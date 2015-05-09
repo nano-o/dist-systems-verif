@@ -16,10 +16,19 @@
     composable SMR algorithm in any order.
 
     The key novelty of our framework is its practical applicability, having state
-    of the art optimization and reconfiguration techniques built-in: tolerating k fault with k+1
+    of the art optimization and reconfiguration techniques built-in:
+    primary-backup replication, tolerating k fault with k+1
     replicas using an external reconfiguration master, executing commutative commands 
     without synchronization, optimizing the execution of read-only commands,
     minimizing the size of crucial data structures. 
+
+    \begin{itemize}
+      \item Checkpointing
+      \item Primary-backup replication with expeditive reads, k-fault tolerance with
+        k+1 replicas.
+      \item Latency of two messages when contention happens only on commutative
+        commands.
+    \end{itemize}
 
     Moreover, our framework allows a novel characterization of SMR algorithms in two categories corresponding to two abstract
     specifications that the algorithms refine. The two categories represent a
