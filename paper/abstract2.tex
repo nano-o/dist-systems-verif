@@ -15,15 +15,20 @@
     framework and proved composable, it can be composed with any other
     composable SMR algorithm in any order.
 
-    The key novelty of our framework is its practial applicability, having state
-    of the art optimization techniques built-in: it supports executing commutative commands 
+    The key novelty of our framework is its practical applicability, having state
+    of the art optimization and reconfiguration techniques built-in: tolerating k fault with k+1
+    replicas using an external reconfiguration master, executing commutative commands 
     without synchronization, optimizing the execution of read-only commands,
     minimizing the size of crucial data structures. 
 
-    We present a detailed, mechanically-proved formalization of our framework
-    and we show how several SMR algorithms fit into our framework.
-    We classify SMR algorithms in two categories corresponding to two abstract
-    specifications that the algorithms refine.
+    Moreover, our framework allows a novel characterization of SMR algorithms in two categories corresponding to two abstract
+    specifications that the algorithms refine. The two categories represent a
+    fundamental three-dimensional trade-off relating resilience to crashes,
+    resilience to contention, and processing latency. Cluster idea?
+
+
+    We present a detailed, mechanically-proved formalization of our framework in
+    Isabelle/HOL, and we show how several SMR algorithms fit into our framework.
 
     The framework is fully formalized and its main properties
     mechanically proven with Isabelle/HOL. The concrete
