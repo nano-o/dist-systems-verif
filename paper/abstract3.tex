@@ -1,0 +1,31 @@
+\abstract{
+  State-Machine Replication (SMR) is a basic building block of reliable distributed
+  systems that allows to implement a reliable service out of unreliable
+  components. Practical implementations of SMR that can be used in cloud
+  computing would have a direct impact on the reliability of many computing 
+  services. However, devising new practical SMR algorithms is hard, often
+  justify a publication in a top conference.
+
+  The problem is that SMR algorithms are not modular. Thus all the reasonging,
+  proofs, and test need to be done again from scratch when devising a new algorithm. With the number of
+  different situations that a practical SMR algorithm must face, a modular approach
+  allowing the reuse of existing techniques is especially important.
+  
+  We present a framework that enables composing SMR algorithms.
+  Crucially, with our framework, an algorithm  is  proved  composable  once  and
+  for all in isolation. Our composition theorem, mechanically proved with Isabelle/HOL,
+  guarantees that  the  composition of  any  number of composable  algorithms  is a
+  correct SMR algorithm.
+
+  The key novelty of our framework is its practical  applicability,  with  state
+  of  the  art  optimization  and  reconfiguration  techniques  being  built-in:
+  tolerating $k$ faults with  $k+1$  replicas,  executing  commutative  commands
+  without synchronization, optimizing the execution of read-only  commands,  and
+  checkpointing.
+
+  To demonstrate our framework  we  present  two  abstract
+  composable algorithms  modeling  concrete algorithms  based  on  two  types  of  quorum
+  systems used in practice. We demonstrate that concrete algorithms can easily be
+  obtained by refinement from the abstract algorithms and we provide TLA+ specifications 
+  ready to be model-checked with the TLC model-checker.
+}
