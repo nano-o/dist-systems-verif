@@ -40,7 +40,7 @@ replicate a service over several servers, each executing the same
 sequence of (deterministic) commands. 
 Making SMR algorithms efficient has been a long-standing
 challenge and a multitude of algorithms have been proposed. Examples
-include Fast Paxos \cite{Lamport06FastPaxos}, Disk Paxos
+include Paxos \cite{lamport2001paxos}, Fast Paxos \cite{Lamport06FastPaxos}, Disk Paxos
 \cite{GafniLamport03DiskPaxos}, Chain Replication
 \cite{RenesseSchneider04ChainReplicationSupportingHighThroughputAvailability},
 Ring Paxos
@@ -55,7 +55,39 @@ Paxos-MIC
 \cite{HurfinMoiseNarzul11AdaptiveFastPaxosMakingQuickEverlasting},
 Mencius
 \cite{MaoJunqueiraMarzullo08MenciusBuildingEfficientReplicatedStateMachine},
-and Fast Mencius \cite{WeiETAL13FastMenciusMenciusLowCommitLatency}.
+Fast Mencius \cite{WeiETAL13FastMenciusMenciusLowCommitLatency}, the Chandra-Toueg \cite{ChandraToueg96UnreliableFailureDetectorsReliableDistributedSystems}, the Ben-Or algorithm \cite{BenOr83AnotherAdvantageFreeChoiceCompletelyAsynchronous}, Raft \cite{OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
+
+With the wide use of cloud computing, improvements in the performance and efficiency of SMR algorithms have the potential to impact most online services: advanced SMR algorithms can be implemented by cloud computing service providers and benefit all their customer's applications.
+
+Devising new SMR algorithms, optimized with particular situations or metrics in mind, is hard: today, several decades after the first SMR algorithms \cite{Lamport98ParttimeParliament,BirmanJoseph87ReliableCommunicationPresenceFailures,OkiLiskov88ViewstampedReplicationGeneralPrimaryCopy,DworkLynchStockmeyer84ConsensusPresencePartialSynchronyPreliminaryVersion} were published, devising new SMR algorithms is still hard enough to justify a publication in a top conference \cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments,OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
+
+The problem is that it is very hard to reuse existing algorithms and ideas because SMR algorithms are not modular. When devising a new algorithm, all the careful analysis, tests, and proofs have to be done again from scratch.
+
+We propose a framework that simplifies devising new SMR algorithms by decomposing them into independent and composable modules.
+Crucially, in our framework, a SMR module can be analyzed, tested, and proved correct  once and for all. 
+Our composition theorem guarantees that composing any number of correct modules can be composed to form a correct SMR algorithm. 
+
+A composite SMR algorithm built with our framework works by running the SMR module most appropriate at any given time, dynamically changing SMR module when needed.
+Thus algorithms designers who want to create a new SMR algorithm, optimized for particular conditions, can focus only on the particular conditions of interest and reuse existing modules to handle the other cases. All the performance analysis, tests, and proofs of the existing SMR modules remain valid and only the new SMR needs to be analyzed.
+Our framework thus enables incremental development of SMR algorithms, where each new development can build on the previous ones instead of starting again from scratch.
+
+An important practical aspect of SMR is fast reconfiguration to replace faulty components, without which the stability of a system is inevitably compromised.
+
+To be usable in  practice, SMR implementations must have high performance, be it throughput, latency, or some other metric depending on the setting, and resort to many optimizations which a framework like ours must support to be practical.
+Two key practical aspects of SMR are the ability to reconfigure the system to replace faulty components and the ability to process commutative commands without synchronization.
+There lies our key contribution: 
+Our framework is based on Generalized Consensus, a formulation of the State-Machine Replication problem that allows processing commutative commands without synchronization.
+
+At the heart of our framework lies a simple abstraction of the familiar notion of rounds (also called epochs, ballots, or views in the literature) used in most SMR algorithms. To illustrate our approach, let us consider Fast Paxos, one of the first examples of SMR algorithm which can change mode dynamically.
+Fast Paxos is of round-based SMR algorithm that can change mode. Each round is categorized as a fast or a normal round. Fast rounds process request faster than normal rounds but may fail to make progress in case of contention, at which point a normal round can take over the execution and make progress, later passing the baton back to a fast round when contention becomes low again. As in the original Paxos algorithm, normal rounds can also succeed each other in order to change
+leader. Each kind of round maintains different state invariants, thus a normal round must know which past rounds are fast or normal rounds in order to take over the execution safely. When adding more kinds of rounds such an approach will quickly become unmanageable, as each type of rounds must have one case for each possible other kind of round, making $n^2$ cases to consider in total.
+
+Our notion of Composable Generalized Consensus defines a common interface and a common correctness property for a round, abstracting over the particular round implementations and making all rounds compatible with each other. 
+Moreover, our interface for rounds enable a straightforward crucial optimization seen in practical systems: introducing an external reconfiguration master which manages the addition of new replicas and the removal of failed ones. Interestingly, as explained in \cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, in a real system it is often possible to implement a reliable reconfiguration master which allows to tolerate $f$ faults with $f+1$ replicas instead of the traditional $2f+1$ replicas .
+
+The reconfiguration master can also make the choice of the new type of round to execute, providing the system's reconfiguration policy. 
+
+************************
 
 Each of the existing algorithms is best suited to a particular range
 of environments, characterized, e.g., by client load, network
