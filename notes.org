@@ -13,3 +13,5 @@ What are the implications of this?
 * Benefits of generalized consensus: Fast algorithms only?
 * Fast Paxos also combines two strategies, but without a clear isolation.
 * Composition correctness: difficulty is showing that the abort and initialize actions simulate actions of the single-instance specification.
+* Generalized Lattice Agreement
+** SMR when all updates commute.
