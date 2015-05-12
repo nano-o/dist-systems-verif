@@ -13,3 +13,16 @@ What are the implications of this?
 * Benefits of generalized consensus: Fast algorithms only?
 * Fast Paxos also combines two strategies, but without a clear isolation.
 * Composition correctness: difficulty is showing that the abort and initialize actions simulate actions of the single-instance specification.
+* Difference between Composable Generalized Paxos and Generalized Paxos:
+** Uniform vs non-uniform interface
+CGP has a uniform interface for rounds: regardless of the type of round, one switch value is enough to progress.
+In contrast, changing round in Paxos or GP requires knowing the type of round (mainly determines the size of the Quorums to use but might get trickier
+for algorithms with many optimization tricks).
+** Can we skip rounds in CGP like in Paxos? 
+One needs to make sure that the round has been stopped, but if there is at least one switch value in this round then it has been stopped.
+So a process that wants to change round can trigger a round change. Similarly in Paxos, a new leader must bring acceptors in its round.
+* Make a clear comparison with Classic Paxos and GP
+** Generic round interface makes changing round a little bit slower: 
+instead of having the leader query directly the acceptors of the previous round, the switchers must query the acceptors.
+But, in fact, the new leader can be a switcher.
+** What if two processes want to become leader? It is the switching policy which chooses the configuration of the next round, _not_ like in Vertical Paxos.

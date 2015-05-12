@@ -83,7 +83,7 @@ Fast Paxos is of round-based SMR algorithm that can change mode. Each round is c
 leader. Each kind of round maintains different state invariants, thus a normal round must know which past rounds are fast or normal rounds in order to take over the execution safely. When adding more kinds of rounds such an approach will quickly become unmanageable, as each type of rounds must have one case for each possible other kind of round, making $n^2$ cases to consider in total.
 
 Our notion of Composable Generalized Consensus defines a common interface and a common correctness property for a round, abstracting over the particular round implementations and making all rounds compatible with each other. 
-Moreover, our interface for rounds enable a straightforward crucial optimization seen in practical systems: introducing an external reconfiguration master which manages the addition of new replicas and the removal of failed ones. Interestingly, as explained in \cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, in a real system it is often possible to implement a reliable reconfiguration master which allows to tolerate $f$ faults with $f+1$ replicas instead of the traditional $2f+1$ replicas .
+Moreover, our interface for rounds enable a straightforward crucial optimization seen in practical systems: introducing an external reconfiguration master which manages the addition of new replicas and the removal of failed ones. Interestingly, as explained in \cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, in a real system it is often possible to implement a reliable reconfiguration master which allows to tolerate $f$ faults with $f+1$ replicas instead of the traditional $2f+1$ replicas.
 
 The reconfiguration master can also make the choice of the new type of round to execute, providing the system's reconfiguration policy. 
 
@@ -1009,7 +1009,6 @@ learner $l$, $learned\left[ l \right]$.
 \end{appendix}
 
 \end{document}
-
     We present a new abstraction, Abortable Generalized Consensus, which enables the
     correct-by-construction composition of heterogeneous State-Machine
     Replication algorithms.
@@ -1472,8 +1471,8 @@ using the following lemma.
   executable form that presented in this section. Moreover,
   instead of sequences of commands, the Isabelle/HOL specification uses the more
   general notion of command history, presented in the next subsection.
-  The Isabelle/HOL formalization of ACA uses the theory of I/O automata, which
-  is also formalized in the Isabelle/HOL. The proof uses a refinement
+  The Isabelle/HOL formalization of ACA uses the theory of I/O-automata, which
+  is also formalized in the Isabelle/HOL development. The proof uses a refinement
   mapping from the composition of two consecutive ACA instances to a single ACA
   instance.
 \end{proof}
@@ -1755,9 +1754,9 @@ centrally orders the proposed commands, which are accepted by the
 other acceptors in the order determined by the leader.  This protocol
 ensures that every local acceptor history is a prefix of the local
 history of the leader, therefore guaranteeing that the local acceptor histories
-forming a chain.
+form a chain.
 
-Acceptor broadcast each newly accepted history to the learners, which
+Each acceptor broadcasts each newly accepted history to the learners, which
 learn a history $h$ when they receive enough extensions of $h$ from the
 acceptors.  When instructed by the scheduling policy to abort, a
 switcher sends a stop message to the acceptors, which irrevocably stop
@@ -1860,7 +1859,7 @@ ACA rounds.
 Compared to the rounds of the original Classic Paxos, Classic Paxos ACA
 rounds add an extra level of indirection when changing round: in the
 original rounds, the leader of the new round directly queries the
-acceptors of the preceeding round, whereas in ACA rounds, the
+acceptors of the preceeding rounds, whereas in ACA rounds, the
 switchers query the acceptors and then send their abort histories to
 the leader. However, changing round is an infrequent event, therefore
 this difference should not have much practical impact on performance.
