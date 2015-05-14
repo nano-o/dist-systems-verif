@@ -3,7 +3,7 @@
 
 \addbibresource{managed.bib}
 
-\title{Changing Flights In The Air\\ (Abortable Chain Agreement)}
+\title{Composable Generalized Consensus}
 
 \author{
   Rachid Guerraoui\\
@@ -32,16 +32,6 @@ This is a regular paper.
 
 \input{roadmap}
 
-\begin{comment}
-Abortable Chain Agreement builds on several recent advances in SMR
-algorithms: ACA allows acceptors to only eventually reach agreement,
-like in Generalized Paxos \cite{Lamport05GeneralizeConsensus},
-boosting performance when most commands commute; ACA allows fast
-execution of read commands like in Generalized Lattice Agreement
-\cite{FalerioETAL12GeneralizedLatticeAgreement}; ACA implementations
-can tolerate $f$ faults with only $f+1$ replicas and replace crashed replicas
-upon changing round, as in Vertical Paxos  \cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}.  
-\end{comment}
 
 \section{Related Work}
 \label{sec:related}
@@ -116,21 +106,20 @@ adaptive replication algorithms out of heterogeneous rounds, making state of the
 art optimization techniques available to algorithm designers, which was not
 possible before.
 
-\section{Chain Agreement}
-\label{sec:ca}
+\section{Composable Generalized Consensus}
+\label{sec:cgc}
 
-We consider a set of asynchronous servers communicating by message passing in an
-asynchronous network. Servers are not necessarily sequential processes. We
-describe a behavior of the system using an infinite sequence of states, where a
-state is a function from variable names to values (i.e. a valuation
-of variables).  We specify sets of allowed behaviors using an initial predicate,
-a next-state relation (using unprimed and primed variables) and a fairness
-condition, all in the style of TLA+ \cite{Lamport02SpecifyingSystems}. However,
-for succinctness, our specification are rather informal, eluding non-essential
-details.
+We consider a set of asynchronous servers communicating by message passing in
+an asynchronous network. Servers are not necessarily sequential processes.
+We describe a behavior of the system using an infinite sequence of states,
+where a state is a function from variable names to values (i.e. a valuation of
+variables). We specify sets of allowed behaviors using an initial predicate
+and a next-state relation expressed using unprimed and primed variables in the
+style of TLA+ \cite{Lamport02SpecifyingSystems}. However, for succinctness, our
+specification are rather informal, eluding non-essential details.
 
 Our specifications all contain by default a state variable $crashed$ and
-$Crash\left( x \right)$ transition which is always enabled. A server $x$ faithfully
+ a $Crash\left( x \right)$ transition which is always enabled. A server $x$ faithfully
 executes the algorithm that is assigned to it until its identifier is added to
 the variable $crashed$ by a $Crash\left( x \right)$ transitions.  When the identifier of a
 server is in the set $crashed$, all its actions are disabled.  In an execution,
@@ -141,50 +130,67 @@ service has a sequential specification consisting of an initial state
 and a deterministic transition relation in which every command
 atomically updates the state of the service and produces an output. We
 assume that duplicate commands have no effect on the state of the
-service and return the same output as their first occurrence.
+service and return the same output as did their first occurrence.
 
+The goal of SMR is to provide a reliable implementation of the computing service despite server crashes.
+To do so, an SMR algorithm replicates the execution of the service on several servers. 
 In a traditional SMR algorithm, the servers can be seen has playing one or
 several of three roles: \emph{proposers}, which propose new commands to execute,
-\emph{acceptors}, which accept and order commands in a sequence, and
+\emph{acceptors}, whose role is to order commands, and
 \emph{learners}, which learn about the growing sequence of commands to
-execute \cite{lamport2001paxos}. Often, but not necessarily, every replica server plays the
+execute \cite{lamport2001paxos} by querying the acceptors. Often, but not necessarily, every replica server plays the
 three roles of proposer, acceptor, and learner: clients of the service
 send their commands to some replica servers; replica servers submit
 the received commands to the SMR protocol in the role of proposers;
 replica servers respond to commands by executing the commands learned
 in the role of learners; replica servers participate in command
-ordering in the role of acceptors.  An SMR algorithm guarantees that
+ordering in the role of acceptors.  A SMR algorithm guarantees that
 the replicas learn the same sequences of commands, possibly up to the
 reordering of commuting commands. Therefore, every learner can respond to client
 requests using its last learned sequence of commands, and clients will receive
 the same responses as the ones produces by a centralized, non-replicated,
 service. 
 
-Chain Agreement precisely specifies the allowed behaviors of the roles of \emph{proposers}
+\subsection{Histories}
+
+To simplify the specification of SMR algorithms optimizing the execution of commuting commands 
+we will use the notion of a command history, or history for short, in our specification of Composable Generalized Consensus.
+
+A command history, abbreviated history, is a data structure that
+represents a set of sequences which are the same modulo the reordering
+of commuting commands and addition or removal of duplicate commands.
+We say that two commands $c_1$ and $c_2$ \emph{commute} when, in every
+sequential execution of the service in which $c_1$ and $c_2$ are adjacent,
+reversing the order of $c_1$ and $c_2$ does not change any of the outputs,
+including those given to $c_1$ and $c_2$.
+
+All the sequences represented by a given history contain the same commands
+and determine the same outputs for each command. Therefore, to implement a
+replicated service, it is sufficient that learners learn histories instead of
+sequences. For a thourough discussion of command histories we refer the reader
+to \cite{Lamport05GeneralizeConsensus}. Our Isabelle/HOL formalization \cite{}
+abstracts over the concrete representation of histories, assuming only their
+necessary properties. Command histories were first introduced in trace theory
+\cite{Mazurkiewicz84Semantics}.
+
+Command histories can be built from the empty history using the $\star$
+operator, which appends a sequence of commands $cs$ to a history $h$, obtaining
+the history $h \star cs$. We can then define define an ordering relation among
+histories: $h_1 \leq h_2$ when there exists a sequence $cs$ such that $h_2 =
+h_1 \star cs$. 
+The maximum over a set of
+histories $H$ is denoted by $Max\left( H \right)$ and $Max\left( \aset{}
+\right)$ is the empty history.
+Histories have the property that every finite set $H$ of 
+histories has a \emph{greatest lower bound}, noted $GLB\left(H\right)$.
+
+The major advantage that histories have over sequences is that if a sequence
+$cs_1$ is obtained by reordering the commuting commands of $cs_2$, then $h \star
+cs_1 = h \star cs_2$. Therefore, in implementations of CGC, servers can agree on
+a history even though they chose different orders for some commuting commands.
+
+Generalized Consensus precisely specifies the allowed behaviors of the roles of \emph{proposers}
 and \emph{learners}, abstracting over the behavior of acceptors. 
-
-\begin{comment}
-We suppose that each server can play a number of \emph{roles}.
-Chain Agreement specifies the allowed behaviors the roles of \emph{proposers}
-and \emph{learners}. Proposers receive commands from the clients of the service
-and propose them for execution by the replicated service. Each learner learns about
-a growing sequence of commands. Thanks to the sequential specification of the
-service, a sequence of commands determines an output for each the included commands. 
-In a traditional SMR algorithm, servers can also play the role of
-\emph{acceptors}, whose task is to collectively order commands and let the
-learners know about the latest sequence of ordered commands.
-
-The point of Chain Agreement is to implement a replicated service by having every learner learn about a growing sequence of commands, which
-represent an execution of the sequential specification of the service.
-Crucially, at all times, the sequences of commands learned by the
-different learners must form a chain in the prefix order on sequences.
-Moreover, for every command $c$ proposed by a correct proposer, every
-correct learner must eventually learn a sequence containing $c$.  Once
-a learner learns about a sequence containing a command $c$, it can
-determine the output produced by $c$, using the sequential
-specification of the service, and respond to the client that issued
-the command $c$.
-\end{comment}
 
 To specify Chain Agreement, we need the notion of ordering of sequences and of
 maximum sequence.  The prefix order on sequences is denoted by the operator
@@ -237,7 +243,7 @@ proposer and one learner are correct.
 We now consider implementing Chain Agreement as a sequence of \emph{Abortable Chain
 Agreement rounds}, where each round makes progress ordering requests or aborts
 its execution and passes the baton to the next round in the sequence.
-An algorithm composed of a sequence of ACA rounds is called an \emph{ACA
+An algorithm composed of a sequence of CGC instances is called an \emph{ACA
 algorithm}.
 
 On top of the traditional roles of proposer, acceptor, and learner, ACA
@@ -246,8 +252,8 @@ introduces the new role of \emph{switcher} and a new component, the
 acceptor, learner, and switcher can change in each rounds, allowing for
 reconfiguration. 
 In normal circumstances, the proposers, acceptors,
-and learners of an ACA round work together to implement Chain Agreement.
-However, if the environment becomes unfavorable to a running ACA round, the
+and learners of a CGC instance work together to implement Chain Agreement.
+However, if the environment becomes unfavorable to a running CGC instance, the
 scheduling policy can instruct the round to abort its execution and pass the
 baton, using the switchers, to a new round.
 
@@ -260,11 +266,11 @@ process is repeated.
 We assume that in the first round, which has no previous round, every 
 switchers receives the empty abort sequence.
 
-The scheduling policy determines when to abort an ACA round and which new ACA
+The scheduling policy determines when to abort a CGC instance and which new ACA
 round should take over. The scheduling policy must inform the switchers about the
 identity of the next round and must guarantee that all switchers receive the
 same information.  In this paper we abstract over the scheduling policy, assuming
-that a round that aborts passes the baton a nondeterministically chosen new
+that a round that aborts passes the baton to a nondeterministically chosen new
 round. A reliable scheduling-policy component can realistically be implemented
 as a replicated state machine running on a large number of servers otherwise
 dedicated to other tasks
@@ -285,7 +291,7 @@ and, for every learner $l$, $learned\left[ l \right]$.  Additionally,
 we use the state variables $inits$, containing the abort sequences
 received from the previous round, and $aborts$, containing the abort
 sequences transfered to the next round.
-Two consecutive ACA rounds are composed by letting the $aborts$ variable of the
+Two consecutive CGC instances are composed by letting the $aborts$ variable of the
 first round be the $inits$ variable of the second round.
 
 Initially, $crashed$, $proposed$, for every
@@ -353,7 +359,7 @@ rounds $i$ of the $learned_i\left[ l \right]$ variables.
 
 \begin{thm}[Composition Theorem]
     \label{thm:comp}
-    In every execution of a succession of ACA rounds, the sequence of valuations
+    In every execution of a succession of CGC instances, the sequence of valuations
     of the variable $proposed$ and, for every learner $l$, of the variables
     $learned\left[ l \right]$ satisfies Chain Agreement.
 \end{thm}
@@ -362,7 +368,7 @@ using the following lemma.
 \begin{lem}
   \label{lem:comp}
     Consider two rounds numbered $i$ and $i+1$. In every execution of a
-    succession of ACA rounds, the sequence of valuations of the variables $inits
+    succession of CGC instances, the sequence of valuations of the variables $inits
     = inits_i$, $propose = proposed_i \cup propose_{i+1}$, for every learner
     $l$, $learned\left[ l \right] = learned_i\left[ l \right] \cup
     learned_{i+1}\left[ l \right]$and $aborts = aborts_{i+1}$ satisfies ACA.
@@ -380,14 +386,14 @@ using the following lemma.
 \end{proof}
 
 \Cref{thm:comp} guarantees that the successive composition of any
-number of ACA rounds implements Chain Agreement.
+number of CGC instances implements Chain Agreement.
 Therefore, with ACA, one can easily build replicated services that
 dynamically adapt to the current operating conditions of the system: a
 replicated service has several types of rounds at its disposal, each being
 tailored to particular conditions. Each time the conditions change,
-the current ACA round aborts and passes the baton to a more 
+the current CGC instance aborts and passes the baton to a more 
 appropriate type of round, as determined by the scheduling policy. Moreover, a new type
-of ACA round can always be devised after the system is deployed and added on the fly to
+of CGC instance can always be devised after the system is deployed and added on the fly to
 the existing types of rounds.
 
 We now describe two important practical optimizations of ACA.
@@ -490,7 +496,7 @@ like, for example, in a fast round of Fast Paxos.
 \label{sec:rounds}
 
 Most existing SMR algorithms can easily be obtained as the
-composition of one or more ACA rounds. 
+composition of one or more CGC instances. 
 
 The FLP impossibility result \cite{FischerLynchPaterson83ImpossibilityDistributedConsensusOneFaultyProcess}
 implies that no algorithm can implement SMR to the letter in practice.
@@ -508,17 +514,17 @@ proposes it as first value to the other acceptors of the ballot $i$.
 In existing SMR algorithms, new rounds are initialized ad-hoc, which
 prevents mixing rounds of two different algorithms.  Instead,
 ACA is an abstraction of rounds which establishes a common interface and contract for switching from
-one round to the next, enabling switching from any ACA round to any other.
+one round to the next, enabling switching from any CGC instance to any other.
 
 To simplify the task of expressing existing algorithms as the composition of one
-or more ACA rounds, we propose two specifications, \emph{conservative ACA
+or more CGC instances, we propose two specifications, \emph{conservative ACA
 rounds} and
-\emph{fast ACA rounds}, which can easily be concretized to obtain executable rounds.
+\emph{fast CGC instances}, which can easily be concretized to obtain executable rounds.
 We show that ACA versions of Classic Paxos, Multi-Coordinated Paxos, Chain
 Replication, and Ring Paxos can be obtained by concretizing the specification of
-conservative ACA rounds, and that ACA versions of the fast rounds of Fast Paxos can be obtained by concretizing the specification of fast ACA rounds.
+conservative CGC instances, and that ACA versions of the fast rounds of Fast Paxos can be obtained by concretizing the specification of fast CGC instances.
 
-Fast and conservative ACA rounds are two specifications, at an
+Fast and conservative CGC instances are two specifications, at an
 intermediate level of abstraction, which satisfy ACA. Both
 specifications specify how the state of the acceptors should be
 updated but abstract over the particular communication topology used
@@ -527,7 +533,7 @@ which is accessible by all servers in all roles. One can refine fast
 or conservative rounds by implementing the state accesses and coordination
 using the network, obtaining a concrete algorithm.
 
-Conservative and fast ACA rounds are specified using the state variables $inits$, $proposed$, for every learner $l$, $learned\left[ l \right]$
+Conservative and fast CGC instances are specified using the state variables $inits$, $proposed$, for every learner $l$, $learned\left[ l \right]$
 and $aborts$, as in ACA, and, for every acceptor $a$, two new variables
 $status\left[ a \right]$, which can be either ``idle'', ``ready'', or
 ``stopped'' and $hist\left[ a \right]$, the local history of the
@@ -580,7 +586,7 @@ of the following types of transitions (and the default $Crash\left( x
 \end{compactitem}
 
 On top of the additional guard on the $Accept$ transition present only
-in conservative rounds, conservative and fast ACA rounds differ in
+in conservative rounds, conservative and fast CGC instances differ in
 their definition of learn quorums, abort quorums, and in their
 definition of the $SafeAborts\left( R \right)$ operator.
 To concisely define read and learn quorums, we define 
@@ -590,7 +596,7 @@ To concisely define read and learn quorums, we define
     Acceptors \right)\right\rfloor + 1}.
 \end{equation}
 
-In conservative ACA rounds, abort and learn quorums are defined such
+In conservative CGC instances, abort and learn quorums are defined such
 that the intersection between two learn quorums is nonempty and the
 intersection between a learn quorum and an abort quorum is nonempty.
 The definition leads to two interesting cases: $LearnQ = AbortQ =
@@ -601,7 +607,7 @@ element over the local histories of the acceptors in $R$ which are not
 $None$. Note that the maximum exists because conservative rounds
 guarantee that the histories of the acceptors form a chain.
 
-In fast ACA rounds, abort and learn quorums are defined such that
+In fast CGC instances, abort and learn quorums are defined such that
 the intersection between any two learn quorums is nonempty and the
 intersection between any two learn quorums and an abort quorum is
 nonempty.  The definition leads to three interesting cases: $LearnQ =
@@ -628,7 +634,7 @@ inserting the new local history in $\overline{learned}\left[ l \right]$ (see \ci
 definition of a history variable).
 \begin{thm}
   \label{thm:rounds}
-    Both conservative and fast ACA rounds implement ACA under the refinement
+    Both conservative and fast CGC instances implement ACA under the refinement
     mapping that consists in substituting $\overline{learned\left[ l \right]}$
     for $learned\left[ l \right]$.
 \end{thm}
@@ -638,16 +644,16 @@ definition of a history variable).
 
 In this section we show how to modify the rounds of Classic Paxos,
 Multi-Coordinated Paxos, Chain Replication, Ring Paxos, and Fast Paxos to obtain
-ACA rounds. \Cref{thm:comp} then guarantee that all those different types of
+CGC instances. \Cref{thm:comp} then guarantee that all those different types of
 rounds can be used in the same algorithm to yield an implementation of Chain
 Agreement.
 
 \subsection{Classic Paxos}
 
 The rounds of the Classic Paxos algorithm can be modified so as to
-obtain an implementation of conservative ACA rounds.  We define
-Classic Paxos ACA rounds by specializing the specification of
-conservative ACA rounds, giving a concrete protocol for disseminating
+obtain an implementation of conservative CGC instances.  We define
+Classic Paxos CGC instances by specializing the specification of
+conservative CGC instances, giving a concrete protocol for disseminating
 the proposed commands to the acceptors and enforcing that the learned
 histories form a chain.
 
@@ -668,8 +674,8 @@ determines an abort history once it has received acknowledgments from
 an abort quorum of acceptors $R$, using the operator $SafeAborts\left(
 R \right)$.
 
-The specification of Classic Paxos ACA rounds uses the variables of
-the specification of conservative ACA rounds, namely the variables
+The specification of Classic Paxos CGC instances uses the variables of
+the specification of conservative CGC instances, namely the variables
 $proposed$, $inits$, $aborts$, the arrays $learned\left[ l \right]$,
 $status\left[ a \right]$, and $hist\left[ a \right]$, and two
 additional arrays $accepted\left[ l \right]\left[ a \right]$ and
@@ -692,7 +698,7 @@ messages in the network.
 The next-state relation is composed of the following types of
 transitions, where the definitions of learn quorums, abort quorums,
 and of the $SafeAborts\left( R \right)$ operator are the ones of conservative
-ACA rounds.
+CGC instances.
 \begin{compactitem}
     \item A $Propose\left( p,c \right)$ transition, for a proposer $p$
         and a command $c$, not guarded, inserts $c$ in the set
@@ -761,15 +767,15 @@ ACA rounds.
 Compared to the rounds of the original Classic Paxos, Classic Paxos ACA
 rounds add an extra level of indirection when changing round: in the
 original rounds, the leader of the new round directly queries the
-acceptors of the preceeding round, whereas in ACA rounds, the
+acceptors of the preceeding round, whereas in CGC instances, the
 switchers query the acceptors and then send their abort histories to
 the leader. However, changing round is an infrequent event, therefore
 this difference should not have much practical impact on performance.
 \begin{thm}
-  Classic Paxos ACA rounds satisfy Abortable Chain Agreement.
+  Classic Paxos CGC instances satisfy Abortable Chain Agreement.
 \end{thm}
 \begin{proof}
-  A Classic Paxos ACA round implements the specification of Abortable
+  A Classic Paxos CGC instance implements the specification of Abortable
   Chain Agreement under the refinement mapping consisting in
   projecting the state of the round onto the variables $proposed$,
   $inits$, $aborts$, and, for every learner $l$, $learned\left[ l
@@ -799,21 +805,21 @@ forwarded along the chain from one acceptor to the other until it
 reaches the last acceptor, which sends the history to the learners. 
 By spreading the load more evenly on the all the servers, Chain Replication
 can achieve higher throughput that Classic Paxos.
-Conservative ACA rounds can be implemented like with Classic Paxos,
+Conservative CGC instances can be implemented like with Classic Paxos,
 replacing the broadcast of the leader by the propagation of the leader's history
 along the chain of servers.
 
 Ring Paxos optimizes Chain Replication by having the leader broadcast
 commands to the acceptors using IP multicast and only sending hashes
 of the commands along the chain. Ring Paxos round can be modified to implement
-conservative ACA rounds in a similar way as for Chain Replication.
+conservative CGC instances in a similar way as for Chain Replication.
 
 \subsection{Fast Paxos}
 
 Fast Paxos is composed of two types of rounds: classic rounds, like in Classic
 Paxos, and fast rounds.
 The fast rounds can be transformed into
-implementations of fast ACA rounds. Instead of sending their
+implementations of fast CGC instances. Instead of sending their
 commands to a leader, as in Classic Paxos, the proposers of fast
 rounds directly broadcast their commands to all the acceptors. As long
 as commands are received in the same order by a learn quorum of
@@ -821,14 +827,14 @@ acceptors or are received in different orders but commute, commands can be learn
 However, if non-commuting commands are received in different orders by
 several acceptors, the local history of the acceptors may not form a
 chain anymore and the rounds must abort. The fast rounds of Fast
-Paxos implement fast ACA rounds.
+Paxos implement fast CGC instances.
 
-Fast Paxos ACA rounds are specified using the same set of variables as for
+Fast Paxos CGC instances are specified using the same set of variables as for
 Classic Paxos, initialized to the same values.
 The next-state relation is composed of the following types of
 transitions, where the definitions of learn quorums, abort quorums,
 and of the $SafeAborts\left( R \right)$ operator are the ones of fast
-ACA rounds.
+CGC instances.
 \begin{compactitem}
     \item A $Propose\left( p,c \right)$ transition, for a proposer $p$
         and a command $c$, not guarded, inserts $c$ in the set
@@ -856,10 +862,10 @@ ACA rounds.
         acceptor $a$, the $RcvStopped\left( s \right)$ transitions,
         for a switcher $s$, and the $Abort\left( s, h \right)$
         transitions, for a switcher $s$ and a history $h$, which are
-        all the same as in Classic Paxos ACA rounds.
+        all the same as in Classic Paxos CGC instances.
 \end{compactitem}
 
-As for Classic Paxos ACA rounds, Fast Paxos ACA rounds implement ACA
+As for Classic Paxos CGC instances, Fast Paxos CGC instances implement ACA
 under the refinement mapping consisting projecting the state of the
 round onto the variables $proposed$, $inits$, $aborts$, and, for every
 learner $l$, $learned\left[ l \right]$.
