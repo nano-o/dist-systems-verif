@@ -1,0 +1,14 @@
+The rest of the paper is structured as follows.
+\Cref{sec:related} surveys recent related work. \Cref{sec:ca} presents Chain
+Agreement, which embodies the requirements for implementing SMR. \Cref{sec:aca}
+presents Abortable Chain Agreement and its optimizations to treat commuting
+and read-only commands efficiently. \Cref{sec:rounds} presents our specification
+of conservative and fast ACA rounds, which implement ACA. In
+\cref{sec:examples}, we show that the rounds of  
+Classic Paxos, Fast Paxos, Chain Replication, Ring Paxos,
+and Multi-Coordinated Paxos can easily be transformed into ACA implementations
+by using our specifications of conservative and fast ACA rounds.
+Finally, in \cref{sec:isaproofs}, we provide a complete formalization of ACA
+and a mechanical proof of the \emph{composition theorem} (\cref{thm:comp}),
+checked by the interactive proof assistant Isabelle/HOL \cite{NipkowPaulsonWenzel02IsabelleHOL}. 
+

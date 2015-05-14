@@ -26,3 +26,4 @@ So a process that wants to change round can trigger a round change. Similarly in
 instead of having the leader query directly the acceptors of the previous round, the switchers must query the acceptors.
 But, in fact, the new leader can be a switcher.
 ** What if two processes want to become leader? It is the switching policy which chooses the configuration of the next round, _not_ like in Vertical Paxos.
+
