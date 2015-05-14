@@ -106,8 +106,8 @@ adaptive replication algorithms out of heterogeneous rounds, making state of the
 art optimization techniques available to algorithm designers, which was not
 possible before.
 
-\section{Composable Generalized Consensus}
-\label{sec:cgc}
+\section{Generalized Consensus}
+\label{sec:gc}
 
 We consider a set of asynchronous servers communicating by message passing in
 an asynchronous network. Servers are not necessarily sequential processes.
@@ -176,20 +176,20 @@ necessary properties. Command histories were first introduced in trace theory
 Command histories can be built from the empty history using the $\star$
 operator, which appends a sequence of commands $cs$ to a history $h$, obtaining
 the history $h \star cs$. We can then define define an ordering relation among
-histories: $h_1 \leq h_2$ when there exists a sequence $cs$ such that $h_2 =
-h_1 \star cs$. 
-The maximum over a set of
-histories $H$ is denoted by $Max\left( H \right)$ and $Max\left( \aset{}
-\right)$ is the empty history.
-Histories have the property that every finite set $H$ of 
-histories has a \emph{greatest lower bound}, noted $GLB\left(H\right)$.
-Finally, we say that a set of histories $H$ is compatible when all the histories in $H$ have a common upper bound $h$ such
-that $h$ can be built using only commands found in the histories in $H$.
+histories: $h_1 \leq h_2$ when there exists a sequence $cs$ such that $h_2 = h_1
+\star cs$. Histories have the property that every finite set $H$ of histories
+has a \emph{greatest lower bound}, noted $GLB\left(H\right)$. Finally, we say
+that a set of histories $H$ is compatible when all the histories in $H$ have a
+common upper bound $h$ such that $h$ can be built using only commands found in
+the histories in $H$.
+%The maximum over a set of histories $H$ is denoted by $Max\left( H \right)$ and $Max\left( \aset{} \right)$ is the empty history.
 
 The major advantage that histories have over sequences is that if a sequence
 $cs_1$ is obtained by reordering the commuting commands of $cs_2$, then $h \star
 cs_1 = h \star cs_2$. Therefore, in implementations of CGC, servers can agree on
 a history even though they chose different orders for some commuting commands.
+
+\subsection{Generalized Consensus}
 
 Generalized Consensus precisely specifies the allowed behaviors of the roles of \emph{proposers}
 and \emph{learners}, abstracting over the behavior of acceptors. 
@@ -214,8 +214,8 @@ conditions:
     \item[\textbf{Validity}:] Every learned sequence contains only
         proposed commands.  
     \item[\textbf{Irrevocability}:] The new learned sequence
-        $cs$ is a strict extension of $Max\left(learned\left[ l
-        \right]\right)$. 
+        $cs$ is an extension of $learned\left[ l
+        \right]$. 
         %\\ $cs > Max\left(learned\left[ l \right]\right)$.
 \end{compactitem}
 
@@ -223,8 +223,6 @@ Thanks to the properties of Generalized Consensus, the clients, observing
 their input commands and the received responses, see a
 \emph{linearizable} execution
 \cite{HerlihyWing90LinearizabilityCorrectnessConditionConcurrentObjects}.
-Moreover, the service remains available as long as at least one
-proposer and one learner are correct.
 
 \section{Abortable Chain Agreement}
 \label{sec:aca}
