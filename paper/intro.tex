@@ -21,19 +21,30 @@ Paxos-MIC
 \cite{HurfinMoiseNarzul11AdaptiveFastPaxosMakingQuickEverlasting},
 Mencius
 \cite{MaoJunqueiraMarzullo08MenciusBuildingEfficientReplicatedStateMachine},
-Fast Mencius \cite{WeiETAL13FastMenciusMenciusLowCommitLatency}, the Chandra-Toueg \cite{ChandraToueg96UnreliableFailureDetectorsReliableDistributedSystems}, the Ben-Or algorithm \cite{BenOr83AnotherAdvantageFreeChoiceCompletelyAsynchronous}, Raft \cite{OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
+Fast Mencius \cite{WeiETAL13FastMenciusMenciusLowCommitLatency}, the Chandra-Toueg \cite{ChandraToueg96UnreliableFailureDetectorsReliableDistributedSystems}, the Ben-Or algorithm \cite{BenOr83AnotherAdvantageFreeChoiceCompletelyAsynchronous}, and Raft \cite{OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
 
 With the wide use of cloud computing, improvements in the performance and efficiency of SMR algorithms have the potential to impact most online services: advanced SMR algorithms can be implemented by cloud computing service providers and benefit all their customer's applications.
 
-Devising new SMR algorithms, optimized with particular situations or metrics in mind, is hard: today, several decades after the first SMR algorithms \cite{Lamport98ParttimeParliament,BirmanJoseph87ReliableCommunicationPresenceFailures,OkiLiskov88ViewstampedReplicationGeneralPrimaryCopy,DworkLynchStockmeyer84ConsensusPresencePartialSynchronyPreliminaryVersion} were published, devising new SMR algorithms is still hard enough to justify a publication in a top conference \cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments,OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
+However, devising new SMR algorithms, optimized with particular situations or metrics in mind, is hard: today, several decades after the first SMR algorithms \cite{Lamport98ParttimeParliament,BirmanJoseph87ReliableCommunicationPresenceFailures,OkiLiskov88ViewstampedReplicationGeneralPrimaryCopy,DworkLynchStockmeyer84ConsensusPresencePartialSynchronyPreliminaryVersion} were published, devising new SMR algorithms is still hard enough to justify a publication in a top conference \cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments,OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
 
 The problem is that it is very hard to reuse existing algorithms and ideas because SMR algorithms are not modular. When devising a new algorithm, all the careful analysis, tests, and proofs have to be done again from scratch.
 
-We propose a framework that simplifies devising new SMR algorithms by decomposing them into independent and composable modules.
-Crucially, in our framework, a SMR module can be analyzed, tested, and proved correct  once and for all. 
-Our composition theorem guarantees that composing any number of correct modules can be composed to form a correct SMR algorithm. 
+We propose a framework to make existing SMR algorithms modular and add new optimizations incrementally, without modification to the existing. 
+An algorithm in our framework is composed of independent modules that can run, abort their execution, and pass the baton to any other module.
+Our framework has the following features:
+\begin{itemize}
+  \item Effortless re-use of existing modules: A SMR algorithm expressed in our framework can can be analyzed, tested, and proved correct in isolation and once and for all.  Our composition theorem guarantees that the composition of any number of correct modules is a correct SMR algorithm. 
+  \item Simplified algorithms thanks to a clear separation of concerns: one can devise a new specialized SMR algorithm focusing only on the situation for which it is specialized.  A composable SMR algorithm is not required to make progress in all situations: if it does not, the system can switch to another SMR algorithm.
 
-A composite SMR algorithm built with our framework works by running the SMR module most appropriate at any given time, dynamically changing SMR module when needed.
+  \item Seamless combination of different SMR algorithms: one can combine different SMR algorithms, optimized for different situations and metrics, without any changes and with guaranteed correctness.
+  \item Practical
+    \begin{itemize}
+  \item Tolerating $k$ fault with $k+1$ replicas and a reliable reconfiguration master. 
+  \item Built-in support for crucial practical optimizations such as executing commuting commands without synchronization and expediting the execution of read-only commands.
+    \end{itemize}
+\end{itemize}
+
+A composite SMR algorithm built with our framework works by running the SMR module deemed the most appropriate at any given time, dynamically changing SMR module when needed.
 Thus algorithms designers who want to create a new SMR algorithm, optimized for particular conditions, can focus only on the particular conditions of interest and reuse existing modules to handle the other cases. All the performance analysis, tests, and proofs of the existing SMR modules remain valid and only the new SMR needs to be analyzed.
 Our framework thus enables incremental development of SMR algorithms, where each new development can build on the previous ones instead of starting again from scratch.
 
@@ -45,8 +56,8 @@ There lies our key contribution:
 Our framework is based on Generalized Consensus, a formulation of the State-Machine Replication problem that allows processing commutative commands without synchronization.
 
 At the heart of our framework lies a simple abstraction of the familiar notion of rounds (also called epochs, ballots, or views in the literature) used in most SMR algorithms. To illustrate our approach, let us consider Fast Paxos, one of the first examples of SMR algorithm which can change mode dynamically.
-Fast Paxos is of round-based SMR algorithm that can change mode. Each round is categorized as a fast or a normal round. Fast rounds process request faster than normal rounds but may fail to make progress in case of contention, at which point a normal round can take over the execution and make progress, later passing the baton back to a fast round when contention becomes low again. As in the original Paxos algorithm, normal rounds can also succeed each other in order to change
-leader. Each kind of round maintains different state invariants, thus a normal round must know which past rounds are fast or normal rounds in order to take over the execution safely. When adding more kinds of rounds such an approach will quickly become unmanageable, as each type of rounds must have one case for each possible other kind of round, making $n^2$ cases to consider in total.
+Fast Paxos is a round-based SMR algorithm that has two types of rounds: fast rounds and normal rounds. Fast rounds process requests faster than normal rounds in contention-free executions but fall back to a slower scheme under contention. Normal rounds are the same as in the classic Paxos. Any process can initiate a round change at any point during execution: this allows switching between fast and normal rounds as well as, similarly to classic Paxos, changing the leader from one normal round to
+another. Each kind of round maintains different invariants relating the state of each process and the the values that might have been chosen in the previous rounds, thus a normal round must know which past rounds are fast or normal rounds in order to take over the execution safely. When adding more kinds of rounds such an approach will quickly become unmanageable, as each type of rounds must have one case for each possible other kind of round, making $n^2$ cases to consider in total.
 
 Our notion of Composable Generalized Consensus defines a common interface and a common correctness property for a round, abstracting over the particular round implementations and making all rounds compatible with each other. 
 Moreover, our interface for rounds enable a straightforward crucial optimization seen in practical systems: introducing an external reconfiguration master which manages the addition of new replicas and the removal of failed ones. Interestingly, as explained in \cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, in a real system it is often possible to implement a reliable reconfiguration master which allows to tolerate $f$ faults with $f+1$ replicas instead of the traditional $2f+1$ replicas.
