@@ -183,6 +183,8 @@ histories $H$ is denoted by $Max\left( H \right)$ and $Max\left( \aset{}
 \right)$ is the empty history.
 Histories have the property that every finite set $H$ of 
 histories has a \emph{greatest lower bound}, noted $GLB\left(H\right)$.
+Finally, we say that a set of histories $H$ is compatible when all the histories in $H$ have a common upper bound $h$ such
+that $h$ can be built using only commands found in the histories in $H$.
 
 The major advantage that histories have over sequences is that if a sequence
 $cs_1$ is obtained by reordering the commuting commands of $cs_2$, then $h \star
@@ -192,15 +194,7 @@ a history even though they chose different orders for some commuting commands.
 Generalized Consensus precisely specifies the allowed behaviors of the roles of \emph{proposers}
 and \emph{learners}, abstracting over the behavior of acceptors. 
 
-To specify Chain Agreement, we need the notion of ordering of sequences and of
-maximum sequence.  The prefix order on sequences is denoted by the operator
-$\leq$ ($s_1 \leq s_2$ means that $s_1$ is a prefix of $s_2$). 
-%Using the operator $\leq$, we define $\geq$, $<$, and $>$ as expected. 
-Note that $\leq$ is a partial order on sequences. The maximum over a set of
-sequences $S$ is denoted by $Max\left( S \right)$ and $Max\left( \aset{}
-\right)$ is the empty sequence.
-
-We specify Chain Agreement using the state variables $crashed$, $proposed$, containing the proposed commands,
+We specify Generalized Consensus using the state variables $crashed$, $proposed$, containing the proposed commands,
 and, for every learner $l$,  $learned\left[ l \right]$, a set of
 sequences of commands. Initially, $crashed$, $proposed$ and, for every learner $l$,
 $learned\left[ l \right]$ are empty sets. 
@@ -215,9 +209,8 @@ which $cs$ is inserted in $learned\left[ l \right]$.
 A $Learn\left( l, cs \right)$ transition is guarded by the following
 conditions:
 \begin{compactitem}
-    \item[\textbf{Agreement}:] The elements of the set $\aset{learned'\left[ l
-      \right] : l \in Learners}$, the learned sequences after the transition,
-      form a chain in the partial order $\leq$.
+    \item[\textbf{Agreement}:] The set of learned histories after the transition, $\aset{learned'\left[ l
+      \right] : l \in Learners}$, is compatible.
     \item[\textbf{Validity}:] Every learned sequence contains only
         proposed commands.  
     \item[\textbf{Irrevocability}:] The new learned sequence
@@ -225,12 +218,8 @@ conditions:
         \right]\right)$. 
         %\\ $cs > Max\left(learned\left[ l \right]\right)$.
 \end{compactitem}
-Finally, we add, for every learner $l$, one weak fairness condition
-\cite{Lamport02SpecifyingSystems} on the transitions $Learn\left( l,
-cs \right)$. The weak fairness conditions ensure that every correct
-learner eventually learns about every proposed command.
 
-Thanks to the properties of Chain Agreement, the clients, observing
+Thanks to the properties of Generalized Consensus, the clients, observing
 their input commands and the received responses, see a
 \emph{linearizable} execution
 \cite{HerlihyWing90LinearizabilityCorrectnessConditionConcurrentObjects}.
@@ -397,63 +386,6 @@ of CGC instance can always be devised after the system is deployed and added on 
 the existing types of rounds.
 
 We now describe two important practical optimizations of ACA.
-
-\subsection{Histories}
-\label{sec:histories}
-
-ACA can be implemented more efficiently by substituting \emph{command histories} for sequences of commands, as in Generalized Consensus \cite{Lamport05GeneralizeConsensus}.
-
-We say that two commands $c_1$ and $c_2$ \emph{commute} when, in every sequential
-execution of the service, reversing the order of $c_1$ and $c_2$ does
-not change any of the outputs, including those given to $c_1$ and
-$c_2$.
-
-A command history, abbreviated history, is a data structure that
-represents a set of sequences which are the same modulo the reordering
-of commuting commands, and in which duplicate commands do not appear.
-All the sequences represented by a given history contain the same
-commands and determine the same outputs for each command.  Therefore,
-to implement a replicated service, it is sufficient that learners
-learn command histories instead of sequences.  For a precise
-definition of command histories, we refer the reader to
-\cite{Lamport05GeneralizeConsensus}. Our Isabelle/HOL formalization
-(\cref{sec:isaproofs}) abstracts
-over the concrete representation of histories, assuming only their necessary
-properties. Command histories were first
-introduced in trace theory \cite{Mazurkiewicz84Semantics}.
-
-A command history can be built by appending a sequence of commands
-$cs$ to a history $h$, obtain the history $h \star cs$.  The major
-advantage that histories have over sequences is that if a sequence
-$cs_1$ is obtained by reordering the commuting commands of $cs_2$,
-then $h \star cs_1 = h \star cs_2$. Therefore, in  implementations of
-ACA, servers can agree on a history even though
-they chose different orders for some commuting commands.
-
-Command histories share the four properties of sequences that are
-necessary and sufficient to substitute histories for sequences in the
-definition of Chain Agreement and ACA.
-\begin{compactitem}
-    \item[\textbf{Distinctness}:] No duplicate command appears in a history. 
-    \item[\textbf{Ordering}:] Command histories form a partial order:
-        $h_1 \leq h_2$ when there exists a sequence $s$ such that $h_2
-        = h_1 \star s$.
-    \item[\textbf{GLB}:] Every finite set of command histories has a
-        \emph{greatest lower bound}.
-%    \item[\textbf{LUB}:] Every finite set of compatible command
-%        histories has a \emph{least upper bound}, where a set of
-%        command histories is compatible when they have a common upper
-%        bound.
-    \item[\textbf{Consistency}:] If $h_1 \leq h_2 \leq h_3$ and $h_3 =
-        h_1 \star s$ then there exists $s'$ and $s''$ where every
-        request of $s'$ and $s''$ appears in $s$ and such that $h_2 =
-        h_1 \star s'$ and $h_3 = h_2 \star s''$.
-\end{compactitem}
-The optimized version of ACA is obtained by
-simply substituting histories for sequences in the definition of ACA.
-The Ordering, GLB, and Consistency properties of histories ensure that
-\cref{thm:comp} still holds: the Isabelle/HOL proof of \cref{thm:comp} (see
-\cref{sec:isaproofs}) relies only on the four properties above.
 
 \subsection{Optimizing the Execution of Read-Only Commands}
 \label{sec:readonly}
