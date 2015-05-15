@@ -51,11 +51,11 @@ as Generalized Consensus. For simplicity, the presentation in this
 paper uses the more concrete notion of \emph{command history} (see
 \cref{sec:histories}).
 
-Generalized Lattice Agreement \cite{FalerioETAL12GeneralizedLatticeAgreement} allows more efficient implementations of SMR when
-commands are partitioned into read-only commands and write-only commands.
-Composable Generalized Consensus supports the same optimizations as Generalized Lattice Agreement.
-Notably, read-only commands are treated specially so as to optimize their
-executions (see \cref{sec:readonly}).
+%Generalized Lattice Agreement \cite{FalerioETAL12GeneralizedLatticeAgreement} allows more efficient implementations of SMR when
+%commands are partitioned into read-only commands and write-only commands.
+%Composable Generalized Consensus supports the same optimizations as Generalized Lattice Agreement.
+%Notably, read-only commands are treated specially so as to optimize their
+%executions (see \cref{sec:readonly}).
 
 Vertical Paxos algorithms 
 \cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication} are SMR algorithms
@@ -117,13 +117,6 @@ variables). We specify sets of allowed behaviors using an initial predicate
 and a next-state relation expressed using unprimed and primed variables in the
 style of TLA+ \cite{Lamport02SpecifyingSystems}. However, for succinctness, our
 specification are rather informal, eluding non-essential details.
-
-Our specifications all contain by default a state variable $crashed$ and
- a $Crash\left( x \right)$ transition which is always enabled. A server $x$ faithfully
-executes the algorithm that is assigned to it until its identifier is added to
-the variable $crashed$ by a $Crash\left( x \right)$ transitions.  When the identifier of a
-server is in the set $crashed$, all its actions are disabled.  In an execution,
-a server that is never added to the set $crashed$ is said correct.
 
 We consider a computing service exposing a set of commands $C$. The
 service has a sequential specification consisting of an initial state
@@ -225,7 +218,7 @@ When clients of a replicated service submit their commands to the proposers and 
 
 \section{Modular Implementations of Generalized Consensus}
 
-Before formally introducing our framework, let us see how we can build a modular implementation similar to Fast Paxos by first designing a fast but fragile modular GC algorithm, then combining it unchanged with a more resilient module, obtaining an algorithm similar to Fast Paxos. 
+In this section we introduce our framework by example, building a modular Generalized Consensus algorithm inspired from Fast Paxos by first designing a fast but fragile modular algorithm, then combining it unchanged with a more resilient algorithm. 
 
 \subsection{The Broadcast-Decide Algorithm}
 
@@ -285,7 +278,7 @@ Switchers detect that the algorithm is deadlocked when they have received two me
   Its effect is to update $status\left[ a \right]$ to $\quo{stopped}$ and to send the message $\aseq{\quo{stopped},a,accepted\left[ a \right]}$ to the switcher $s$.
 
 \item The $Abort\left( s, h\right)$ transition, for a switcher $s$, is enabled when $aborts\left[ s \right] = \quo{none}$ and the switcher has received
-  at least one $\aseq{\quo{stopped}, a, h}$ message. Its effect is to set the variable $aborts\left[ s \right]$ to the history $h$ received in the $\quo{stopped}$ message. The history $aborts'\left[ s \right]$ is then called an abort history. Because the switcher has received a $\aseq{\quo{stopped},a,h}$ message from the acceptor $a$, the acceptor $a$ no longer accepts new proposals, therefore no history greater than $h$ can ever be learned anymore. Therefore, an abort history can be seen as a safe starting point for a new round to resume execution. 
+  at least one $\aseq{\quo{stopped}, a, h}$ message. Its effect is to set the variable $aborts\left[ s \right]$ to the history $h$ received in the $\quo{stopped}$ message. The history $aborts'\left[ s \right]$ is then called an abort history. 
 
 \item The $Init\left( s,h \right)$ transition, for a switcher $s$, is enabled when $inits\left[ s \right]=\quo{none}$ and $h$ is a history, and its effect is to set $inits\left[ s \right]$ to $h$, and to broadcast the message $\aseq{\quo{init}, h}$ to the acceptors.  The history $inits\left[ s \right]$ is then called an init history.
 As described below, in $B_2$ composed with $B_1$, this history is constrained to be an abort history of $B_1$.
@@ -301,6 +294,9 @@ The composition $B_1\times B_2$ of the two rounds $B_1$ and $B_2$ is obtained as
 \end{itemize}
 The composition models two independent rounds being linked only by the switchers passing the abort histories from $B_1$ to $B_2$, where they become init histories: switchers gather abort histories in $B_1$, then they broadcast them as init histories to the acceptors in $B_2$. The acceptors then initialize their state to a received init history in the $WakeUp\left( a \right)$ transition.
 This process can be repeated as often as needed, with new rounds $B_3$, $B_4$, etc., to try to make progress learning new histories.
+
+Crucially, the composition of any number of rounds implements Generalized Consensus.
+To understand why, observe that in an $Abort\left( s,h \right)$ transition, the switcher $s$ has received a $\aseq{\quo{stopped},a,h}$ message from the acceptor $a$, which means that the acceptor $a$ no longer accepts new proposals and that $h$ is the current value of the $learned\left[ a \right]$ variable. Therefore no history greater than $h$ can ever be learned anymore. An abort history can thus be seen as a safe starting point for a new round to resume execution. 
 
 The Broadcast-Decide algorithm can no more learn new histories whenever one acceptor crashes because the learners wait for the lower bound of the accepted histories of all acceptors to increase. However, the round-change mechanism is very resilient to faults and can abort anyway thanks to the timeout triggering the $Stop\left( s \right)$ transition: a single live acceptor with a single live switcher can abort the execution and change round.
 
@@ -397,37 +393,29 @@ transitions.
 
 Thanks to the inter-round interface, which is the same for Simple-Leader rounds and Broadcast-Decide rounds, Simple-Leader rounds and Broadcast-Decide rounds can be repeatedly composed in a sequence. 
 
-Informally, the composition is correct because abort histories are always safe in the sense that any of the abort histories could be the next learned history.
-However not all can be learned and the initialization mechanism of the rounds ensures that at most one is chosen.
-In the next section we present Composable Generalized Consensus, a specification of the behavior of rounds at the level of proposals, learned histories, init histories, and abort histories. Our composition theorem ensures that any set of rounds individually satisfying Composable Generalized Consensus can be composed in any order to yield an algorithm satisfying Composable Generalized Consensus. 
+Observe that a Simple-Leader round maintains a similar invariant, relating abort histories to learn histories, than the BroadCast-Decide algorithm:
+the learned histories are necessarily smaller than the abort histories in the partial order on histories. In both types of rounds, an abort history is
+a safe starting point for initializing the variables $accepted\left[ a \right]$ of the acceptors. Moreover, both types of rounds guarantee that only a
+single history will be used as a basis for the learners to learn new histories.
+
+In the next section we present Composable Generalized Consensus, a specification of the behavior of rounds at the level of proposals, learned histories, init histories, and abort histories, which allows making precise the informal reasoning above.
+Our composition theorem ensures that any set of rounds individually satisfying Composable Generalized Consensus can be composed in any order to yield an algorithm satisfying Composable Generalized Consensus.
+Therefore we can devise many other types of rounds and compose them unchanged with our two BroadCast-Decide and Simple-Leader rounds.
 
 \section{Composable Generalized Consensus}
 \label{sec:aca}
 
-We now consider implementing Generalized Consensus as a sequence of \emph{Composable Generalized Consensus rounds}, where each round makes progress
-ordering requests or aborts its execution and passes the baton to the next round in the sequence. An algorithm composed of a sequence of CGC instances
-is called a \emph{CGC algorithm}.
+In this section we present Composable Generalized Consensus, our specification for composable Generalized Consensus rounds.
 
-On top of the traditional roles of proposer, acceptor, and learner, CGC
-introduces the new role of \emph{switcher} and a new component, the
-\emph{scheduling policy}. In CGC, the assignment of the roles of proposer,
+As described in the preceding section, the servers can have any of the four roles of proposer, acceptor, learner, and switcher. 
+The assignment of the roles of proposer,
 acceptor, learner, and switcher can change in each rounds, allowing for
-reconfiguration. 
-In normal circumstances, the proposers, acceptors,
-and learners of a CGC instance work together to implement Generalized Consensus.
-However, if the environment becomes unfavorable to a running CGC instance, the
-scheduling policy can instruct the round to abort its execution and pass the
-baton, using the switchers, to a new round.
+reconfiguration.
 
-A switcher of an aborting round determines, from the state of the
-acceptors, an \emph{abort sequence} that it transfers to one or several
-switchers of the new round.  Upon receiving an abort sequence, a switcher of the
-new round initializes the acceptors of the new round, which can then
-proceed implementing SMR, until the new round itself aborts and the
-process is repeated. 
 We assume that in the first round, which has no previous round, every 
 switchers receives the empty abort sequence.
 
+\begin{comment}
 The scheduling policy determines when to abort a CGC instance and which new CGC
 round should take over. The scheduling policy must inform the switchers about the
 identity of the next round and must guarantee that all switchers receive the
@@ -440,6 +428,7 @@ dedicated to other tasks
  in \cref{sec:rounds} that, as in Vertical Paxos, a reliable scheduling policy component allows
 tolerating $f$ faults with $f+1$ replicas, while maintaining the long-term
 resilience of the service by replacing faulty servers upon round change.
+\end{comment}
 
 The clients of a CGC algorithm can send their commands to the proposers of any round (in
 practice, clients send their commands to proposers of the largest
@@ -453,22 +442,15 @@ and, for every learner $l$, $learned\left[ l \right]$.  Additionally,
 we use the state variables $inits$, containing the abort sequences
 received from the previous round, and $aborts$, containing the abort
 sequences transfered to the next round.
-Two consecutive CGC instances are composed by letting the $aborts$ variable of the
+Two consecutive CGC rounds are composed by letting the $aborts$ variable of the
 first round be the $inits$ variable of the second round.
 
-Initially, $crashed$, $proposed$, for every
-learner $l$, $learned\left[ l \right]$, $inits$, and $aborts$ are all empty sets.
-The next-state relation consists of five types of transitions. The
-first three, $Crash\left( x \right)$, $Propose\left( l, c
-\right)$, and $Learn\left( l, cs \right)$, for a learner, proposer, or
-switcher $x$, for a learner $l$, and for a sequence of commands
-$cs$, have the same effect as in Generalized Consensus.
-CGC introduces two new transitions, $Init\left(
-s, cs \right)$ and $Abort\left( s, cs \right)$, for a switcher $s$ and a sequence of
-commands $cs$. The transition $Init\left( s, cs \right)$ adds $cs$ to the set $inits$, and models a switcher receiving the
-abort sequence $cs$ from the preceding round.
-The transition $Abort\left( s, cs \right)$ adds $cs$ to the set $aborts$ and models a switcher transferring the abort sequence $cs$ to a switcher of the next round.
-All the transition are guarded by the following conditions:
+Initially, $crashed$, $proposed$, for every learner $l$, $learned\left[ l \right]$, $inits$, and $aborts$ are all empty sets. The next-state relation
+consists of four types of transitions. The first two, $Propose\left( l, c \right)$, and $Learn\left( l, h \right)$, for a learner $l$, and for a
+history $h$, have the same effect as in Generalized Consensus. CGC introduces two new transitions, $Init\left( s, h \right)$ and $Abort\left( s, h
+\right)$, for a switcher $s$ and a history $h$. The transition $Init\left( s,h \right)$ adds $h$ to the set $inits$, and models a switcher receiving
+the abort sequence $h$ from the preceding round. The transition $Abort\left( s, h \right)$ adds $cs$ to the set $aborts$ and models a switcher
+transferring the abort sequence $cs$ to a switcher of the next round. All the transition are guarded by the following conditions:
 \begin{compactitem}
     \item[\textbf{Agreement}:] The set $\aset{learned'\left[ l
       \right] : l \in Learners}$ is compatible.
