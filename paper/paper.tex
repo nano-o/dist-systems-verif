@@ -226,6 +226,89 @@ their input commands and the received responses, see a
 
 \section{Modular Implementations of Generalized Consensus}
 
+Before formally introducing our framework, let us see how we can build a modular implementation similar to Fast Paxos by first designing a fast but fragile modular GC algorithm, then combining it unchanged with a more resilient module, obtaining an algorithm similar to Fast Paxos. 
+
+\subsection{Fast Generalized Consensus}
+
+In our first algorithm, Fast GC, learners each maintain a variable $hist\left[ l \right]$ which contain the currently accepted history of learner $l$.
+For every learner $l$, $accepted\left[ l \right]$ is initialized to the empty history.
+A proposer broadcasts its proposal to all the learners which unconditionally accept it by setting appending it to their $accepted\left[ l \right]$
+variable and broadcasting to all the acceptors the new value of their accepted history.
+Each acceptor $l$ maintains a variable $learned\left[ l \right]$, initially the empty history, containing its last learned history. A learner $l$
+learns a new history $h$ when $h \geq learned\left[ l \right]$ and $h$ is a lower bound of the set consisting of the last accepted history received
+from each acceptor.
+
+More precisely, the Fast-GC algorithm is described by the sequence of states obtained by the transition relation obtain as the disjunction of the
+following transitions. We do not model the network explicitly using state variables but instead we just say that servers send, broadcast, or receive messages.
+
+\begin{compactitem}
+
+\item A $Propose\left( p,c \right)$ transition, for a proposer $p$ and a command $c$, not guarded, broadcasts the message $\aseq{\quo{prop},c}$ to all
+the acceptors.
+
+\item An $Accept\left( a \right)$ transition, for an acceptor $a$, enabled when $a$ can receive an $\aseq{\quo{prop},c}$ message from a proposer,
+updates $accepted\left[ a \right]$ to $accepted\left[ a \right]\star \aseq{c}$ and broadcasts the message $\aseq{\quo{accepted}, a, accepted'\left[ a \right]}$ to all the learners
+($accepted'\left[ a \right]$ is the new value of the variable $accepted\left[ a \right]$).
+
+\item A $Learn\left( l, h \right)$ transition, for a learner $l$ and a history $h$, enabled when $h \geq learned\left[ l \right]$ and $h$ is a lower
+bound of the set $\aset{LastReceived\left( a \right) : a \in Acceptors}$, where $LastReceived\left( a \right)$ is the last accepted history received
+from the acceptor $a$.
+
+\end{compactitem}
+
+The algorithm Fast GC cannot make progress if two acceptors $a_1$ and $a_2$ have two histories which are not compatible because, since one can only append to the histories $accepted\left[ l \right]$, all the possible future lower bounds of the set $\aset{LastReceived\left( a \right) : a \in Acceptors}$ are bounded above by $GLB\left( \aset{accepted\left[ a_1 \right], accepted\left[ a_2 \right]} \right)$.
+This situation occurs when there is contention on non-commuting commands: for example, when two different proposers send two commands $c_1$ and $c_2$ that do not commute, an acceptors $a_1$ accepts $c_1$ before $c_2$, and an acceptor $a_2 \neq a_1$ accepts $c_2$ before $c_1$.
+
+To overcome this deadlock, we will make some modifications to the algorithm that will allow us to start a fresh instance $FGC_2$, called a round, of the Fast GC algorithm.
+
+Basically, we introduce the new role of switcher, that any server can play additionally from being a proposer, acceptor, or learner.
+A switcher will extract a maximal accepted history from the first round and try to initialize all the acceptors of the second round with the extracted history.
+If we are luckier than in the first round, there may be no contention between switchers and every acceptor $a$ will start accepting new proposals in the second round based on the same initial history $accepted\left[ a \right]$.
+
+We write $FGC_1$ for the first, deadlocked, round of the Fast GC algorithm.
+The rounds $FCG_1$ and $FCG_2$ each have their own copies of the arrays $accepted$ and $learned$, noted $accepted_1$, $accepted_2$, $learend_1$, and $learned_2$ when the round is not clear from the context. 
+We assume that network messages are tagged with a round number and that a message tagged with $i\in\aset{1,2}$ can only be received in $FCG_i$, creating two isolated logical networks. 
+
+Switchers have the role of initializing the new round of Fast GC so that it can resume the execution and overcome the deadlock.
+
+We modify the FCG algorithm by introducing three new transitions and modifying the $Accept\left( a \right)$ transition as follows.
+We add the new variables $status\left[ a \right]$ for every acceptor $a$, which are initialized to $\quo{idle}$. The purpose of $status\left[ a \right]$ is to prevent the acceptor $a$ from accepting commands until its status changes from $\quo{idle}$ to $\quo{ready}$.
+We also add the new variables $inits\left[ s \right]$ and $aborts\left[ s \right]$, for every switcher $s$, initialized to the empty history in $FGC_1$ and to $\quo{none}$ in $FGC_2$. The purpose of the arrays $aborts$ and $inits$ is to transfer state between $FGC_1$ and $FGC_2$.
+The algorithms $FGC_1$ and $FGC_2$ each have their own copy of the arrays $status$, $inits$, and $aborts$, and we adopt the same convention as above consisting in adding a subscript denoted the round to a variable when the round is not clear from the context. 
+
+\begin{compactitem}
+  \item We modify the $Accept\left( a \right)$ transition by having the acceptor $a$ additionally broadcast its new accepted value to the switchers.
+Switchers can therefore detect that the algorithm is deadlocked when there are two broadcast messages $\aseq{\quo{accepted}, a_1, h_1}$ and $\aseq{\quo{accepted}, a_2, h_2}$ in the network such that $h_1$ and $h_2$ are incompatible.
+
+\item The $Abort\left( s \right)$ transition, for a switcher $s$, is enabled when the switcher has detected a deadlock. Its effect is to 
+   set the variable $aborts\left[ s \right]$ to the maximum of the histories received from $a$, where $a$ is any acceptor. 
+   The history $aborts'\left[ s \right]$ is then called an abort history.
+
+ \item The $Init\left( s \right)$ transition, for a switcher $s$, always enabled, and its effect is to to pick a history $h$, set $inits\left[ s \right]$ to $h$, and to broadcast the message $\aseq{\quo{init}, h}$ to the acceptors. In $FGC_2$, composed with $FGC_1$, this history is constrained to be an abort history of $FGC_1$.
+   The history $inits\left[ s \right]$ is then called an init history.
+
+ \item The $WakeUp\left( a \right)$ transition, for an acceptor $a$, is enabled when $status\left[ a \right]$ is $\quo{idle}$ and there is at least one switcher $s$ such that $inits\left[ s \right] \neq \quo{none}$. Its effect is to set set $status\left[ a \right]$ to $\quo{ready}$ and $accepted\left[ a \right]$ to $inits\left[ s \right]$.
+
+\end{compactitem}
+
+The two rounds $FGC_1$ and $FGC_2$ are composed by requiring that $aborts_1 = inits_2$ at all times.
+This model the switchers passing the histories $aborts\left[ s \right]$ from $FGC_1$ to $FGC_2$, where they broadcast to the acceptors and used in the $WakeUp\left( a \right)$ transitions to initialize the state of the acceptors.
+This process can be repeated as often as needed, with new rounds $FGC_3$, $FGC_4$, etc., to try to make progress.
+
+The initial $FGC$ algorithm also enters a deadlock whenever one acceptor crashes because the learners wait for the lower bound over all accepted histories of all acceptors to increase. However, the round-change mechanism is very resilient to faults: a single live acceptor with a single live switcher can abort the execution and change round.
+To allow a new round to make progress after some acceptors crashed in a previous round, we introduce a component called the switching policy. With the Fast GC rounds, the task of the switching policy is to update the set of acceptors from one round to the next, ensuring that failed acceptors are removed or replaced by live ones. The switching policy must be queried by the switchers upon changing round to determine the new set of acceptors. This information can then be piggybacked to the
+acceptors and learners, or the acceptors and learns can directly query the switching policy too. 
+The set of switchers can be changed from round to round in the same fashion. Moreover, in an algorithm composed of several different types of rounds, the switching policy will also be responsible for choosing the type of round to execute next.
+
+\section{Classic Generalized Consensus}
+
+The Fast GC algorithm can process a proposal in two message delays when there is no contention on non-commuting commands. However, if there is
+repeated contention on non-commuting commands, the algorithm may not make progress despite changing round, as the acceptors of the each new round
+may be initialized with incompatible histories. The Fast Paxos algorithm \cite{Lamport06FastPaxos} is able to make progress under high contention by
+designating a leader server that will totally order the proposals. However, to make our Fast GC algorithm work like Fast Paxos, we would have to modify it substantially. If we had spent effort testing Fast GC implementations and proving it correct, this effort would be wasted and we would have to redo all the tests and proofs from scratch.
+
+Instead, we will now show how to obtain an algorithm with performance characteristics close to Fast Paxos, employing a leader to deal with contention, without modifying at all our existing Fast GC algorithm.
+
 \section{Abortable Chain Agreement}
 \label{sec:aca}
 
