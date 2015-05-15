@@ -304,7 +304,7 @@ To allow a new round to make progress after some acceptors crashed in a previous
 acceptors and learners, or the acceptors and learners can directly query the switching policy. 
 The set of switchers can be changed from round to round in the same fashion. Moreover, in an algorithm composed of several different types of rounds, the switching policy will also be responsible for choosing the type of round to execute next.
 
-\section{The Simple-Leader Algorithm} 
+\section{The Leader Algorithm} 
 
 The Broadcast-Decide algorithm can process a proposal in two message delays when there is no contention on non-commuting commands. However, if there is
 repeated contention on non-commuting commands, the algorithm may not make progress despite changing round, as the acceptors of the each new round
@@ -312,25 +312,25 @@ may be initialized with incompatible histories. The Fast Paxos algorithm \cite{L
 designating a leader server that will totally order the proposals. However, to make our Broadcast-Decide algorithm work like Fast Paxos, we would have to modify it substantially. If we had spent effort testing Broadcast-Decide implementations and proving it correct, this effort would be wasted and we would have to redo all the tests and proofs from scratch.
 
 Instead, we will now show how to obtain an algorithm with performance characteristics close to those of Fast Paxos, employing a leader to deal with contention, without modifying at all our existing Broadcast-Decide algorithm.
-To do so, we define a new kind of rounds, the Simple-Leader rounds, which uses the same inter-round interface as the Broadcast-Decide algorithm. 
-The inter-round interface will allow use to combine Simple-Leader rounds and Broadcast-Decide rounds in any order, obtaining an algorithm which can adapt its strategy to its environment, selecting the Broadcast-Decide algorithm under low contention and switching to the more expensive Simple-Leader algorithm when there is contention.
+To do so, we define a new kind of rounds, the Leader rounds, which uses the same inter-round interface as the Broadcast-Decide algorithm. 
+The inter-round interface will allow use to combine Leader rounds and Broadcast-Decide rounds in any order, obtaining an algorithm which can adapt its strategy to its environment, selecting the Broadcast-Decide algorithm under low contention and switching to the more expensive Leader algorithm when there is contention.
 
-In the Simple-Leader algorithm, the proposers send their proposals to a distinguished acceptor called the leader. 
+In the Leader algorithm, the proposers send their proposals to a distinguished acceptor called the leader. 
 The leader totally orders the proposals it receives and forwards them to all the acceptors which accept them in the order defined by the leader.
 As in the Broadcast-Decide algorithm, acceptors broadcast their accepted histories to the learners, which learn a new history when it is a lower bound of 
 the set of $\aset{MaxReceivedFrom\left( a \right) : a \in Acceptors}$.
-Thanks to its leader, a Simple-Leader round continues to learn new histories even when proposals conflict because the leader ensures that the accepted histories of the acceptors remain consistent. 
+Thanks to its leader, a Leader round continues to learn new histories even when proposals conflict because the leader ensures that the accepted histories of the acceptors remain consistent. 
 
-The Simple-Leader algorithm treats all proposals equally and does not take advantage of commutativity. When the leader does not crash, each proposal is processed in three message delays. In comparison, in the absence of failures, the Broadcast-Decide algorithm processes non-conflicting proposals in two message delays but can take arbitrarily long to process conflicting proposals.
+The Leader algorithm treats all proposals equally and does not take advantage of commutativity. When the leader does not crash, each proposal is processed in three message delays. In comparison, in the absence of failures, the Broadcast-Decide algorithm processes non-conflicting proposals in two message delays but can take arbitrarily long to process conflicting proposals.
 
-To initialize a Simple-Leader round, the switchers send their init histories to the leader, which choose a unique one that it forwards to the acceptors, guaranteeing that all the acceptors are initialized with the same history even when conflicting init histories are sent concurrently.
+To initialize a Leader round, the switchers send their init histories to the leader, which choose a unique one that it forwards to the acceptors, guaranteeing that all the acceptors are initialized with the same history even when conflicting init histories are sent concurrently.
 
-The Simple-Leader algorithm can not learn new histories if its leader, or any other acceptor, crashes.
+The Leader algorithm can not learn new histories if its leader, or any other acceptor, crashes.
 To recover from this deadlock we pass the baton to a new round, as in the Broadcast-Decide algorithm, with a similar same mechanism: a switcher that times-out waiting for new messages from the acceptors broadcast a stop message, gathers the accepted history from at least one of the acceptors, and aborts. 
 
-Let us specify more precisely the Simple-Leader algorithm.
+Let us specify more precisely the Leader algorithm.
 
-The specification of Simple-Leader algorithm uses the same variables as the Broadcast-Decide algorithm and the same initial state. 
+The specification of Leader algorithm uses the same variables as the Broadcast-Decide algorithm and the same initial state. 
 %that is the arrays of variables    
 %$inits\left[ s \right]$, $aborts\left[ s \right]$, $learned\left[ l \right]$,
 %$status\left[ a \right]$, and $accepted\left[ a \right]$, where $l$ is a learner, $a$ is
@@ -391,16 +391,15 @@ transitions.
   history $h$ received in the $\quo{stopped}$ message.
 \end{compactitem}
 
-Thanks to the inter-round interface, which is the same for Simple-Leader rounds and Broadcast-Decide rounds, Simple-Leader rounds and Broadcast-Decide rounds can be repeatedly composed in a sequence. 
+Thanks to the inter-round interface, which is the same for Leader rounds and Broadcast-Decide rounds, Leader rounds and Broadcast-Decide rounds can be repeatedly composed in a sequence. 
 
-Observe that a Simple-Leader round maintains a similar invariant, relating abort histories to learn histories, than the BroadCast-Decide algorithm:
+Observe that a Leader round maintains a similar invariant, relating abort histories to learn histories, than the BroadCast-Decide algorithm:
 the learned histories are necessarily smaller than the abort histories in the partial order on histories. In both types of rounds, an abort history is
 a safe starting point for initializing the variables $accepted\left[ a \right]$ of the acceptors. Moreover, both types of rounds guarantee that only a
-single history will be used as a basis for the learners to learn new histories.
+single history will be used as a basis for the learners to learn new histories. These common invariants make the two kinds of rounds compatible, so that we can compose them and obtain an algorithm implementing Generalized Consensus.
 
 In the next section we present Composable Generalized Consensus, a specification of the behavior of rounds at the level of proposals, learned histories, init histories, and abort histories, which allows making precise the informal reasoning above.
-Our composition theorem ensures that any set of rounds individually satisfying Composable Generalized Consensus can be composed in any order to yield an algorithm satisfying Composable Generalized Consensus.
-Therefore we can devise many other types of rounds and compose them unchanged with our two BroadCast-Decide and Simple-Leader rounds.
+Our composition theorem ensures that any set of rounds individually satisfying Composable Generalized Consensus can be composed in any order to yield an algorithm satisfying Composable Generalized Consensus. Therefore we can devise many other types of rounds and compose them unchanged with our two BroadCast-Decide and Leader rounds.
 
 \section{Composable Generalized Consensus}
 \label{sec:aca}
@@ -408,12 +407,11 @@ Therefore we can devise many other types of rounds and compose them unchanged wi
 In this section we present Composable Generalized Consensus, our specification for composable Generalized Consensus rounds.
 
 As described in the preceding section, the servers can have any of the four roles of proposer, acceptor, learner, and switcher. 
-The assignment of the roles of proposer,
-acceptor, learner, and switcher can change in each rounds, allowing for
+The assignment of the roles of proposer, acceptor, learner, and switcher can change in each rounds, allowing for
 reconfiguration.
 
 We assume that in the first round, which has no previous round, every 
-switchers receives the empty abort sequence.
+switchers receives the empty abort history.
 
 \begin{comment}
 The scheduling policy determines when to abort a CGC instance and which new CGC
@@ -439,18 +437,18 @@ CGC specifies the allowed behaviors of the proposers, learners, and switchers
 \emph{of a single round}. Similarly to
 Generalized Consensus, we use the state variables $crashed$, $proposed$,
 and, for every learner $l$, $learned\left[ l \right]$.  Additionally,
-we use the state variables $inits$, containing the abort sequences
+we use the state variables $inits$, containing the init histories 
 received from the previous round, and $aborts$, containing the abort
-sequences transfered to the next round.
+histories transfered to the next round.
 Two consecutive CGC rounds are composed by letting the $aborts$ variable of the
-first round be the $inits$ variable of the second round.
+first round be equal to the $inits$ variable of the second round.
 
-Initially, $crashed$, $proposed$, for every learner $l$, $learned\left[ l \right]$, $inits$, and $aborts$ are all empty sets. The next-state relation
+Initially, $proposed$, for every learner $l$, $learned\left[ l \right]$, $inits$, and $aborts$ are all empty sets. The next-state relation
 consists of four types of transitions. The first two, $Propose\left( l, c \right)$, and $Learn\left( l, h \right)$, for a learner $l$, and for a
 history $h$, have the same effect as in Generalized Consensus. CGC introduces two new transitions, $Init\left( s, h \right)$ and $Abort\left( s, h
 \right)$, for a switcher $s$ and a history $h$. The transition $Init\left( s,h \right)$ adds $h$ to the set $inits$, and models a switcher receiving
-the abort sequence $h$ from the preceding round. The transition $Abort\left( s, h \right)$ adds $cs$ to the set $aborts$ and models a switcher
-transferring the abort sequence $cs$ to a switcher of the next round. All the transition are guarded by the following conditions:
+the abort history $h$ from the preceding round. The transition $Abort\left( s, h \right)$ adds $cs$ to the set $aborts$ and models a switcher
+transferring the abort history $cs$ to a switcher of the next round. All the transition are guarded by the following conditions:
 \begin{compactitem}
     \item[\textbf{Agreement}:] The set $\aset{learned'\left[ l
       \right] : l \in Learners}$ is compatible.
@@ -458,18 +456,18 @@ transferring the abort sequence $cs$ to a switcher of the next round. All the tr
         is of the form $h \star cs$, where $cs$ contains only commands
         of the set $proposed$.
     \item[\textbf{Initialization}:] If $inits$ is empty, then no
-        sequence can be learned and no switcher can abort.
+        history can be learned and no switcher can abort.
     \item[\textbf{Irrevocability}:] In the case of a $Learn\left( l,h
         \right)$ transition, the new learned history $h$ is an 
         extension of $learned\left[ l \right]$.
-    \item[\textbf{Safe Abort}:] Every abort sequence is an extension in the 
+    \item[\textbf{Safe Abort}:] Every abort history is an extension in the 
         partial order $\leq$ of a learned history.
 \end{compactitem}
 Note that Agreement and Irrevocability are the same as in Generalized Consensus.
 
 If a client has submitted a command to a proposer, eventually,
 either the client gets a response from the current round, or
-the next round is initialized with an abort sequence and the
+the next round is initialized with an abort history and the
 command can be resubmitted to the next round.
 
 \subsection{The Composition Theorem}
@@ -483,7 +481,7 @@ variables of the seventh round are written $proposed_7$, for every
 learner $l$, $learned_7\left[ l \right]$, $inits_7$, and $aborts_7$.
 
 Moreover, we assume that a command, which is proposed to a round and that
-is not learned before the first abort sequence is transfered to the
+is not learned before the first abort history is transfered to the
 next round, is proposed anew to the next round.
 
 Define the state variable $proposed$ as the union over all rounds $i$
@@ -491,9 +489,10 @@ of the $proposed_i$ variables and, for every learner $l$,
 define the $learned\left[ l \right]$ variable as the union over all
 rounds $i$ of the $learned_i\left[ l \right]$ variables.
 
+\begin{comment}
 \begin{thm}[Composition Theorem]
     \label{thm:comp}
-    In every execution of a succession of CGC instances, the sequence of valuations
+    In every execution of a succession of CGC instances, the history of valuations
     of the variable $proposed$ and, for every learner $l$, of the variables
     $learned\left[ l \right]$ satisfies Generalized Consensus.
 \end{thm}
@@ -502,7 +501,7 @@ using the following lemma.
 \begin{lem}
   \label{lem:comp}
     Consider two rounds numbered $i$ and $i+1$. In every execution of a
-    succession of CGC instances, the sequence of valuations of the variables $inits
+    succession of CGC instances, the history of valuations of the variables $inits
     = inits_i$, $propose = proposed_i \cup propose_{i+1}$, for every learner
     $l$, $learned\left[ l \right] = learned_i\left[ l \right] \cup
     learned_{i+1}\left[ l \right]$and $aborts = aborts_{i+1}$ satisfies CGC.
@@ -511,7 +510,7 @@ using the following lemma.
   A mechanically-checked proof in Isabelle/HOL appears in \cref{sec:isaproofs}.
   The proofs uses a version of the specification of CGC that has a more
   executable form that presented in this section. Moreover,
-  instead of sequences of commands, the Isabelle/HOL specification uses the more
+  instead of history of commands, the Isabelle/HOL specification uses the more
   general notion of command history, presented in the next subsection.
   The Isabelle/HOL formalization of CGC uses the theory of I/O automata, which
   is also formalized in the Isabelle/HOL. The proof uses a refinement
@@ -531,6 +530,7 @@ of CGC instance can always be devised after the system is deployed and added on 
 the existing types of rounds.
 
 We now describe two important practical optimizations of CGC.
+
 
 \subsection{Optimizing the Execution of Read-Only Commands}
 \label{sec:readonly}
@@ -569,34 +569,19 @@ since no-op commands commute with all other commands, they can be
 treated more efficiently than regular read commands by the acceptors,
 like, for example, in a fast round of Fast Paxos.
 
+\end{comment}
+
+
 \section{Fast and Conservative Rounds}
 \label{sec:rounds}
 
-Most existing SMR algorithms can easily be obtained as the
-composition of one or more CGC instances. 
-
-The FLP impossibility result \cite{FischerLynchPaterson83ImpossibilityDistributedConsensusOneFaultyProcess}
-implies that no algorithm can implement SMR to the letter in practice.
-Instead, SMR algorithms guarantee safety (i.e. replica execute the
-same sequence of commands) but may not be able to make progress (i.e.
-order new commands). To make progress as likely as possible, most SMR
-algorithms are structured in consecutive rounds (also called ballots,
-views, or epochs). In each round, the algorithm tries to make progress
-but cannot be guaranteed to succeed. When the algorithm detects that
-progress is no more possible, a new round is started.  The new round
-is initialized so as to preserve safety, usually by one of the
-acceptors. For example, in Paxos, the leader of a newly started ballot
-numbered $i$ determines a value that is \emph{safe at $i$} and
-proposes it as first value to the other acceptors of the ballot $i$.
-In existing SMR algorithms, new rounds are initialized ad-hoc, which
-prevents mixing rounds of two different algorithms.  Instead,
-CGC is an abstraction of rounds which establishes a common interface and contract for switching from
-one round to the next, enabling switching from any CGC instance to any other.
+Most existing SMR algorithms are structured in rounds that can be modified to obtain several CGC rounds.
+However, checking that the obtained rounds are correct may be quite difficult in the case of algorithms using complex quorum
+systems. In particular, safely aborting can become complex.
 
 To simplify the task of expressing existing algorithms as the composition of one
 or more CGC instances, we propose two specifications, \emph{conservative CGC
-rounds} and
-\emph{fast CGC instances}, which can easily be concretized to obtain executable rounds.
+rounds} and \emph{fast CGC rounds}, which can easily be concretized to obtain executable rounds.
 We show that CGC versions of Classic Paxos, Multi-Coordinated Paxos, Chain
 Replication, and Ring Paxos can be obtained by concretizing the specification of
 conservative CGC instances, and that CGC versions of the fast rounds of Fast Paxos can be obtained by concretizing the specification of fast CGC instances.
@@ -621,8 +606,7 @@ $status\left[ a \right]$  is ``idle'' and $hist\left[ a \right]$ is the special
 value $None$.
 
 The next-state relations of conservative and fast rounds are composed
-of the following types of transitions (and the default $Crash\left( x
-\right)$ transition).
+of the following types of transitions:
 \begin{compactitem}
     \item A $Propose\left( p,c \right)$ transition, for a proposer $p$
         and a command $c$, not guarded, inserts $c$ in the set
