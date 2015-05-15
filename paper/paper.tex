@@ -253,6 +253,7 @@ updates $accepted\left[ a \right]$ to $accepted\left[ a \right]\star \aseq{c}$ a
 \item A $Learn\left( l, h \right)$ transition, for a learner $l$ and a history $h$, enabled when $h \geq learned\left[ l \right]$ and $h$ is a lower
 bound of the set $\aset{MaxReceivedFrom\left( a \right) : a \in Acceptors}$, where $MaxReceivedFrom\left( a \right)$ is the maximal accepted history received
 from the acceptor $a$.
+ Its effect is to set $learned\left[ l \right]$ to $h$.
 
 \end{compactitem}
 
@@ -283,17 +284,17 @@ Switchers detect that the algorithm is deadlocked when they have received two me
 \item The $Stop\left( a \right)$ transition, for an acceptor $a$, is enabled when the acceptor $a$ can receive a $\aseq{\quo{stop}, s}$ message from a switcher $s$.
   Its effect is to update $status\left[ a \right]$ to $\quo{stopped}$ and to send the message $\aseq{\quo{stopped},a,accepted\left[ a \right]}$ to the switcher $s$.
 
-\item The $Abort\left( s \right)$ transition, for a switcher $s$, is enabled when $aborts\left[ s \right] = \quo{none}$ and the switcher has received
+\item The $Abort\left( s, h\right)$ transition, for a switcher $s$, is enabled when $aborts\left[ s \right] = \quo{none}$ and the switcher has received
   at least one $\aseq{\quo{stopped}, a, h}$ message. Its effect is to set the variable $aborts\left[ s \right]$ to the history $h$ received in the $\quo{stopped}$ message. The history $aborts'\left[ s \right]$ is then called an abort history. Because the switcher has received a $\aseq{\quo{stopped},a,h}$ message from the acceptor $a$, the acceptor $a$ no longer accepts new proposals, therefore no history greater than $h$ can ever be learned anymore. Therefore, an abort history can be seen as a safe starting point for a new round to resume execution. 
 
-\item The $Init\left( s \right)$ transition, for a switcher $s$, is enabled when $inits\left[ s \right]=\quo{none}$, and its effect is to pick a history $h$, set $inits\left[ s \right]$ to $h$, and to broadcast the message $\aseq{\quo{init}, h}$ to the acceptors.  The history $inits\left[ s \right]$ is then called an init history.
+\item The $Init\left( s,h \right)$ transition, for a switcher $s$, is enabled when $inits\left[ s \right]=\quo{none}$ and $h$ is a history, and its effect is to set $inits\left[ s \right]$ to $h$, and to broadcast the message $\aseq{\quo{init}, h}$ to the acceptors.  The history $inits\left[ s \right]$ is then called an init history.
 As described below, in $B_2$ composed with $B_1$, this history is constrained to be an abort history of $B_1$.
 
  \item The $WakeUp\left( a \right)$ transition, for an acceptor $a$, is enabled when $status\left[ a \right]$ is $\quo{idle}$ and there is at least one switcher $s$ such that $inits\left[ s \right] \neq \quo{none}$. Its effect is to set set $status\left[ a \right]$ to $\quo{ready}$ and $accepted\left[ a \right]$ to $inits\left[ s \right]$.
 
 \end{compactitem}
 
-The two rounds $B_1$ and $B_2$ are composed as follows:
+The composition $B_1\times B_2$ of the two rounds $B_1$ and $B_2$ is obtained as follows:
 \begin{itemize}
   \item We Require that a transition of the composition be a transition of either specification but not both, except for the $Abort\left( s \right)$ and $Init\left( s \right)$ transitions, which are allowed to take place at the same time. 
   \item We require that $aborts_1 = inits_2$ at all times.
@@ -331,102 +332,70 @@ To initialize a Simple-Leader round, the switchers send their init histories to 
 The Simple-Leader algorithm can not learn new histories if its leader, or any other acceptor, crashes.
 To recover from this deadlock we pass the baton to a new round, as in the Broadcast-Decide algorithm, with a similar same mechanism: a switcher that times-out waiting for new messages from the acceptors broadcast a stop message, gathers the accepted history from at least one of the acceptors, and aborts. 
 
-****************************************
-
 Let us specify more precisely the Simple-Leader algorithm.
 
-The specification of Simple-Leader algorithm uses the sets   
- $inits$, $aborts$, the arrays of variables $learned\left[ l \right]$,
-$status\left[ a \right]$, and $accepted\left[ a \right]$, and two
-additional arrays $accepted\left[ l \right]\left[ a \right]$ and
-$stop\left[ s \right]\left[ a \right]$, where $l$ is a learner, $a$ is
-an acceptor, and $s$ is a switcher.
+The specification of Simple-Leader algorithm uses the same variables as the Broadcast-Decide algorithm and the same initial state. 
+%that is the arrays of variables    
+%$inits\left[ s \right]$, $aborts\left[ s \right]$, $learned\left[ l \right]$,
+%$status\left[ a \right]$, and $accepted\left[ a \right]$, where $l$ is a learner, $a$ is
+%an acceptor, and $s$ is a switcher.
 
-There is also a network component that we do not describe explicitly.
-However, the network allows any servers to communicate by sending and
-receiving messages.
+%Initially, the variables $inits$, $aborts$, and, for every
+%learner $l$, $learned\left[ l \right]$ are empty sets. For every
+%acceptor $a$, $status\left[ a \right]$ is ``idle'' and $hist\left[ a
+%\right]$ is the special value $None$.
 
-Initially, the variables $inits$, $aborts$, and, for every
-learner $l$, $learned\left[ l \right]$ are empty sets. For every
-acceptor $a$, $status\left[ a \right]$ is ``idle'' and $hist\left[ a
-\right]$ is the special value $None$. For every learner $l$ and acceptor $a$,
-$accepted\left[ l \right]\left[ a \right]$ is the special value
-$None$. For every switcher $s$ and acceptor $a$, $stopped\left[ s
-\right]\left[ a \right]$ is set to $false$.  There are initially no
-messages in the network.
-
-The next-state relation is composed of the following types of
-transitions, where the definitions of learn quorums, abort quorums,
-and of the $SafeAborts\left( R \right)$ operator are the ones of conservative
-CGC instances.
+The next-state relation is the disjunction of the following types of
+transitions. 
 \begin{compactitem}
-    \item A $Propose\left( p,c \right)$ transition, for a proposer $p$
-        and a command $c$, not guarded, inserts $c$ in the set
-        $proposed$ and sends the message $\aseq{\quo{prop},c}$ to
-        the leader.
-    \item An $Init\left( s, h \right)$ transition, for a switcher $s$
-        and a history $h$, not guarded, inserts $h$ in the set $inits$ and
-        sends the message $\aseq{\quo{init},h}$ to the leader.
-    \item A $WakeUp\left( leader \right)$ transition, enabled when
-        $status\left[ leader \right]$ is ``idle'' and the leader can
-        receive a $\aseq{\quo{init},h}$ message. Its effect is to
-        receive the message, set $hist\left[ leader \right]$ to $h$,
-        to set $status\left[ leader \right]$ to ``ready'', and to
-        broadcast the message $\aseq{\quo{leader-accept},h}$ to all
-        other acceptors.
-    \item An $Accept\left( leader \right)$ transition, enabled when
-        $status\left[ leader \right]$ is ``ready'' and the leader can
-        receive a $\aseq{\quo{prop},c}$ message. The effect of the
-        action is to receive the message, to update $hist\left[ leader
-        \right]$ to $hist\left[ leader \right]\star c$, and to
-        broadcast the message $\aseq{\quo{ack},hist\left[ leader
-        \right]\star c}$ to the learners, and to broadcast the message
-        $\aseq{\quo{leader-accept},hist\left[ leader \right]\star c}$
-        to all the other acceptors.
-    \item An $Accept\left( a \right)$ transition, for an acceptor $a$
-        which is not the leader, is enabled when $status\left[ a
-        \right]$ is ``ready'' and $a$ can receive a
-        $\aseq{\quo{leader-accept},h}$ message where $h > hist\left[ a
-        \right]$. The effect of the action is to receive the message,
-        to update $hist\left[ a \right]$ to $h$, and to broadcast the
-        message $\aseq{\quo{ack},hist\left[ a \right]\star c}$ to the
-        learners.
-    \item A $RcvAck\left( l \right)$ transition, for a learner $l$, is
-        enabled when $l$ can receive a message $\aseq{\quo{ack},h}$
-        from an acceptor $a$. Its effect is to receive the message and
-        to set $accepted\left[ l \right]\left[ a \right]$ to $h$.
-    \item A $Learn\left( l, h \right)$ transition, for a learner $l$
-        and a history $h$, is enabled when $h > Max\left(
-        learned\left[ l \right] \right)$ and there is a learn quorum
-        $Q$ of acceptors such that $h = GLB\left( \aset{accepted\left[
-        l \right]\left[ a \right] : a \in Q }\right)$. Its effect is
-        to insert $h$ in $learned\left[ l \right]$.
-    \item A $Stop\left( s \right)$ transition, for a switcher $s$,
-        always enabled, broadcasts a $\aseq{\quo{stop}}$ message to all
-        the acceptors.  This transition models a switcher being
-        instructed by the scheduling policy to abort the current round.
-    \item A $Stop\left( a \right)$ transition, for an acceptor $a$,
-        enabled when $a$ can receive a $\aseq{\quo{stop}}$ message
-        from a switcher $s$. Its effect is to receive the message, set
-        $status\left[ a \right]$ to ``stopped'', and to send the
-        message $\aseq{\quo{stopped},hist\left[ a \right]}$ to the
-        switcher $s$.
-    \item A $RcvStopped\left( s \right)$ transition, for a switcher
-        $s$, enabled when $s$ can receive a $\aseq{\quo{stopped},h}$
-        message from an acceptor $a$. Its effect is to receive the
-        message and to set $stopped\left[ s \right]\left[ a \right]$
-        to $h$.
-    \item An $Abort\left( s, h \right)$ transition, for a switcher $s$
-        and a history $h$, is enabled when there exists an abort quorum
-        $R$ such that, for every member $a$ of $R$, $stopped\left[ s
-        \right]\left[ a \right]$ is not $false$ and $h \in
-        SafeAborts\left( R \right)$, where $SafeAborts\left( R
-        \right)$ is computed using the array $stopped\left[ a
-        \right]$. Its effect is to insert  $h$ in the set $aborts$. 
+\item A $Propose\left( p,c \right)$ transition, for a proposer $p$
+  and a command $c$, not guarded, sends the message $\aseq{\quo{prop},c}$ to
+  the leader.
+\item An $Init\left( s, h \right)$ transition, for a switcher $s$
+  and a history $h$, is enabled when $inits\left[ s \right] = \quo{none}$, and its effect is to set $inits\left[ s \right]$ to $h$ and
+  to sends the message $\aseq{\quo{init},h}$ to the leader.
+\item A $WakeUp\left( leader \right)$ transition, enabled when
+  $status\left[ leader \right]$ is ``idle'' and 
+  a message $\aseq{\quo{init},h}$ was sent to the leader. Its effect is to
+  receive the message, set $accepted\left[ leader \right]$ to $h$,
+  to set $status\left[ leader \right]$ to ``ready'', and to
+  broadcast the message $\aseq{\quo{leader-accept},h}$ to all
+  other acceptors.
+\item An $Accept\left( leader \right)$ transition, enabled when
+  $status\left[ leader \right]$ is ``ready'' and a $\aseq{\quo{prop},c}$ message has been sent to the leader. The effect of the
+  action is to receive the message, to update $accepted\left[ leader
+  \right]$ to $accepted\left[ leader \right]\star c$, and to
+  broadcast the message $\aseq{\quo{accepted},accepted'\left[ leader
+  \right]}$ to the learners, and to broadcast the message
+  $\aseq{\quo{leader-accept},accepted'\left[ leader \right]}$
+  to all the other acceptors.
+\item An $Accept\left( a \right)$ transition, for an acceptor $a$
+  which is not the leader, is enabled when $status\left[ a
+  \right]$ is ``ready'' and the leader has sent a
+  $\aseq{\quo{leader-accept},h}$ message to $a$, where $h > accepted\left[ a
+  \right]$. The effect of the action is to receive the message,
+  to update $accepted\left[ a \right]$ to $h$, and to broadcast the
+  message $\aseq{\quo{accepted},hist\left[ a \right]\star c}$ to the
+  learners.
+\item A $Learn\left( l, h \right)$ transition, for a learner $l$
+  and a history $h$, is enabled when $h \geq learned\left[ l \right]$ and $h$ is a lower
+  bound of the set $\aset{MaxReceivedFrom\left( a \right) : a \in Acceptors}$, where $MaxReceivedFrom\left( a \right)$ is the maximal accepted history received
+  from the acceptor $a$.  Its effect is to set $learned\left[ l \right]$ to $h$.
+\item A $Stop\left( s \right)$ transition, for a switcher $s$,
+  enabled when the switcher $s$ has waited for too long without receiving any messages from the acceptors, broadcasts a $\aseq{\quo{stop}, s}$ message to all
+  the acceptors.  
+\item A $Stop\left( a \right)$ transition, for an acceptor $a$,
+  enabled when $a$ can receive a $\aseq{\quo{stop},s}$ message
+  from a switcher $s$. Its effect is to receive the message, set
+  $status\left[ a \right]$ to ``stopped'', and to send the
+  message $\aseq{\quo{stopped},a,hist\left[ a \right]}$ to the
+  switcher $s$.
+\item An $Abort\left( s, h \right)$ transition, for a switcher $s$ and a history $h$, is enabled when $aborts\left[ s \right] = \quo{none}$ and
+  the switcher has received at least one $\aseq{\quo{stopped}, a, h}$ message. Its effect is to set the variable $aborts\left[ s \right]$ to the
+  history $h$ received in the $\quo{stopped}$ message.
 \end{compactitem}
 
-Thanks to the inter-round interface, Simple-Leader rounds and Broadcast-Decide rounds can be composed in any order.
-To compose a Simple-Leader round $SL_1$ with an Broadcast-Decide round $B_2$, we compose their specifications as before, adding the constraint that the set $aborts_1$ be equal to the set $inits_2$ at all times.
+Thanks to the inter-round interface, which is the same for Simple-Leader rounds and Broadcast-Decide rounds, Simple-Leader rounds and Broadcast-Decide rounds can be repeatedly composed in a sequence. 
 
 Informally, the composition is correct because abort histories are always safe in the sense that any of the abort histories could be the next learned history.
 However not all can be learned and the initialization mechanism of the rounds ensures that at most one is chosen.
