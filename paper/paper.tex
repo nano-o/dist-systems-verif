@@ -38,7 +38,7 @@ This is a regular paper.
 
 SMR is often implemented using a sequence of instances of Consensus.
 There are numerous examples of consensus algorithms in the literature.
-However, Abortable Chain Agreement is based on Generalized Consensus. 
+However, Composable Generalized Consensus is based on Generalized Consensus. 
 In Generalized Consensus \cite{Lamport05GeneralizeConsensus}, the learners of a
 SMR algorithm repeatedly learn new values belonging to a \emph{C-struct set}. A
 C-struct can be seen as a data structure encoding  sequences of commands modulo
@@ -46,14 +46,14 @@ the ordering of commands that commute. The advantage of Generalized
 Consensus over Consensus is that
 two servers which receive commuting commands in different orders can still reach
 agreement on C-structs without further synchronization. 
-Our Abortable Chain Agreement can also use C-structs, with the same advantages
+Our Composable Generalized Consensus can also use C-structs, with the same advantages
 as Generalized Consensus. For simplicity, the presentation in this
 paper uses the more concrete notion of \emph{command history} (see
 \cref{sec:histories}).
 
 Generalized Lattice Agreement \cite{FalerioETAL12GeneralizedLatticeAgreement} allows more efficient implementations of SMR when
 commands are partitioned into read-only commands and write-only commands.
-Abortable Chain Agreement supports the same optimizations as Generalized Lattice Agreement.
+Composable Generalized Consensus supports the same optimizations as Generalized Lattice Agreement.
 Notably, read-only commands are treated specially so as to optimize their
 executions (see \cref{sec:readonly}).
 
@@ -65,13 +65,13 @@ long-term availability of a replicated service.
 Vertical Paxos algorithms use an external reconfiguration master, itself
 implemented as a replicated state machine, which determines the servers that should
 be removed from or added to the configuration.
-ACA shares some aspects of Vertical Paxos algorithms: the task of the
+CGC shares some aspects of Vertical Paxos algorithms: the task of the
 reconfiguration master is similar to the task of the scheduling policy
-component of ACA (see \cref{sec:aca}).
-However, in ACA, changing round can be used not only to replace crashed servers
+component of CGC (see \cref{sec:aca}).
+However, in CGC, changing round can be used not only to replace crashed servers
 but also to change the algorithm that the servers are running. 
 Changing algorithm is not possible in Vertical Paxos.
-In both Vertical Paxos and ACA, a reliable reconfiguration master, resp. a
+In both Vertical Paxos and CGC, a reliable reconfiguration master, resp. a
 reliable scheduling policy, allows tolerating $f$ crashes with $f+1$ servers.
 
 The Abstract Framework \cite{GuerraouiETAL10Next700BftProtocols} proposes to
@@ -81,9 +81,9 @@ correctness properties. By construction, the composition of any number of
 Abstract instances is a correct SMR implementation. However, the Abstract
 Framework uses totally ordered sequence of commands, making difficult the
 optimization of the execution of commuting and read-only commands that are
-possible with ACA.  Moreover, the Abstract Framework does not identify the
+possible with CGC.  Moreover, the Abstract Framework does not identify the
 crucial role of the scheduling policy for the long-term resilience of a service.
-Abortable Chain Agreement combines the ideas of the Abstract Framework,
+Composable Generalized Consensus combines the ideas of the Abstract Framework,
 Generalized Paxos, Generalized Lattice Agreement, and Vertical Paxos in a
 unified abstraction. 
 
@@ -95,13 +95,13 @@ Isabelle/HOL interactive
 proofs assistant.  Like the Abstract Framework, the
 Speculative Linearizability framework is based on totally ordered
 sequences of commands, with the same drawback for the execution of
-commuting and read-only commands. Moreover, Abortable Chain Agreement is both
+commuting and read-only commands. Moreover, Composable Generalized Consensus is both
 conceptually simpler and subsumes the Speculative Linearizability
-property.  Like Speculative Linearizability, Abortable Chain Agreement
+property.  Like Speculative Linearizability, Composable Generalized Consensus
 and its main property, the composition theorem (\cref{thm:comp}), are
 formalized in Isabelle/HOL (see \cref{sec:isaproofs}).
 
-Abortable Chain Agreement is the most complete framework to date for building
+Composable Generalized Consensus is the most complete framework to date for building
 adaptive replication algorithms out of heterogeneous rounds, making state of the
 art optimization techniques available to algorithm designers, which was not
 possible before.
@@ -228,17 +228,18 @@ their input commands and the received responses, see a
 
 Before formally introducing our framework, let us see how we can build a modular implementation similar to Fast Paxos by first designing a fast but fragile modular GC algorithm, then combining it unchanged with a more resilient module, obtaining an algorithm similar to Fast Paxos. 
 
-\subsection{Fast Generalized Consensus (Aggrement By All?)}
+\subsection{The Broadcast Algorithm}
 
-In our first algorithm, Fast GC, learners each maintain a variable $hist\left[ l \right]$ which contain the currently accepted history of learner $l$.
+In our first algorithm, Broadcast, learners each maintain a variable $hist\left[ l \right]$ which contain the currently accepted history of learner $l$.
 For every learner $l$, $accepted\left[ l \right]$ is initialized to the empty history.
-A proposer broadcasts its proposal to all the learners which unconditionally accept it by setting appending it to their $accepted\left[ l \right]$
-variable and broadcasting to all the acceptors the new value of their accepted history.
+A proposer broadcasts its proposal to all the learners which unconditionally accept it by appending the proposal to their $accepted\left[ l \right]$
+history and by broadcasting to all the acceptors their new accepted history, $accepted'\left[ l \right]$.
+
 Each acceptor $l$ maintains a variable $learned\left[ l \right]$, initially the empty history, containing its last learned history. A learner $l$
 learns a new history $h$ when $h \geq learned\left[ l \right]$ and $h$ is a lower bound of the set consisting of the maximal accepted history received
 from each acceptor.
 
-More precisely, the Fast-GC algorithm is described by the sequence of states obtained by the transition relation obtain as the disjunction of the
+More precisely, the Broadcast algorithm is described by the transition relation obtained as the disjunction of the
 following transitions. We do not model the network explicitly using state variables but instead we just say that servers send, broadcast, or receive messages.
 
 \begin{compactitem}
@@ -246,7 +247,7 @@ following transitions. We do not model the network explicitly using state variab
 \item A $Propose\left( p,c \right)$ transition, for a proposer $p$ and a command $c$, not guarded, broadcasts the message $\aseq{\quo{prop},c}$ to all
 the acceptors.
 
-\item An $Accept\left( a \right)$ transition, for an acceptor $a$, enabled when $a$ can receive an $\aseq{\quo{prop},c}$ message from a proposer,
+\item An $Accept\left( a \right)$ transition, for an acceptor $a$, enabled when $a$ can receive a $\aseq{\quo{prop},c}$ message from a proposer,
 updates $accepted\left[ a \right]$ to $accepted\left[ a \right]\star \aseq{c}$ and broadcasts the message $\aseq{\quo{accepted}, a, accepted'\left[ a \right]}$ to all the learners
 ($accepted'\left[ a \right]$ is the new value of the variable $accepted\left[ a \right]$).
 
@@ -256,29 +257,27 @@ from the acceptor $a$.
 
 \end{compactitem}
 
-The algorithm Fast GC cannot learn new histories if two acceptors $a_1$ and $a_2$ have two histories which are not compatible because, since one can only append to the histories $accepted\left[ l \right]$, all the possible future lower bounds of the set $\aset{MaxReceivedFrom\left( a \right) : a \in Acceptors}$ are bounded above by $GLB\left( \aset{accepted\left[ a_1 \right], accepted\left[ a_2 \right]} \right)$.
-This situation occurs when there is contention on non-commuting commands: for example, when two different proposers send two commands $c_1$ and $c_2$ that do not commute, an acceptors $a_1$ accepts $c_1$ before $c_2$, and an acceptor $a_2 \neq a_1$ accepts $c_2$ before $c_1$.
+The algorithm Broadcast cannot learn new histories if two acceptors $a_1$ and $a_2$ have two histories which are not compatible because, since an acceptor can only append new proposals to its history $accepted\left[ l \right]$, all the possible future lower bounds of the set $\aset{MaxReceivedFrom\left( a \right) : a \in Acceptors}$ are bounded above by $GLB\left( \aset{accepted\left[ a_1 \right], accepted\left[ a_2 \right]} \right)$.
+This situation occurs when non-commuting commands contend: for example, when two different proposers send two commands $c_1$ and $c_2$ that do not commute, the acceptors $a_1$ accepts $c_1$ before $c_2$, and the acceptor $a_2 \neq a_1$ accepts $c_2$ before $c_1$.
 
-To overcome this deadlock, we will make some modifications to the algorithm that will allow us to start a fresh instance $FGC_2$, called a round, of the Fast GC algorithm.
+To overcome this deadlock, we will make some modifications to the algorithm that will allow us to start a fresh instance $B_2$, called a round, of the Broadcast algorithm.
+To allow switching to a fresh new instance of the Broadcast algorithm, we introduce the new role of switcher, that any server can play additionally from being a proposer, acceptor, or learner.
+A switcher will extract an accepted history from the first round and try to initialize all the acceptors of the second round with the extracted history.
+If we are luckier than in the first round, there may be no contention between switchers and every acceptor $a$ will start accepting new proposals in the second round based on the same initial history.
 
-Basically, we introduce the new role of switcher, that any server can play additionally from being a proposer, acceptor, or learner.
-A switcher will extract a maximal accepted history from the first round and try to initialize all the acceptors of the second round with the extracted history.
-If we are luckier than in the first round, there may be no contention between switchers and every acceptor $a$ will start accepting new proposals in the second round based on the same initial history $accepted\left[ a \right]$.
+We write $B_1$ for the first round of the Broadcast algorithm.
+The rounds $B_1$ and $B_2$ each have their own copies of the arrays $accepted$ and $learned$, noted $accepted_1$, $accepted_2$, $learned_1$, and $learned_2$ when the round is not clear from the context. 
+We assume that network messages are tagged with a round number and that a message tagged with $i\in\aset{1,2}$ can only be received in $B_i$, creating two isolated logical networks. 
 
-We write $FGC_1$ for the first round of the Fast GC algorithm.
-The rounds $FCG_1$ and $FCG_2$ each have their own copies of the arrays $accepted$ and $learned$, noted $accepted_1$, $accepted_2$, $learend_1$, and $learned_2$ when the round is not clear from the context. 
-We assume that network messages are tagged with a round number and that a message tagged with $i\in\aset{1,2}$ can only be received in $FCG_i$, creating two isolated logical networks. 
-
-Switchers have the role of initializing the new round of Fast GC so that it can resume the execution and overcome the deadlock.
-
-We modify the FCG algorithm by introducing new transitions and modifying the $Accept\left( a \right)$ transition as follows.
+In our example with the deadlock, switchers have the role of initializing the new round of $B_2$ so that it can resume the execution and overcome the deadlock.
+We modify the Broadcast algorithm by introducing new transitions and modifying the $Accept\left( a \right)$ transition as follows.
 We add the new variables $status\left[ a \right]$ for every acceptor $a$, which are initialized to $\quo{idle}$. The purpose of $status\left[ a \right]$ is to prevent the acceptor $a$ from accepting commands until its status changes from $\quo{idle}$ to $\quo{ready}$ and to stop it when its status goes to $\quo{stopped}$.
-We also add the new variables $inits\left[ s \right]$ and $aborts\left[ s \right]$, for every switcher $s$, initialized to the empty history in $FGC_1$ and to $\quo{none}$ in $FGC_2$. The purpose of the arrays $aborts$ and $inits$ is to transfer state between $FGC_1$ and $FGC_2$. The arrays $aborts$ and $inits$ form what we call the \emph{inter-round} interface.
-The algorithms $FGC_1$ and $FGC_2$ each have their own copy of the arrays $status$, $inits$, and $aborts$, and we adopt the same convention as above consisting in adding a subscript denoted the round to a variable when the round is not clear from the context. 
+We also add the new arrays of variables $inits\left[ s \right]$ and $aborts\left[ s \right]$, for every switcher $s$, initialized to the empty history in $B_1$ and to $\quo{none}$ in $B_2$. The purpose of the arrays of variables $aborts$ and $inits$ is to transfer state between $B_1$ and $B_2$. The arrays of variables $aborts$ and $inits$ form what we call the \emph{inter-round} interface.
+As for the arrays $accepted$ and $learned$, the rounds $B_1$ and $B_2$ each have their own copy of the arrays of variables $status$, $inits$, and $aborts$, and we adopt add subscripts denoting the round when the round is not clear from the context. 
 
 \begin{compactitem}
 \item We modify the $Accept\left( a \right)$ transition by enabling it only if $status\left[ a \right] = \quo{ready}$ and by having the acceptor $a$ additionally broadcast its new accepted value to the switchers.
-Switchers can therefore detect that the algorithm is deadlocked when there are two broadcast messages $\aseq{\quo{accepted}, a_1, h_1}$ and $\aseq{\quo{accepted}, a_2, h_2}$ in the network such that $h_1$ and $h_2$ are incompatible.
+Switchers detect that the algorithm is deadlocked when they have received two messages $\aseq{\quo{accepted}, a_1, h_1}$ and $\aseq{\quo{accepted}, a_2, h_2}$ such that $h_1$ and $h_2$ are incompatible.
 
 \item The $Stop\left( s \right)$ transition, for a switcher $s$, is enabled when the switcher has detected a deadlock or has waited for too long without receiving any message from the acceptors. Its effect is to broadcast a $\aseq{\quo{stop}, s}$ message to the acceptors.
 
@@ -286,51 +285,52 @@ Switchers can therefore detect that the algorithm is deadlocked when there are t
   Its effect is to update $status\left[ a \right]$ to $\quo{stopped}$ and to send the message $\aseq{\quo{stopped},a,accepted\left[ a \right]}$ to the switcher $s$.
 
 \item The $Abort\left( s \right)$ transition, for a switcher $s$, is enabled when $aborts\left[ s \right] = \quo{none}$ and the switcher has received
-at least on $\aseq{\quo{stopped}, a, h}$ message. Its effect is to set the variable $aborts\left[ s \right]$ to the history $h$ received from $a$. The
-history $aborts'\left[ s \right]$ is then called an abort history. Because the switcher has received a $\aseq{\quo{stopped},a,h}$ message from the acceptor $a$, no history greater than $h$ can ever be learned anymore. Therefore, an abort history can be seen as a safe starting point for a new round to resume execution. 
+  at least one $\aseq{\quo{stopped}, a, h}$ message. Its effect is to set the variable $aborts\left[ s \right]$ to the history $h$ received in the $\quo{stopped}$ message. The history $aborts'\left[ s \right]$ is then called an abort history. Because the switcher has received a $\aseq{\quo{stopped},a,h}$ message from the acceptor $a$, the acceptor $a$ no longer accepts new proposals, therefore no history greater than $h$ can ever be learned anymore. Therefore, an abort history can be seen as a safe starting point for a new round to resume execution. 
 
-\item The $Init\left( s \right)$ transition, for a switcher $s$, is enabled when $inits\left[ s \right]=\quo{none}$, and its effect is to to pick a history $h$, set $inits\left[ s \right]$ to $h$, and to broadcast the message $\aseq{\quo{init}, h}$ to the acceptors. In $FGC_2$, composed with $FGC_1$, this history is constrained to be an abort history of $FGC_1$. The history $inits\left[ s \right]$ is then called an init history.
+\item The $Init\left( s \right)$ transition, for a switcher $s$, is enabled when $inits\left[ s \right]=\quo{none}$, and its effect is to pick a history $h$, set $inits\left[ s \right]$ to $h$, and to broadcast the message $\aseq{\quo{init}, h}$ to the acceptors.  The history $inits\left[ s \right]$ is then called an init history.
+As described below, in $B_2$ composed with $B_1$, this history is constrained to be an abort history of $B_1$.
 
  \item The $WakeUp\left( a \right)$ transition, for an acceptor $a$, is enabled when $status\left[ a \right]$ is $\quo{idle}$ and there is at least one switcher $s$ such that $inits\left[ s \right] \neq \quo{none}$. Its effect is to set set $status\left[ a \right]$ to $\quo{ready}$ and $accepted\left[ a \right]$ to $inits\left[ s \right]$.
 
 \end{compactitem}
 
-The two rounds $FGC_1$ and $FGC_2$ are composed as follows
+The two rounds $B_1$ and $B_2$ are composed as follows:
 \begin{itemize}
-  \item Requiring that a transition of the composition be a transition of either specification but not both, except for the $Abort\left( s \right)$ and $Init\left( s \right)$ transitions, which are allowed to take place at the same time. 
-  \item Requiring that $aborts_1 = inits_2$ at all times.
+  \item We Require that a transition of the composition be a transition of either specification but not both, except for the $Abort\left( s \right)$ and $Init\left( s \right)$ transitions, which are allowed to take place at the same time. 
+  \item We require that $aborts_1 = inits_2$ at all times.
 \end{itemize}
-This models two independent rounds being linked only by the switchers passing the histories $aborts\left[ s \right]$ from $FGC_1$ to $FGC_2$: switchers gather abort histories in $FGC_1$, then they broadcast them as init histories to the acceptors in $FGC_2$. The acceptors then initialize their state to an init histories in the $WakeUp\left( a \right)$ transition.
-This process can be repeated as often as needed, with new rounds $FGC_3$, $FGC_4$, etc., to try to make progress learning new histories.
+The composition models two independent rounds being linked only by the switchers passing the abort histories from $B_1$ to $B_2$, where they become init histories: switchers gather abort histories in $B_1$, then they broadcast them as init histories to the acceptors in $B_2$. The acceptors then initialize their state to a received init history in the $WakeUp\left( a \right)$ transition.
+This process can be repeated as often as needed, with new rounds $B_3$, $B_4$, etc., to try to make progress learning new histories.
 
-The initial $FGC$ algorithm also enters a deadlock whenever one acceptor crashes because the learners wait for the lower bound over all accepted histories of all acceptors to increase. However, the round-change mechanism is very resilient to faults and can abort anyway thanks to the timeout triggering the $Stop\left( s \right)$ transition: a single live acceptor with a single live switcher can abort the execution and change round.
-To allow a new round to make progress after some acceptors crashed in a previous round, we introduce a component called the switching policy. With the Fast GC rounds, the task of the switching policy is to update the set of acceptors from one round to the next, ensuring that failed acceptors are removed or replaced by live ones. The switching policy must be queried by the switchers upon changing round to determine the new set of acceptors. This information can then be piggybacked to the
-acceptors and learners, or the acceptors and learns can directly query the switching policy too. 
+The Broadcast algorithm can no more learn new histories whenever one acceptor crashes because the learners wait for the lower bound of the accepted histories of all acceptors to increase. However, the round-change mechanism is very resilient to faults and can abort anyway thanks to the timeout triggering the $Stop\left( s \right)$ transition: a single live acceptor with a single live switcher can abort the execution and change round.
+
+To allow a new round to make progress after some acceptors crashed in a previous round, we introduce a component called the switching policy. With the Broadcast rounds, the task of the switching policy is to update the set of acceptors from one round to the next, ensuring that failed acceptors are removed or replaced by live ones. The switching policy must be queried by the switchers upon changing round to determine the new set of acceptors. This information can then be piggybacked to the
+acceptors and learners, or the acceptors and learners can directly query the switching policy. 
 The set of switchers can be changed from round to round in the same fashion. Moreover, in an algorithm composed of several different types of rounds, the switching policy will also be responsible for choosing the type of round to execute next.
 
 \section{The Simple-Leader Algorithm} 
 
-The Fast GC algorithm can process a proposal in two message delays when there is no contention on non-commuting commands. However, if there is
+The Broadcast algorithm can process a proposal in two message delays when there is no contention on non-commuting commands. However, if there is
 repeated contention on non-commuting commands, the algorithm may not make progress despite changing round, as the acceptors of the each new round
 may be initialized with incompatible histories. The Fast Paxos algorithm \cite{Lamport06FastPaxos} is able to learn new histories under high contention by
-designating a leader server that will totally order the proposals. However, to make our Fast GC algorithm work like Fast Paxos, we would have to modify it substantially. If we had spent effort testing Fast GC implementations and proving it correct, this effort would be wasted and we would have to redo all the tests and proofs from scratch.
+designating a leader server that will totally order the proposals. However, to make our Broadcast algorithm work like Fast Paxos, we would have to modify it substantially. If we had spent effort testing Broadcast implementations and proving it correct, this effort would be wasted and we would have to redo all the tests and proofs from scratch.
 
-Instead, we will now show how to obtain an algorithm with performance characteristics close to those of Fast Paxos, employing a leader to deal with contention, without modifying at all our existing Fast GC algorithm.
-To do so, we define a new kind of rounds, the Simple-Leader rounds, which uses the same inter-round interface as the Agreement-By-All algorithm. 
-The inter-round interface will allow use to combine Simple-Leader rounds and Agreement-By-All rounds in any order, obtaining an algorithm which can adapt its strategy to its environment, selecting the Agreement-By-All algorithm under low contention and switching to the more expensive Simple-Leader algorithm when there is contention.
+Instead, we will now show how to obtain an algorithm with performance characteristics close to those of Fast Paxos, employing a leader to deal with contention, without modifying at all our existing Broadcast algorithm.
+To do so, we define a new kind of rounds, the Simple-Leader rounds, which uses the same inter-round interface as the Broadcast algorithm. 
+The inter-round interface will allow use to combine Simple-Leader rounds and Broadcast rounds in any order, obtaining an algorithm which can adapt its strategy to its environment, selecting the Broadcast algorithm under low contention and switching to the more expensive Simple-Leader algorithm when there is contention.
 
 In the Simple-Leader algorithm, the proposers send their proposals to a distinguished acceptor called the leader. 
 The leader totally orders the proposals it receives and forwards them to all the acceptors which accept them in the order defined by the leader.
-As in the Agreement-By-All algorithm, acceptors broadcast their accepted histories to the learners, which learn a new history when it is a lower bound of 
+As in the Broadcast algorithm, acceptors broadcast their accepted histories to the learners, which learn a new history when it is a lower bound of 
 the set of $\aset{MaxReceivedFrom\left( a \right) : a \in Acceptors}$.
 Thanks to its leader, a Simple-Leader round continues to learn new histories even when proposals conflict because the leader ensures that the accepted histories of the acceptors remain consistent. 
 
-The Simple-Leader algorithm treats all proposals equally and does not take advantage of commutativity. When the leader does not crash, each proposal is processed in three message delays. In comparison, in the absence of failures, the Agreement-By-All algorithm processes non-conflicting proposals in two message delays but can take arbitrarily long to process conflicting proposals.
+The Simple-Leader algorithm treats all proposals equally and does not take advantage of commutativity. When the leader does not crash, each proposal is processed in three message delays. In comparison, in the absence of failures, the Broadcast algorithm processes non-conflicting proposals in two message delays but can take arbitrarily long to process conflicting proposals.
 
 To initialize a Simple-Leader round, the switchers send their init histories to the leader, which choose a unique one that it forwards to the acceptors, guaranteeing that all the acceptors are initialized with the same history even when conflicting init histories are sent concurrently.
 
 The Simple-Leader algorithm can not learn new histories if its leader, or any other acceptor, crashes.
-To recover from this deadlock we pass the baton to a new round, as in the Agreement-By-All algorithm, with a similar same mechanism: a switcher that times-out waiting for new messages from the acceptors broadcast a stop message, gathers the accepted history from at least one of the acceptors, and aborts. 
+To recover from this deadlock we pass the baton to a new round, as in the Broadcast algorithm, with a similar same mechanism: a switcher that times-out waiting for new messages from the acceptors broadcast a stop message, gathers the accepted history from at least one of the acceptors, and aborts. 
 
 Let us specify more precisely the Simple-Leader algorithm.
 
@@ -424,29 +424,27 @@ CGC instances.
         \right]$. Its effect is to insert  $h$ in the set $aborts$. 
 \end{compactitem}
 
-Thanks to the inter-round interface, Simple-Leader rounds and Agreement-By-All rounds can be composed in any order.
-To compose a Simple-Leader round $SL_1$ with an Agreement-By-All round $ABA_2$, we compose their specifications as before, adding the constraint that the set $aborts_1$ be equal to the set $inits_2$ at all times.
+Thanks to the inter-round interface, Simple-Leader rounds and Broadcast rounds can be composed in any order.
+To compose a Simple-Leader round $SL_1$ with an Broadcast round $ABA_2$, we compose their specifications as before, adding the constraint that the set $aborts_1$ be equal to the set $inits_2$ at all times.
 
 Informally, the composition is correct because abort histories are always safe in the sense that any of the abort histories could be the next learned history.
 However not all can be learned and the initialization mechanism of the rounds ensures that at most one is chosen.
 In the next section we present Composable Generalized Consensus, a specification of the behavior of rounds at the level of proposals, learned histories, init histories, and abort histories. Our composition theorem ensures that any set of rounds individually satisfying Composable Generalized Consensus can be composed in any order to yield an algorithm satisfying Composable Generalized Consensus. 
 
-\section{Abortable Chain Agreement}
+\section{Composable Generalized Consensus}
 \label{sec:aca}
 
-We now consider implementing Chain Agreement as a sequence of \emph{Abortable Chain
-Agreement rounds}, where each round makes progress ordering requests or aborts
-its execution and passes the baton to the next round in the sequence.
-An algorithm composed of a sequence of CGC instances is called an \emph{ACA
-algorithm}.
+We now consider implementing Generalized Consensus as a sequence of \emph{Composable Generalized Consensus rounds}, where each round makes progress
+ordering requests or aborts its execution and passes the baton to the next round in the sequence. An algorithm composed of a sequence of CGC instances
+is called a \emph{CGC algorithm}.
 
-On top of the traditional roles of proposer, acceptor, and learner, ACA
+On top of the traditional roles of proposer, acceptor, and learner, CGC
 introduces the new role of \emph{switcher} and a new component, the
-\emph{scheduling policy}. In ACA, the assignment of the roles of proposer,
+\emph{scheduling policy}. In CGC, the assignment of the roles of proposer,
 acceptor, learner, and switcher can change in each rounds, allowing for
 reconfiguration. 
 In normal circumstances, the proposers, acceptors,
-and learners of a CGC instance work together to implement Chain Agreement.
+and learners of a CGC instance work together to implement Generalized Consensus.
 However, if the environment becomes unfavorable to a running CGC instance, the
 scheduling policy can instruct the round to abort its execution and pass the
 baton, using the switchers, to a new round.
@@ -460,7 +458,7 @@ process is repeated.
 We assume that in the first round, which has no previous round, every 
 switchers receives the empty abort sequence.
 
-The scheduling policy determines when to abort a CGC instance and which new ACA
+The scheduling policy determines when to abort a CGC instance and which new CGC
 round should take over. The scheduling policy must inform the switchers about the
 identity of the next round and must guarantee that all switchers receive the
 same information.  In this paper we abstract over the scheduling policy, assuming
@@ -473,14 +471,14 @@ dedicated to other tasks
 tolerating $f$ faults with $f+1$ replicas, while maintaining the long-term
 resilience of the service by replacing faulty servers upon round change.
 
-The clients of an ACA algorithm can send their commands to the proposers of any round (in
+The clients of a CGC algorithm can send their commands to the proposers of any round (in
 practice, clients send their commands to proposers of the largest
 active round) and servers can use sequences learned in any round
 to determine outputs.
 
-ACA specifies the allowed behaviors of the proposers, learners, and switchers
+CGC specifies the allowed behaviors of the proposers, learners, and switchers
 \emph{of a single round}. Similarly to
-Chain Agreement, we use the state variables $crashed$, $proposed$,
+Generalized Consensus, we use the state variables $crashed$, $proposed$,
 and, for every learner $l$, $learned\left[ l \right]$.  Additionally,
 we use the state variables $inits$, containing the abort sequences
 received from the previous round, and $aborts$, containing the abort
@@ -494,8 +492,8 @@ The next-state relation consists of five types of transitions. The
 first three, $Crash\left( x \right)$, $Propose\left( l, c
 \right)$, and $Learn\left( l, cs \right)$, for a learner, proposer, or
 switcher $x$, for a learner $l$, and for a sequence of commands
-$cs$, have the same effect as in Chain Agreement.
-ACA introduces two new transitions, $Init\left(
+$cs$, have the same effect as in Generalized Consensus.
+CGC introduces two new transitions, $Init\left(
 s, cs \right)$ and $Abort\left( s, cs \right)$, for a switcher $s$ and a sequence of
 commands $cs$. The transition $Init\left( s, cs \right)$ adds $cs$ to the set $inits$, and models a switcher receiving the
 abort sequence $cs$ from the preceding round.
@@ -504,9 +502,9 @@ All the transition are guarded by the following conditions:
 \begin{compactitem}
     \item[\textbf{Agreement}:] The set $\aset{learned'\left[ l
       \right] : l \in Learners}$ is compatible.
-    \item[\textbf{Validity}:] Every abort history or learned history 
+    \item[\textbf{Validity}:] There is a history $h$ belonging to $inits$ such that every abort history or learned history 
         is of the form $h \star cs$, where $cs$ contains only commands
-        of the set $proposed$ and $h$ is a history belonging to $inits$.
+        of the set $proposed$.
     \item[\textbf{Initialization}:] If $inits$ is empty, then no
         sequence can be learned and no switcher can abort.
     \item[\textbf{Irrevocability}:] In the case of a $Learn\left( l,h
@@ -515,23 +513,16 @@ All the transition are guarded by the following conditions:
     \item[\textbf{Safe Abort}:] Every abort sequence is an extension in the 
         partial order $\leq$ of a learned history.
 \end{compactitem}
-Note that Agreement and Irrevocability are the same as in Chain
-Agreement.
+Note that Agreement and Irrevocability are the same as in Generalized Consensus.
 
-Finally, for every learner $l$, we add a weak fairness condition on the
-following state transition: 
-\begin{equation}
-    \exists  s \in Switchers, cs \in Sequence\left( C \right) : Learn\left( l, cs \right) \vee Abort\left( s,cs \right)
-\end{equation}
-The weak fairness conditions ensure that when a correct learner has not
-learned a sequence containing all commands proposed in the round, then
-it eventually learns a new command or, if there is at least one correct switcher, at least one switch value is transfered to the next round. 
-Therefore, if a client has submitted a command to a proposer, eventually,
+If a client has submitted a command to a proposer, eventually,
 either the client gets a response from the current round, or
 the next round is initialized with an abort sequence and the
 command can be resubmitted to the next round.
 
 \subsection{The Composition Theorem}
+
+TODO: frame in terms of composability.
 
 Consider the succession of $n$ rounds numbered $1$ to $n$.  To
 distinguish the variables of each round, we annotate the local
@@ -552,7 +543,7 @@ rounds $i$ of the $learned_i\left[ l \right]$ variables.
     \label{thm:comp}
     In every execution of a succession of CGC instances, the sequence of valuations
     of the variable $proposed$ and, for every learner $l$, of the variables
-    $learned\left[ l \right]$ satisfies Chain Agreement.
+    $learned\left[ l \right]$ satisfies Generalized Consensus.
 \end{thm}
 \Cref{thm:comp} can be shown by induction on the number of rounds,
 using the following lemma.
@@ -562,23 +553,23 @@ using the following lemma.
     succession of CGC instances, the sequence of valuations of the variables $inits
     = inits_i$, $propose = proposed_i \cup propose_{i+1}$, for every learner
     $l$, $learned\left[ l \right] = learned_i\left[ l \right] \cup
-    learned_{i+1}\left[ l \right]$and $aborts = aborts_{i+1}$ satisfies ACA.
+    learned_{i+1}\left[ l \right]$and $aborts = aborts_{i+1}$ satisfies CGC.
 \end{lem}
 \begin{proof}
   A mechanically-checked proof in Isabelle/HOL appears in \cref{sec:isaproofs}.
-  The proofs uses a version of the specification of ACA that has a more
+  The proofs uses a version of the specification of CGC that has a more
   executable form that presented in this section. Moreover,
   instead of sequences of commands, the Isabelle/HOL specification uses the more
   general notion of command history, presented in the next subsection.
-  The Isabelle/HOL formalization of ACA uses the theory of I/O automata, which
+  The Isabelle/HOL formalization of CGC uses the theory of I/O automata, which
   is also formalized in the Isabelle/HOL. The proof uses a refinement
-  mapping from the composition of two consecutive ACA instances to a single ACA
+  mapping from the composition of two consecutive CGC instances to a single CGC
   instance.
 \end{proof}
 
 \Cref{thm:comp} guarantees that the successive composition of any
-number of CGC instances implements Chain Agreement.
-Therefore, with ACA, one can easily build replicated services that
+number of CGC instances implements Generalized Consensus.
+Therefore, with CGC, one can easily build replicated services that
 dynamically adapt to the current operating conditions of the system: a
 replicated service has several types of rounds at its disposal, each being
 tailored to particular conditions. Each time the conditions change,
@@ -587,12 +578,12 @@ appropriate type of round, as determined by the scheduling policy. Moreover, a n
 of CGC instance can always be devised after the system is deployed and added on the fly to
 the existing types of rounds.
 
-We now describe two important practical optimizations of ACA.
+We now describe two important practical optimizations of CGC.
 
 \subsection{Optimizing the Execution of Read-Only Commands}
 \label{sec:readonly}
 
-Chain Agreement can be further optimized by treating 
+Generalized Consensus can be further optimized by treating 
 read-only commands specially, as in Generalized Lattice Agreement
 \cite{FalerioETAL12GeneralizedLatticeAgreement}.
 
@@ -647,19 +638,19 @@ numbered $i$ determines a value that is \emph{safe at $i$} and
 proposes it as first value to the other acceptors of the ballot $i$.
 In existing SMR algorithms, new rounds are initialized ad-hoc, which
 prevents mixing rounds of two different algorithms.  Instead,
-ACA is an abstraction of rounds which establishes a common interface and contract for switching from
+CGC is an abstraction of rounds which establishes a common interface and contract for switching from
 one round to the next, enabling switching from any CGC instance to any other.
 
 To simplify the task of expressing existing algorithms as the composition of one
-or more CGC instances, we propose two specifications, \emph{conservative ACA
+or more CGC instances, we propose two specifications, \emph{conservative CGC
 rounds} and
 \emph{fast CGC instances}, which can easily be concretized to obtain executable rounds.
-We show that ACA versions of Classic Paxos, Multi-Coordinated Paxos, Chain
+We show that CGC versions of Classic Paxos, Multi-Coordinated Paxos, Chain
 Replication, and Ring Paxos can be obtained by concretizing the specification of
-conservative CGC instances, and that ACA versions of the fast rounds of Fast Paxos can be obtained by concretizing the specification of fast CGC instances.
+conservative CGC instances, and that CGC versions of the fast rounds of Fast Paxos can be obtained by concretizing the specification of fast CGC instances.
 
 Fast and conservative CGC instances are two specifications, at an
-intermediate level of abstraction, which satisfy ACA. Both
+intermediate level of abstraction, which satisfy CGC. Both
 specifications specify how the state of the acceptors should be
 updated but abstract over the particular communication topology used
 to implement the state accesses: the specifications use a global state
@@ -668,7 +659,7 @@ or conservative rounds by implementing the state accesses and coordination
 using the network, obtaining a concrete algorithm.
 
 Conservative and fast CGC instances are specified using the state variables $inits$, $proposed$, for every learner $l$, $learned\left[ l \right]$
-and $aborts$, as in ACA, and, for every acceptor $a$, two new variables
+and $aborts$, as in CGC, and, for every acceptor $a$, two new variables
 $status\left[ a \right]$, which can be either ``idle'', ``ready'', or
 ``stopped'' and $hist\left[ a \right]$, the local history of the
 acceptor $a$, which can be either a history or the special value $None$.
@@ -768,12 +759,14 @@ inserting the new local history in $\overline{learned}\left[ l \right]$ (see \ci
 definition of a history variable).
 \begin{thm}
   \label{thm:rounds}
-    Both conservative and fast CGC instances implement ACA under the refinement
+    Both conservative and fast CGC instances implement CGC under the refinement
     mapping that consists in substituting $\overline{learned\left[ l \right]}$
     for $learned\left[ l \right]$.
 \end{thm}
 
-\section{Examples of Concrete ACA Algorithms}
+
+\begin{comment}
+\section{Examples of Concrete CGC Algorithms}
 \label{sec:examples}
 
 In this section we show how to modify the rounds of Classic Paxos,
@@ -898,7 +891,7 @@ CGC instances.
         \right)$ is computed using the array $stopped\left[ a
         \right]$. Its effect is to insert  $h$ in the set $aborts$. 
 \end{compactitem}
-Compared to the rounds of the original Classic Paxos, Classic Paxos ACA
+Compared to the rounds of the original Classic Paxos, Classic Paxos CGC
 rounds add an extra level of indirection when changing round: in the
 original rounds, the leader of the new round directly queries the
 acceptors of the preceeding round, whereas in CGC instances, the
@@ -906,16 +899,17 @@ switchers query the acceptors and then send their abort histories to
 the leader. However, changing round is an infrequent event, therefore
 this difference should not have much practical impact on performance.
 \begin{thm}
-  Classic Paxos CGC instances satisfy Abortable Chain Agreement.
+  Classic Paxos CGC instances satisfy Composable Generalized Consensus.
 \end{thm}
 \begin{proof}
   A Classic Paxos CGC instance implements the specification of Abortable
-  Chain Agreement under the refinement mapping consisting in
+  Generalized Consensus under the refinement mapping consisting in
   projecting the state of the round onto the variables $proposed$,
   $inits$, $aborts$, and, for every learner $l$, $learned\left[ l
   \right]$.
 \end{proof}
 
+\end{comment}
 \subsection{Multi-Coordinated Paxos, Chain Replication, and Ring Paxos.}
 
 Multi-Coordinated Paxos, Chain Replication, and Ring Paxos rounds have a similar
@@ -926,7 +920,7 @@ the other acceptors.
 Multi-Coordinated Paxos avoids depending on a unique leader by using a
 distributed leader implementation that can make progress as long as a
 strict majority of the acceptors are correct, trading off resilience
-for a higher time complexity. Conservative ACA
+for a higher time complexity. Conservative CGC
 rounds can be implemented like with Classic Paxos, replacing the
 leader by the distributed leader of Multi-Coordinated Paxos.
 
@@ -948,6 +942,7 @@ commands to the acceptors using IP multicast and only sending hashes
 of the commands along the chain. Ring Paxos rounds can be modified to implement
 conservative CGC instances in a similar way as for Chain Replication.
 
+\begin{comment}
 \subsection{Fast Paxos}
 
 Fast Paxos is composed of two types of rounds: classic rounds, like in Classic
@@ -999,11 +994,13 @@ CGC instances.
         all the same as in Classic Paxos CGC instances.
 \end{compactitem}
 
-As for Classic Paxos CGC instances, Fast Paxos CGC instances implement ACA
+As for Classic Paxos CGC instances, Fast Paxos CGC instances implement CGC
 under the refinement mapping consisting projecting the state of the
 round onto the variables $proposed$, $inits$, $aborts$, and, for every
 learner $l$, $learned\left[ l \right]$.
 
+
+\end{comment}
 
 \newpage
 
