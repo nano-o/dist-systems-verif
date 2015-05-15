@@ -173,12 +173,15 @@ abstracts over the concrete representation of histories, assuming only their
 necessary properties. Command histories were first introduced in trace theory
 \cite{Mazurkiewicz84Semantics}.
 
-Command histories can be built from the empty history using the $\star$
+Command histories can be built from the empty history, noted $\bot$, using the $\star$
 operator, which appends a sequence of commands $cs$ to a history $h$, obtaining
 the history $h \star cs$. We can then define define an ordering relation among
 histories: $h_1 \leq h_2$ when there exists a sequence $cs$ such that $h_2 = h_1
 \star cs$. Histories have the property that every finite set $H$ of histories
-has a \emph{greatest lower bound}, noted $GLB\left(H\right)$. Finally, we say
+has a \emph{greatest lower bound}, noted $GLB\left(H\right)$. 
+We say that a history $h$ contains the command $c$ when there exists a sequence of commands 
+$cs$ containing $c$ such that $\bot \star cs = h$.
+Finally, we say
 that a set of histories $H$ is compatible when all the histories in $H$ have a
 common upper bound $h$ such that $h$ can be built using only commands found in
 the histories in $H$.
@@ -186,7 +189,7 @@ the histories in $H$.
 
 The major advantage that histories have over sequences is that if a sequence
 $cs_1$ is obtained by reordering the commuting commands of $cs_2$, then $h \star
-cs_1 = h \star cs_2$. Therefore, in implementations of CGC, servers can agree on
+cs_1 = h \star cs_2$. Therefore, in SMR implementations, servers can agree on
 a history even though they chose different orders for some commuting commands.
 
 \subsection{Generalized Consensus}
@@ -194,43 +197,39 @@ a history even though they chose different orders for some commuting commands.
 Generalized Consensus precisely specifies the allowed behaviors of the roles of \emph{proposers}
 and \emph{learners}, abstracting over the behavior of acceptors. 
 
-We specify Generalized Consensus using the state variables $crashed$, $proposed$, containing the proposed commands,
-and, for every learner $l$,  $learned\left[ l \right]$, a set of
-sequences of commands. Initially, $crashed$, $proposed$ and, for every learner $l$,
-$learned\left[ l \right]$ are empty sets. 
+We specify Generalized Consensus using the variables $crashed$, the variable $proposed$, containing the proposed commands,
+and, for every learner $l$,  a variable $learned\left[ l \right]$, holding a history. Initially, $crashed$ and $proposed$ are empty sets and, for every learner $l$,
+$learned\left[ l \right]$ is the empty history. 
 Remember that any transition involving a server $x$ is always disabled when $x\in crashed$. 
 
 The next-state relation consists of three types of transitions:
 $Crash\left( x \right)$ transitions; $Propose\left( l, c
 \right)$ transitions, for a learner $l$ and a command $c$, in which
-$c$ is inserted in the set $proposed$; $Learn\left( l,cs \right)$
-transitions, for a learner $l$ and a sequence of commands $cs$, in
-which $cs$ is inserted in $learned\left[ l \right]$. 
-A $Learn\left( l, cs \right)$ transition is guarded by the following
-conditions:
+$c$ is inserted in the set $proposed$; $Learn\left( l,h \right)$
+transitions, for a learner $l$ and a history $h$, in
+which $learned\left[ l \right]$ is update to $h$. 
+A $Learn\left( l, h \right)$ transition is guarded by the following conditions:
 \begin{compactitem}
     \item[\textbf{Agreement}:] The set of learned histories after the transition, $\aset{learned'\left[ l
       \right] : l \in Learners}$, is compatible.
-    \item[\textbf{Validity}:] Every learned sequence contains only
+    \item[\textbf{Validity}:] Every learned history contains only
         proposed commands.  
-    \item[\textbf{Irrevocability}:] The new learned sequence
-        $cs$ is an extension of $learned\left[ l
+    \item[\textbf{Irrevocability}:] The new learned history
+      $learned'\left[ l \right]$ is an extension of $learned\left[ l
         \right]$. 
         %\\ $cs > Max\left(learned\left[ l \right]\right)$.
 \end{compactitem}
 
-Thanks to the properties of Generalized Consensus, the clients, observing
-their input commands and the received responses, see a
-\emph{linearizable} execution
+When clients of a replicated service submit their commands to the proposers and learners compute the response to give to clients using their local $learned\left[ l \right]$ history, the three properties above imply that the clients see a \emph{linearizable} execution
 \cite{HerlihyWing90LinearizabilityCorrectnessConditionConcurrentObjects}.
 
 \section{Modular Implementations of Generalized Consensus}
 
 Before formally introducing our framework, let us see how we can build a modular implementation similar to Fast Paxos by first designing a fast but fragile modular GC algorithm, then combining it unchanged with a more resilient module, obtaining an algorithm similar to Fast Paxos. 
 
-\subsection{The Broadcast Algorithm}
+\subsection{The Broadcast-Decide Algorithm}
 
-In our first algorithm, Broadcast, learners each maintain a variable $hist\left[ l \right]$ which contain the currently accepted history of learner $l$.
+In our first algorithm, Broadcast-Decide, learners each maintain a variable $hist\left[ l \right]$ which contain the currently accepted history of learner $l$.
 For every learner $l$, $accepted\left[ l \right]$ is initialized to the empty history.
 A proposer broadcasts its proposal to all the learners which unconditionally accept it by appending the proposal to their $accepted\left[ l \right]$
 history and by broadcasting to all the acceptors their new accepted history, $accepted'\left[ l \right]$.
@@ -239,7 +238,7 @@ Each acceptor $l$ maintains a variable $learned\left[ l \right]$, initially the 
 learns a new history $h$ when $h \geq learned\left[ l \right]$ and $h$ is a lower bound of the set consisting of the maximal accepted history received
 from each acceptor.
 
-More precisely, the Broadcast algorithm is described by the transition relation obtained as the disjunction of the
+More precisely, the Broadcast-Decide algorithm is described by the transition relation obtained as the disjunction of the
 following transitions. We do not model the network explicitly using state variables but instead we just say that servers send, broadcast, or receive messages.
 
 \begin{compactitem}
@@ -257,20 +256,20 @@ from the acceptor $a$.
 
 \end{compactitem}
 
-The algorithm Broadcast cannot learn new histories if two acceptors $a_1$ and $a_2$ have two histories which are not compatible because, since an acceptor can only append new proposals to its history $accepted\left[ l \right]$, all the possible future lower bounds of the set $\aset{MaxReceivedFrom\left( a \right) : a \in Acceptors}$ are bounded above by $GLB\left( \aset{accepted\left[ a_1 \right], accepted\left[ a_2 \right]} \right)$.
+The algorithm Broadcast-Decide cannot learn new histories if two acceptors $a_1$ and $a_2$ have two histories which are not compatible because, since an acceptor can only append new proposals to its history $accepted\left[ l \right]$, all the possible future lower bounds of the set $\aset{MaxReceivedFrom\left( a \right) : a \in Acceptors}$ are bounded above by $GLB\left( \aset{accepted\left[ a_1 \right], accepted\left[ a_2 \right]} \right)$.
 This situation occurs when non-commuting commands contend: for example, when two different proposers send two commands $c_1$ and $c_2$ that do not commute, the acceptors $a_1$ accepts $c_1$ before $c_2$, and the acceptor $a_2 \neq a_1$ accepts $c_2$ before $c_1$.
 
-To overcome this deadlock, we will make some modifications to the algorithm that will allow us to start a fresh instance $B_2$, called a round, of the Broadcast algorithm.
-To allow switching to a fresh new instance of the Broadcast algorithm, we introduce the new role of switcher, that any server can play additionally from being a proposer, acceptor, or learner.
+To overcome this deadlock, we will make some modifications to the algorithm that will allow us to start a fresh instance $B_2$, called a round, of the Broadcast-Decide algorithm.
+To allow switching to a fresh new instance of the Broadcast-Decide algorithm, we introduce the new role of switcher, that any server can play additionally from being a proposer, acceptor, or learner.
 A switcher will extract an accepted history from the first round and try to initialize all the acceptors of the second round with the extracted history.
 If we are luckier than in the first round, there may be no contention between switchers and every acceptor $a$ will start accepting new proposals in the second round based on the same initial history.
 
-We write $B_1$ for the first round of the Broadcast algorithm.
+We write $B_1$ for the first round of the Broadcast-Decide algorithm.
 The rounds $B_1$ and $B_2$ each have their own copies of the arrays $accepted$ and $learned$, noted $accepted_1$, $accepted_2$, $learned_1$, and $learned_2$ when the round is not clear from the context. 
 We assume that network messages are tagged with a round number and that a message tagged with $i\in\aset{1,2}$ can only be received in $B_i$, creating two isolated logical networks. 
 
 In our example with the deadlock, switchers have the role of initializing the new round of $B_2$ so that it can resume the execution and overcome the deadlock.
-We modify the Broadcast algorithm by introducing new transitions and modifying the $Accept\left( a \right)$ transition as follows.
+We modify the Broadcast-Decide algorithm by introducing new transitions and modifying the $Accept\left( a \right)$ transition as follows.
 We add the new variables $status\left[ a \right]$ for every acceptor $a$, which are initialized to $\quo{idle}$. The purpose of $status\left[ a \right]$ is to prevent the acceptor $a$ from accepting commands until its status changes from $\quo{idle}$ to $\quo{ready}$ and to stop it when its status goes to $\quo{stopped}$.
 We also add the new arrays of variables $inits\left[ s \right]$ and $aborts\left[ s \right]$, for every switcher $s$, initialized to the empty history in $B_1$ and to $\quo{none}$ in $B_2$. The purpose of the arrays of variables $aborts$ and $inits$ is to transfer state between $B_1$ and $B_2$. The arrays of variables $aborts$ and $inits$ form what we call the \emph{inter-round} interface.
 As for the arrays $accepted$ and $learned$, the rounds $B_1$ and $B_2$ each have their own copy of the arrays of variables $status$, $inits$, and $aborts$, and we adopt add subscripts denoting the round when the round is not clear from the context. 
@@ -302,35 +301,37 @@ The two rounds $B_1$ and $B_2$ are composed as follows:
 The composition models two independent rounds being linked only by the switchers passing the abort histories from $B_1$ to $B_2$, where they become init histories: switchers gather abort histories in $B_1$, then they broadcast them as init histories to the acceptors in $B_2$. The acceptors then initialize their state to a received init history in the $WakeUp\left( a \right)$ transition.
 This process can be repeated as often as needed, with new rounds $B_3$, $B_4$, etc., to try to make progress learning new histories.
 
-The Broadcast algorithm can no more learn new histories whenever one acceptor crashes because the learners wait for the lower bound of the accepted histories of all acceptors to increase. However, the round-change mechanism is very resilient to faults and can abort anyway thanks to the timeout triggering the $Stop\left( s \right)$ transition: a single live acceptor with a single live switcher can abort the execution and change round.
+The Broadcast-Decide algorithm can no more learn new histories whenever one acceptor crashes because the learners wait for the lower bound of the accepted histories of all acceptors to increase. However, the round-change mechanism is very resilient to faults and can abort anyway thanks to the timeout triggering the $Stop\left( s \right)$ transition: a single live acceptor with a single live switcher can abort the execution and change round.
 
-To allow a new round to make progress after some acceptors crashed in a previous round, we introduce a component called the switching policy. With the Broadcast rounds, the task of the switching policy is to update the set of acceptors from one round to the next, ensuring that failed acceptors are removed or replaced by live ones. The switching policy must be queried by the switchers upon changing round to determine the new set of acceptors. This information can then be piggybacked to the
+To allow a new round to make progress after some acceptors crashed in a previous round, we introduce a component called the switching policy. With the Broadcast-Decide rounds, the task of the switching policy is to update the set of acceptors from one round to the next, ensuring that failed acceptors are removed or replaced by live ones. The switching policy must be queried by the switchers upon changing round to determine the new set of acceptors. This information can then be piggybacked to the
 acceptors and learners, or the acceptors and learners can directly query the switching policy. 
 The set of switchers can be changed from round to round in the same fashion. Moreover, in an algorithm composed of several different types of rounds, the switching policy will also be responsible for choosing the type of round to execute next.
 
 \section{The Simple-Leader Algorithm} 
 
-The Broadcast algorithm can process a proposal in two message delays when there is no contention on non-commuting commands. However, if there is
+The Broadcast-Decide algorithm can process a proposal in two message delays when there is no contention on non-commuting commands. However, if there is
 repeated contention on non-commuting commands, the algorithm may not make progress despite changing round, as the acceptors of the each new round
 may be initialized with incompatible histories. The Fast Paxos algorithm \cite{Lamport06FastPaxos} is able to learn new histories under high contention by
-designating a leader server that will totally order the proposals. However, to make our Broadcast algorithm work like Fast Paxos, we would have to modify it substantially. If we had spent effort testing Broadcast implementations and proving it correct, this effort would be wasted and we would have to redo all the tests and proofs from scratch.
+designating a leader server that will totally order the proposals. However, to make our Broadcast-Decide algorithm work like Fast Paxos, we would have to modify it substantially. If we had spent effort testing Broadcast-Decide implementations and proving it correct, this effort would be wasted and we would have to redo all the tests and proofs from scratch.
 
-Instead, we will now show how to obtain an algorithm with performance characteristics close to those of Fast Paxos, employing a leader to deal with contention, without modifying at all our existing Broadcast algorithm.
-To do so, we define a new kind of rounds, the Simple-Leader rounds, which uses the same inter-round interface as the Broadcast algorithm. 
-The inter-round interface will allow use to combine Simple-Leader rounds and Broadcast rounds in any order, obtaining an algorithm which can adapt its strategy to its environment, selecting the Broadcast algorithm under low contention and switching to the more expensive Simple-Leader algorithm when there is contention.
+Instead, we will now show how to obtain an algorithm with performance characteristics close to those of Fast Paxos, employing a leader to deal with contention, without modifying at all our existing Broadcast-Decide algorithm.
+To do so, we define a new kind of rounds, the Simple-Leader rounds, which uses the same inter-round interface as the Broadcast-Decide algorithm. 
+The inter-round interface will allow use to combine Simple-Leader rounds and Broadcast-Decide rounds in any order, obtaining an algorithm which can adapt its strategy to its environment, selecting the Broadcast-Decide algorithm under low contention and switching to the more expensive Simple-Leader algorithm when there is contention.
 
 In the Simple-Leader algorithm, the proposers send their proposals to a distinguished acceptor called the leader. 
 The leader totally orders the proposals it receives and forwards them to all the acceptors which accept them in the order defined by the leader.
-As in the Broadcast algorithm, acceptors broadcast their accepted histories to the learners, which learn a new history when it is a lower bound of 
+As in the Broadcast-Decide algorithm, acceptors broadcast their accepted histories to the learners, which learn a new history when it is a lower bound of 
 the set of $\aset{MaxReceivedFrom\left( a \right) : a \in Acceptors}$.
 Thanks to its leader, a Simple-Leader round continues to learn new histories even when proposals conflict because the leader ensures that the accepted histories of the acceptors remain consistent. 
 
-The Simple-Leader algorithm treats all proposals equally and does not take advantage of commutativity. When the leader does not crash, each proposal is processed in three message delays. In comparison, in the absence of failures, the Broadcast algorithm processes non-conflicting proposals in two message delays but can take arbitrarily long to process conflicting proposals.
+The Simple-Leader algorithm treats all proposals equally and does not take advantage of commutativity. When the leader does not crash, each proposal is processed in three message delays. In comparison, in the absence of failures, the Broadcast-Decide algorithm processes non-conflicting proposals in two message delays but can take arbitrarily long to process conflicting proposals.
 
 To initialize a Simple-Leader round, the switchers send their init histories to the leader, which choose a unique one that it forwards to the acceptors, guaranteeing that all the acceptors are initialized with the same history even when conflicting init histories are sent concurrently.
 
 The Simple-Leader algorithm can not learn new histories if its leader, or any other acceptor, crashes.
-To recover from this deadlock we pass the baton to a new round, as in the Broadcast algorithm, with a similar same mechanism: a switcher that times-out waiting for new messages from the acceptors broadcast a stop message, gathers the accepted history from at least one of the acceptors, and aborts. 
+To recover from this deadlock we pass the baton to a new round, as in the Broadcast-Decide algorithm, with a similar same mechanism: a switcher that times-out waiting for new messages from the acceptors broadcast a stop message, gathers the accepted history from at least one of the acceptors, and aborts. 
+
+****************************************
 
 Let us specify more precisely the Simple-Leader algorithm.
 
@@ -424,8 +425,8 @@ CGC instances.
         \right]$. Its effect is to insert  $h$ in the set $aborts$. 
 \end{compactitem}
 
-Thanks to the inter-round interface, Simple-Leader rounds and Broadcast rounds can be composed in any order.
-To compose a Simple-Leader round $SL_1$ with an Broadcast round $ABA_2$, we compose their specifications as before, adding the constraint that the set $aborts_1$ be equal to the set $inits_2$ at all times.
+Thanks to the inter-round interface, Simple-Leader rounds and Broadcast-Decide rounds can be composed in any order.
+To compose a Simple-Leader round $SL_1$ with an Broadcast-Decide round $B_2$, we compose their specifications as before, adding the constraint that the set $aborts_1$ be equal to the set $inits_2$ at all times.
 
 Informally, the composition is correct because abort histories are always safe in the sense that any of the abort histories could be the next learned history.
 However not all can be learned and the initialization mechanism of the rounds ensures that at most one is chosen.
