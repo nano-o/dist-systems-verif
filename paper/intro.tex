@@ -70,10 +70,13 @@ designers who want to create a new GC algorithm, optimized for particular
 conditions, can focus only on the particular conditions of interest, knowing
 that the other existing modules will handle the other cases.
 
-The key novelty of our framework lies in its practical applicability, allowing
-the execution of commutative commands without synchronization and reducing the
-replication overhead from $2*k+1$ replicas to $k+1$ replicas, to tolerate $k$
-replica crashes, using a reliable external reconfiguration master.
+The key novelty of our framework lies in its practical applicability.
+Most SMR algorithms are variations on a basic structure consisting of one of two kinds of 
+quorum systems \cite{GuerraouiVukolic10RefinedQuorumSystems}. 
+The first kind, that we call resilient quorums, are used in leader-based algorithms, while the second
+kind of quorums, that we call fast quorums, are used in leader-less algorithms and can order commuting commands without synchronization.
+We provide two specifications, at an intermediate level of abstraction, that capture the essence of composing algorithms using these two kinds of quorums.
+Our two specifications allow to easily check that new modules based on resilient or fast quorums are correct, covering a large spectrum of practical algorithms. 
 
 Allowing the execution of commuting commands to proceed without
 synchronization is an important practical optimization, as commands may
