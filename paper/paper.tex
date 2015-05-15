@@ -224,6 +224,8 @@ their input commands and the received responses, see a
 \emph{linearizable} execution
 \cite{HerlihyWing90LinearizabilityCorrectnessConditionConcurrentObjects}.
 
+\section{Modular Implementations of Generalized Consensus}
+
 \section{Abortable Chain Agreement}
 \label{sec:aca}
 
@@ -295,21 +297,18 @@ abort sequence $cs$ from the preceding round.
 The transition $Abort\left( s, cs \right)$ adds $cs$ to the set $aborts$ and models a switcher transferring the abort sequence $cs$ to a switcher of the next round.
 All the transition are guarded by the following conditions:
 \begin{compactitem}
-    \item[\textbf{Agreement}:] The elements of the set $\aset{learned'\left[ l
-      \right] : l \in Learners}$ form a chain in the partial order.
-    \item[\textbf{Validity}:] Every abort sequence or learned sequence
+    \item[\textbf{Agreement}:] The set $\aset{learned'\left[ l
+      \right] : l \in Learners}$ is compatible.
+    \item[\textbf{Validity}:] Every abort history or learned history 
         is of the form $h \star cs$, where $cs$ contains only commands
-        of the set $proposed$ and $h$ is the greatest lower bound of a
-        nonempty subset of $inits$.
+        of the set $proposed$ and $h$ is a history belonging to $inits$.
     \item[\textbf{Initialization}:] If $inits$ is empty, then no
         sequence can be learned and no switcher can abort.
-    \item[\textbf{Irrevocability}:] In the case of a $Learn\left( l,cs
-        \right)$ transition, the new learned sequence $cs$ is a strict
-        extension of $Max\left(learned\left[ l \right]\right)$.
-        %, $cs
-        %\geq Max\left(learned\left[ l \right]\right)$.
-    \item[\textbf{Safe Abort}:] Every abort sequence is larger in the
-        partial order $\leq$ than every learned sequence.
+    \item[\textbf{Irrevocability}:] In the case of a $Learn\left( l,h
+        \right)$ transition, the new learned history $h$ is an 
+        extension of $learned\left[ l \right]$.
+    \item[\textbf{Safe Abort}:] Every abort sequence is an extension in the 
+        partial order $\leq$ of a learned history.
 \end{compactitem}
 Note that Agreement and Irrevocability are the same as in Chain
 Agreement.
