@@ -70,13 +70,17 @@ designers who want to create a new GC algorithm, optimized for particular
 conditions, can focus only on the particular conditions of interest, knowing
 that the other existing modules will handle the other cases.
 
-The key novelty of our framework lies in its practical applicability.
-Most SMR algorithms are variations on a basic structure consisting of one of two kinds of 
-quorum systems \cite{GuerraouiVukolic10RefinedQuorumSystems}. 
-The first kind, that we call resilient quorums, are used in leader-based algorithms, while the second
-kind of quorums, that we call fast quorums, are used in leader-less algorithms and can order commuting commands without synchronization.
-We provide two specifications, at an intermediate level of abstraction, that capture the essence of composing algorithms using these two kinds of quorums.
-Our two specifications allow to easily check that new modules based on resilient or fast quorums are correct, covering a large spectrum of practical algorithms. 
+The key novelty of our framework lies in its practical applicability:
+\begin{itemize}
+  \item Our framework is based on Generalized Consensus, a generalization of the consensus problem 
+    that allows optimizing the execution of commuting commands.
+  \item Many SMR algorithms are variations on a basic structure consisting of one of two kinds of 
+    quorum systems \cite{GuerraouiVukolic10RefinedQuorumSystems}. 
+    The first kind, that we call resilient quorums, are used in leader-based algorithms, while the second
+    kind of quorums, that we call fast quorums, are used in leader-less algorithms and can order commuting commands without synchronization.
+    We provide two specifications, at an intermediate level of abstraction, that capture the essence of composing algorithms using these two kinds of quorums.
+    Our two specifications allow to easily check that new modules based on resilient or fast quorums are correct, covering a large spectrum of practical algorithms. 
+\end{itemize}
 
 Allowing the execution of commuting commands to proceed without
 synchronization is an important practical optimization, as commands may
@@ -97,31 +101,35 @@ this property, two replicas executing commuting commands in a different order
 will not end up in a different state and can continue executing without further
 synchronization. In message-passing systems, this property can be leveraged to
 reduce the latency of processing one command to two message delays instead of
-three. As we will show, it also enables the processing of read-only commands
-in two message delays, although read-only commands do not commute with write
-commands.
+three. 
+%As we will see, fast execution of commutative requests also enables the processing of read-only commands
+%in two message delays, although read-only commands do not commute with write
+%commands.
 
-In practice, a SMR algorithm must support fast reconfiguration to replace faulty
-components, without which the long-term stability of a system is inevitably
-compromised. Our framework abstracts over how the reconfiguration decisions
-are made, providing an interface allowing to plug an external reconfiguration
-master implementing the reconfiguration policy of the system. The master decides
-which GC module to run next and which replica servers will participate, removing
-failed replicas and adding new ones. As we will explain, this enables tolerating
-$k$ failures with $k+1$ replicas, an important improvement over the traditional
-$2k+1$ needed replicas.
+In practice, a SMR algorithm must support fast reconfiguration to replace
+faulty components, without which the long-term stability of a system is
+inevitably compromised. Our framework abstracts over how the reconfiguration
+decisions are made, providing an interface allowing to plug in an external
+reconfiguration master implementing the reconfiguration policy of the
+system. The master decides which GC module to run next and which replica
+servers will participate, removing failed replicas and adding new ones. The
+reconfiguration master enables tolerating $k$ failures with $k+1$ replicas
+\cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, an important
+improvement over the traditional $2k+1$ needed replicas.
 
 To demonstrate the practical applicability of our framework we provide
 composable versions of the generalized variations of popular consensus
-algorithms: classic Paxos, Fast Paxos, Chain Replication, and multi-coordinated
-Paxos. We have checked the correctness of these algorithms with the TLC
+algorithms: Classic Paxos, Fast Paxos, Chain Replication, and multi-coordinated
+Paxos. Thanks to our specifications of algorithms based on quorum-systems, 
+we have checked the correctness of our version of Fast Paxos and Chain Replication with the TLC
 model-checker and we provide all the specifications needed to replicate these
 experiments. Our framework is also fully formalized and its composition theorem
 proved in Isabelle/HOL, a foundational interactive theorem prover, thereby
 certifying the correctness of the composition theorem at the deepest level.
+The TLA+ and Isabelle/HOL development can be found at \url{http://losa.fr/cgc}.
 
 At the heart of our framework lies an abstraction, called Composable Generalized
-Consensus, of the familiar notion of round (also called epoch, ballot, or
+Consensus (CGC), of the familiar notion of round (also called epoch, ballot, or
 view in the literature) used in most SMR algorithms. As an example, let us
 consider Fast Paxos, one of the first SMR algorithm which can change strategy
 dynamically. Fast Paxos is a round-based SMR algorithm that has two types of
@@ -142,6 +150,7 @@ kind of round, making $O(n^2)$ cases to consider in total.
 Our notion of Composable Generalized Consensus defines a common interface and a
 common correctness property for a round, abstracting over the particular round
 implementations and making all types of rounds compatible with each other.
+
 Moreover, our interface for rounds enables a crucial optimization seen in
 practical systems: introducing an external reconfiguration master which manages
 the addition of new replicas and the removal of failed ones. Interestingly, as

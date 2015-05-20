@@ -17,13 +17,11 @@ once and for all in isolation. Our composition theorem, mechanically proved
 with Isabelle/HOL, guarantees that the composition of any number of composable
 algorithms is a correct SMR algorithm.
 
-The key novelty of our framework is its practical applicability. 
-Our framework is based on Generalized Paxos, therefore providing buit-in support
-for algorithms optimizing the execution of commuting commands.
-Moreover, we propose two specifications 
-capturing the essence of modular SMR algorithms based on quorum systems.
-We demonstrate that concrete
-algorithms can easily be obtained by refinement from our abstract specifications, as
-evidenced by TLA+ specifications ready to be checked by the TLC model checker.
-
+The key novelty of our framework is its practical applicability: we show that
+a large class of SMR algorithms can be expressed in our framework by proposing
+two specifications capturing the essence of modular SMR algorithms based
+on Generalized Consensus and using quorum systems for synchronization. We
+demonstrate that concrete algorithms can easily be obtained by refinement from
+our abstract specifications, as evidenced by TLA+ specifications ready to be
+checked by the TLC model checker.
 }
