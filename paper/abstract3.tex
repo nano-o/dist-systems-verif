@@ -2,25 +2,20 @@
 State-Machine Replication (SMR) is a basic building block of reliable
 distributed systems. Improving SMR algorithms used by cloud-computing providers
 can have a big impact on the reliability of the many computing services they
-support. However, devising a new practical SMR algorithm is hard, often
+support. However, improving upon existing SMR algorithms is hard, often
 justifying a publication in a top conference.
 
-The problem is that SMR algorithms are not modular. Thus all the analysis,
-proofs, and tests need to be done again from scratch when devising a new
-algorithm. A modular approach allowing the reuse of existing techniques is
-especially important because of the many different situations that a practical
-SMR algorithm must face.
+The problem is that SMR algorithms are not modular. 
+Thus one cannot optimize an existing algorithm for a specific situation without having to 
+ redo from scratch all the analysis, proofs, and tests that were done for the existing algorithm.
 
-We present a framework that enables devising and composing modular SMR
-algorithms. Crucially, with our framework, an algorithm is proved composable
-once and for all in isolation. Our composition theorem, mechanically proved
-with Isabelle/HOL, guarantees that the composition of any number of composable
-algorithms is a correct SMR algorithm.
+We present a framework that enables building SMR algorithms out of independent modules. A module is an SMR algorithm that can abort its execution and pass the baton to a new module, allowing a composite SMR algorithm to dynamically switch between modules. 
+Crucially, each module can be proved correct once and for all in isolation and our composition theorem guarantees that 
+the composition of any number of correct modules is a correct SMR algorithm.
 
 The key novelty of our framework is its practical applicability: we show that
 a large class of SMR algorithms can be expressed in our framework by proposing
-two specifications capturing the essence of modular SMR algorithms based
-on Generalized Consensus and using quorum systems for synchronization. We
+two specifications capturing the essence of modular SMR algorithms based on quorum systems. We
 demonstrate that concrete algorithms can easily be obtained by refinement from
 our abstract specifications, as evidenced by TLA+ specifications ready to be
 checked by the TLC model checker.
