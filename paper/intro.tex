@@ -82,6 +82,7 @@ The key novelty of our framework lies in its practical applicability:
     Our two specifications allow to easily check that new modules based on resilient or fast quorums are correct, covering a large spectrum of practical algorithms. 
 \end{itemize}
 
+\begin{comment}
 Allowing the execution of commuting commands to proceed without
 synchronization is an important practical optimization, as commands may
 often commute in practice, for example when operating on disjoint parts
@@ -116,6 +117,7 @@ servers will participate, removing failed replicas and adding new ones. The
 reconfiguration master enables tolerating $k$ failures with $k+1$ replicas
 \cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, an important
 improvement over the traditional $2k+1$ needed replicas.
+\end{comment}
 
 To demonstrate the practical applicability of our framework we provide
 composable versions of the generalized variations of popular consensus

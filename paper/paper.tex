@@ -21,10 +21,10 @@
 
 \input{abstract3}
 
-\vspace{2cm}
-\begin{center}
-This is a regular paper.
-\end{center}
+%\vspace{2cm}
+%\begin{center}
+%This is a regular paper.
+%\end{center}
 
 \newpage
 
@@ -153,11 +153,7 @@ including those given to $c_1$ and $c_2$.
 By definition, all the sequences represented by a given history contain the same commands
 and determine the same outputs for each command. Therefore, to implement a
 replicated service, it is sufficient that learners learn histories instead of
-sequences. For a thorough discussion of command histories we refer the reader
-to \cite{Lamport05GeneralizeConsensus}. 
-Our Isabelle/HOL formalization abstracts over the concrete representation of histories, assuming only their
-necessary properties. Command histories were first introduced in trace theory
-\cite{Mazurkiewicz84Semantics}.
+sequences. 
 
 Command histories are built from the empty history, noted $\bot$, using the $\star$
 operator, which appends a sequence of commands $cs$ to a history $h$, obtaining
@@ -177,6 +173,14 @@ The major advantage that histories have over sequences is that if a sequence
 $cs_1$ is obtained by reordering the commuting commands of $cs_2$, then $h \star
 cs_1 = h \star cs_2$. Therefore, in SMR implementations, servers can agree on
 a history even though they chose different orders for some commuting commands.
+
+For a thorough discussion of command histories we refer the reader
+to \cite{Lamport05GeneralizeConsensus}, where histories are called C-structs. 
+%Our Isabelle/HOL formalization abstracts over the concrete representation of histories, assuming only their
+%necessary properties. 
+Command histories were first introduced in trace theory by Mazurkiewicz 
+\cite{Mazurkiewicz84Semantics}.
+
 
 \subsection{Generalized Consensus}
 
@@ -296,6 +300,7 @@ acceptors and learners, or the acceptors and learners can directly query the swi
 The set of switchers can be changed from round to round in the same fashion. Moreover, in an algorithm composed of several different types of rounds, the switching policy will also be responsible for choosing the type of round to execute next.
 
 \subsection{The Leader Algorithm} 
+\label{sec:leader}
 
 The Broadcast-Decide algorithm can process a proposal in two message delays when there are no conflicts, i.e. no contention on non-commuting commands. However, if there are repeated conflicts, the algorithm may not make progress despite changing round, as the acceptors of the each new round
 may be initialized with incompatible histories. The Fast Paxos algorithm \cite{Lamport06FastPaxos} is able to learn new histories under high contention by
@@ -303,7 +308,7 @@ designating a leader server that will totally order the proposals. However, to m
 
 Instead, we will now show how to obtain an algorithm with performance characteristics close to those of Fast Paxos, employing a leader to deal with contention, without modifying at all our existing Broadcast-Decide algorithm.
 To do so, we define a new kind of rounds, the Leader rounds, which uses the same inter-round interface as the Broadcast-Decide algorithm. 
-The inter-round interface will allow use to combine Leader rounds and Broadcast-Decide rounds in any order, obtaining an algorithm which can adapt its strategy to its environment, selecting the Broadcast-Decide algorithm under low contention and switching to the slower Leader algorithm when there is contention.
+The inter-round interface will allow us to combine Leader rounds and Broadcast-Decide rounds in any order, obtaining an algorithm which can adapt its strategy to its environment, selecting the Broadcast-Decide algorithm under low contention and switching to the slower Leader algorithm when there is contention.
 
 In the Leader algorithm, the proposers send their proposals to a distinguished acceptor called the leader. 
 The leader totally orders the proposals it receives and forwards them to all the acceptors which accept them in the order defined by the leader.
@@ -410,7 +415,7 @@ All the transition are guarded by the following conditions:
     \item[\textbf{Irrevocability}:] In the case of a $Learn\left( l,h
         \right)$ transition, the new learned history $h$ is an 
         extension of every history in $learned\left[ l \right]$.
-    \item[\textbf{Safe Abort}:] For every abort history $h$ there is a learner $l$ such that $h$ is an extension of the maximum learned history of $l$.
+    \item[\textbf{Safe Abort}:] Every abort history $h$ is an upper bound of the set of learned histories.
 \end{compactitem}
 
 Note that if a round is initialized with empty abort histories, then it implements Generalized Consensus.
@@ -448,7 +453,7 @@ We provide a mechanically-checked proof of the composition theorem in Isabelle/H
 The proofs uses a version of the specification of CGC that has a more
 executable form that presented in this section. 
 The Isabelle/HOL formalization of CGC uses the theory of I/O automata, which
-is also formalized in the Isabelle/HOL. The proof uses a refinement
+is also formalized in Isabelle/HOL. The proof uses a refinement
 mapping from the composition of two consecutive CGC instances to a single CGC
 instance.
 
@@ -817,8 +822,8 @@ Classic Paxos \cite{lamport2001paxos}, Multi-Coordinated Paxos \cite{CamargosSch
 implemented and in the way that the histories of the leader are disseminated to
 the other acceptors.
 
-The rounds of Classic Paxos are similar to the Leader algorithm of section 4.2 but
-tolerates that a minority of servers crash by using majority quorums instead of
+The rounds of Classic Paxos are similar to the Leader algorithm of \cref{sec:leader} but
+tolerate that a minority of servers crash by using majority quorums instead of
 waiting for histories from all the acceptors.
 
 Multi-Coordinated Paxos avoids depending on a unique leader by using a
