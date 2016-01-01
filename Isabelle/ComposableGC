@@ -1,0 +1,5 @@
+theory ComposableGC
+import CStruct IOA
+begin
+
+end

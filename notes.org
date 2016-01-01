@@ -5,6 +5,7 @@ What are the implications of this?
 ** None in practice it seems, as all of the algorithms guarantee the chain property.
 * Why do we have the consistency property?
 ** Needed in the simulation steps of init transitions.
+** How does GP work without it?
 * Fast and safe rounds:
 ** Fast rounds have lower latency but tolerate less faults.
 ** Safe rounds have a higher latency but tolerate more faults.

@@ -9,7 +9,7 @@ The problem is that SMR algorithms are not modular.
 Thus one cannot optimize an existing algorithm for a specific situation without having to 
  redo from scratch all the analysis, proofs, and tests that were done for the existing algorithm.
 
-We present a framework that enables building SMR algorithms out of independent modules. A module is an SMR algorithm that can abort its execution and pass the baton to a new module, allowing a composite SMR algorithm to dynamically switch between modules. 
+We present a framework that enables building SMR algorithms out of independent modules. A module is an SMR algorithm that can abort its execution and pass the baton to a new module, allowing to build composite SMR algorithms which can dynamically switch between modules. 
 Crucially, each module can be proved correct once and for all in isolation and our composition theorem guarantees that 
 the composition of any number of correct modules is a correct SMR algorithm.
 
