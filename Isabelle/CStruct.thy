@@ -55,8 +55,11 @@ definition inf  (infix "\<sqinter>" 65) where
 definition sup  (infix "\<squnion>" 65) where
   "sup s1 s2 \<equiv> THE s . is_lub s s1 s2"
 
+definition compat2 where
+  "compat2 s1 s2 \<equiv> \<exists> s3 . s1 \<preceq> s3 \<and> s2 \<preceq> s3"
+
 definition compat where
-  "compat s1 s2 \<equiv> \<exists> s3 . s1 \<preceq> s3 \<and> s2 \<preceq> s3"
+  "compat S \<equiv> \<forall> s1 \<in> S . \<forall> s2 \<in> S .compat2 s1 s2"
 
 subsection {* Useful Lemmas in the pre-CStruct locale *}
 
@@ -90,6 +93,9 @@ qed
 lemma preceq_star: "s \<star> (rs#r) \<preceq> s' \<Longrightarrow> s \<star> rs \<preceq> s'"
 by (metis pre_CStruct.exec.simps(1) pre_CStruct.exec.simps(2) pre_CStruct.less_eq_def trans)
 
+lemma compat_sym:"compat2 s1 s2 \<longleftrightarrow> compat2 s2 s1"
+by (metis compat2_def)
+
 end
 
 subsection {* The CStruct locale *}
@@ -102,16 +108,29 @@ locale CStruct = pre_CStruct +
     -- {* antisym implies that @{term "op \<preceq>"} is a partial order*}
   and glb_exists:"\<And> s1 s2 . \<exists> s . is_glb s s1 s2"
   and bot:"\<And> s . \<bottom> \<preceq> s"
+  and lub_exists:"compat2 s1 s2 \<Longrightarrow> \<exists> s . is_lub s s1 s2"
+  and lub_compat:"compat {s1,s2,s3} \<Longrightarrow> compat {(s1 \<squnion> s2), s3}"
 
 begin
 
-lemma inf_glb:"is_glb (s1 \<sqinter> s2) s1 s2"
+lemma inf_glb:"is_glb (s1 \<sqinter> s2) s1 s2" 
 proof -
   { fix s s'
     assume "is_glb s s1 s2" and "is_glb s' s1 s2"
     hence "s = s'" using antisym by (auto simp add:is_glb_def is_lb_def) }
     from this and glb_exists show ?thesis
       by (auto simp add:inf_def, metis (lifting) theI')
+qed
+
+lemma sup_lub:
+  assumes "compat2 s1 s2"
+  shows "is_lub (s1 \<squnion> s2) s1 s2"
+proof -
+  { fix s s'
+    assume "is_lub s s1 s2" and "is_lub s' s1 s2"
+    hence "s = s'" using antisym by (auto simp add:is_lub_def is_ub_def) }
+    from this and lub_exists show ?thesis 
+      by (auto simp add:sup_def) (metis (lifting) assms theI)
 qed
 
 text {* CStructs form a partial order *}

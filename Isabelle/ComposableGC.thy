@@ -10,7 +10,7 @@ datatype ('a,'c,'l) cgc_action =
 
 record ('a,'c,'l)cgc_state =
   propCmd :: "'c set"
-  learned :: "'l \<Rightarrow> 'a option"
+  learned :: "'l \<Rightarrow> 'a set"
   fromPrev :: "'a set"
   toNext :: "'a set"
 
@@ -24,7 +24,7 @@ definition cgc_asig where
       internals = {} \<rparr>"
 
 definition cgc_start where
-  "cgc_start \<equiv> {\<lparr>propCmd = {}, learned = \<lambda> p . None, fromPrev = {}, toNext = {} \<rparr>}"
+  "cgc_start \<equiv> {\<lparr>propCmd = {}, learned = \<lambda> p . {}, fromPrev = {}, toNext = {} \<rparr>}"
 
 definition propose  where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
@@ -35,17 +35,20 @@ definition fromPrev where
 definition non_trivial where
   "non_trivial r \<equiv> { s . \<exists> s\<^sub>0 cs . s\<^sub>0 \<in> cgc_state.fromPrev r \<and> set cs \<subseteq> propCmd r \<and> s = s\<^sub>0 \<star> cs }"
 
+(* TODO: for using \<Squnion>, we would need a lattice parameterized by an explicit carrier set. See HOL/Algebra/Lattice.thy maybe *)
+(* TODO: what about the relation with fromPrev? Is \<in> non_trivial sufficient?*)
 definition toNext where
   "toNext s r r' \<equiv>
     s \<in> non_trivial r
-    \<and> (\<forall> l . case learned r l of Some s' \<Rightarrow> s' \<preceq> s | None \<Rightarrow> True)
+    \<and> (\<forall> l . \<forall> s' \<in> (learned r l) . s' \<preceq> s)
     \<and> (r' = r\<lparr>toNext := (cgc_state.toNext r) \<union> {s}\<rparr>)"
 
 definition learn where
   "learn l s r r' \<equiv> s \<in> non_trivial r
-    \<and> (\<forall> l . (case (learned r) l of Some s' \<Rightarrow> compat s' s | None \<Rightarrow> True))
+    \<and> (\<forall> l . \<forall> s' \<in> learned r l . compat2 s' s)
     \<and> (\<forall> s' \<in> cgc_state.toNext r . s \<preceq> s')
-    \<and> r' = r\<lparr>learned := ((learned r)(l := Some s))\<rparr>"
+    \<and> cgc_state.fromPrev r \<noteq> {}
+    \<and> r' = r\<lparr>learned := (learned r)(l := learned r l \<union> {s})\<rparr>"
 
 fun cgc_trans_fun  where
   "cgc_trans_fun r (Propose c) r' = propose c r r'"
