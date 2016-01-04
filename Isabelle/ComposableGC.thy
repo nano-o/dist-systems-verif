@@ -1,7 +1,7 @@
 theory ComposableGC
 imports CStruct "/home/nano/Documents/IO-Automata/IOA"
 begin
-
+ 
 datatype ('a,'c,'l) cgc_action = 
   Propose 'c 
 | Learn 'a 'l
@@ -14,7 +14,8 @@ record ('a,'c,'l)cgc_state =
   fromPrev :: "'a set"
   toNext :: "'a set"
 
-locale ComposableGC = CStruct + IOA 
+locale ComposableGC = CStruct + IOA +
+  fixes learners::"'c set" (* TODO: without this, we get weird schematic type variables, why?*)
 begin
 
 definition cgc_asig where
@@ -23,10 +24,10 @@ definition cgc_asig where
       outputs = { a . \<exists> s p . a = Learn s p } \<union> { a . \<exists> s . a = ToNext s },
       internals = {} \<rparr>"
 
-definition cgc_start where
+definition cgc_start::"('a,'b,'c)cgc_state set" where
   "cgc_start \<equiv> {\<lparr>propCmd = {}, learned = \<lambda> p . {}, fromPrev = {}, toNext = {} \<rparr>}"
 
-definition propose  where
+definition propose::"'b \<Rightarrow> ('a,'b,'c)cgc_state \<Rightarrow>  ('a,'b,'c)cgc_state \<Rightarrow> bool" where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
 
 definition fromPrev where
@@ -43,7 +44,7 @@ definition toNext where
     \<and> (\<forall> l . \<forall> s' \<in> (learned r l) . s' \<preceq> s)
     \<and> (r' = r\<lparr>toNext := (cgc_state.toNext r) \<union> {s}\<rparr>)"
 
-definition learn where
+definition learn::"'c \<Rightarrow> 'a \<Rightarrow> ('a,'b,'c)cgc_state \<Rightarrow>  ('a,'b,'c)cgc_state \<Rightarrow> bool" where
   "learn l s r r' \<equiv> s \<in> non_trivial r
     \<and> (\<forall> l . \<forall> s' \<in> learned r l . compat2 s' s)
     \<and> (\<forall> s' \<in> cgc_state.toNext r . s \<preceq> s')
