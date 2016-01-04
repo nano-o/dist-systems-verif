@@ -33,6 +33,7 @@ definition propose::"'b \<Rightarrow> ('a,'b,'c)cgc_state \<Rightarrow>  ('a,'b,
 definition fromPrev where
   "fromPrev s r r' \<equiv> (r' = r\<lparr>fromPrev := (cgc_state.fromPrev r) \<union> {s}\<rparr>)"
 
+(* TODO: what about a definition using the longest common prefix of the fromPrev CStructs?*)
 definition non_trivial where
   "non_trivial r \<equiv> { s . \<exists> s\<^sub>0 cs . s\<^sub>0 \<in> cgc_state.fromPrev r \<and> set cs \<subseteq> propCmd r \<and> s = s\<^sub>0 \<star> cs }"
 
