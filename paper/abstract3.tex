@@ -1,21 +1,26 @@
-\abstract{
+\begin{abstract}
 State-Machine Replication (SMR) is a basic building block of reliable
 distributed systems. Improving SMR algorithms used by cloud-computing providers
 can have a big impact on the reliability of the many computing services they
-support. However, doing so is hard, often justifying a publication in a top conference.
+support. However, doing so is hard, often justifying a publication in a top
+conference.
 
-The problem is that SMR algorithms are not modular. 
-Thus one cannot optimize an existing algorithm for a specific situation without having to 
- redo from scratch all the analysis, proofs, and tests that were done for the existing algorithm.
+The problem is that SMR algorithms are not modular. Thus one cannot optimize an
+existing algorithm for a specific situation without having to redo from scratch
+all the analysis, proofs, and tests that were done for the existing algorithm.
 
-We present a framework that enables building SMR algorithms out of independent modules. 
-A module is an SMR algorithm that can abort its execution and pass the baton to a new module, allowing to build composite SMR algorithms which can dynamically switch between modules. 
-Crucially, each module can be analyzed once and for all in isolation; our composition theorem guarantees that 
-the composition of any number of correct modules is a correct SMR algorithm.
+We present a framework that enables building SMR algorithms out of independent
+modules. A module is an SMR algorithm that can abort its execution and pass
+the baton to a new module, allowing to build composite SMR algorithms which
+can dynamically switch between modules. Crucially, each module can be analyzed
+once and for all in isolation; our composition theorem guarantees that the
+composition of any number of correct modules is a correct SMR algorithm.
 
-The key novelty of our framework is its wide applicability: we show that
-a large class of SMR algorithms can be expressed in our framework by proposing
-two specifications capturing the essence of modular SMR algorithms based on quorum systems. We
-demonstrate that concrete algorithms can easily be obtained by refinement from
-our abstract specifications and we show that our framework enables formal specification and verification of composite SMR algorithms in TLA+ and Isabelle/HOL.
-}
+The key novelty of our framework is its wide applicability: we show that a
+large class of SMR algorithms can be expressed in our framework by proposing
+two specifications capturing the essence of modular SMR algorithms based on
+quorum systems. We demonstrate that concrete algorithms can easily be obtained
+by refinement from our abstract specifications and we show that our framework
+enables formal specification and verification of composite SMR algorithms in
+TLA+ and Isabelle/HOL\@.
+\end{abstract}

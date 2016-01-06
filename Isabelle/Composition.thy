@@ -164,9 +164,6 @@ definition refmap where
       cgc_state.fromPrev = {\<bottom>}, 
       toNext = cgc_state.toNext r2\<rparr>"
 
-method app_fun_eq_iff =
-  (match conclusion in "(\<lambda> x . ?B x) = (\<lambda> x . ?A x)" \<Rightarrow> \<open>simp add:fun_eq_iff\<close>)
-
 method split_conjs =
   (rule conjI);split_conjs?
 
@@ -188,10 +185,10 @@ apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
    apply(rule_tac x="[(Learn1 x31 x32,refmap (aa,ba))]" in exI)
    apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs actions_defs inv_defs refmap_def non_trivial_def)
    apply(split_conjs?)
-   apply (app_fun_eq_iff?, force?)
+   apply (force)
    apply (metis Un_iff compat_sym l1 less_eq_def)
    apply (metis pre_CStruct.trans)
-   apply (app_fun_eq_iff?, force?)
+   apply (simp add:fun_eq_iff)
 
    apply(rule_tac x="refmap (a,b)" in exI)
    apply(rule_tac x="[(Learn2 x41 x42,refmap (aa,ba))]" in exI)
@@ -199,7 +196,7 @@ apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
    apply (split_conjs?)
    apply (metis l2 sup.mono)
    apply (metis Un_iff l1)
-   apply (app_fun_eq_iff)
+   apply (simp add:fun_eq_iff)
 
    apply(rule_tac x="refmap (a,b)" in exI)
    apply(rule_tac x="[]" in exI)

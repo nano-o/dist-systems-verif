@@ -1,159 +1,73 @@
 \section{Introduction}
 
 The State-Machine Replication technique (abbreviated SMR) allows building
-reliable services on top of unreliable hardware. The basic idea is to
-replicate a service over several servers and enforce through a distributed protocol that each execute the same sequence of
-deterministic commands. In such a setup, any replica can be used to determine
-the result of a command. Therefore, if a replica crashes, clients can be
-transparently redirected to another one and will have the illusion of accessing
-a centralized service at all times.
+reliable computing services on top of unreliable hardware. The basic idea is
+to replicate a service over several servers and enforce, using a distributed
+protocol, that each server executes the same sequence of deterministic commands.
+In this fashion, a command will produce the same effect on all replicas.
+Therefore, if a replica crashes, clients of the service can be transparently redirected to
+another replica and will have the illusion of accessing a centralized service at
+all times. SMR is often formally specified using the Generalized Consensus
+specification~\cite{Lamport05GeneralizeConsensus}, abbreviated GC\@.
 
-Making SMR algorithms efficient has been a long-standing challenge
-and a multitude of algorithms have been proposed. Examples include
-Paxos~\cite{lamport2001paxos}, Fast Paxos~\cite{Lamport06FastPaxos},
-Disk Paxos~\cite{GafniLamport03DiskPaxos}, Generalized Paxos~\cite{Lamport05GeneralizeConsensus}, FGGC~\cite{SutraShapiro11FastGenuineGeneralizedConsensus}, Chain Replication~\cite{RenesseSchneider04ChainReplicationSupportingHighThroughputAvailability},
-Ring Paxos~\cite{MarandiETAL10RingPaxosHighthroughputAtomicBroadcastProtocol},
-Egalitarian Paxos
-\cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments},
-Multi-Coordinated Paxos~\cite{CamargosSchmidtPedone07MulticoordinatedPaxos},
-Cheap Paxos~\cite{LamportMassa04CheapPaxos}, Vertical Paxos
-\cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, Paxos-MIC
-\cite{HurfinMoiseNarzul11AdaptiveFastPaxosMakingQuickEverlasting}, Mencius
-\cite{MaoJunqueiraMarzullo08MenciusBuildingEfficientReplicatedStateMachine},
-Fast Mencius~\cite{WeiETAL13FastMenciusMenciusLowCommitLatency},
-the Chandra-Toueg algorithm
-\cite{ChandraToueg96UnreliableFailureDetectorsReliableDistributedSystems}, the
-Ben-Or algorithm~\cite{BenOr83AnotherAdvantageFreeChoiceCompletelyAsynchronous},
-and Raft~\cite{OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
+Because SMR is part of the basic infrastructure supporting cloud computing,
+improving the performance of SMR algorithms can result in performance gains,
+cost reduction, or improved resilience (because SMR may be used where it was
+too costly before) for many online services.
 
-Improvements in the performance and
-efficiency of SMR algorithms have the potential to impact most online services, which widely rely on cloud computing:
-advanced SMR algorithms can be implemented by cloud computing service providers
-and benefit all their customer's applications.
+However, devising new SMR algorithms or optimizing existing ones for a
+particular use-case is hard: today, more than two decades after the first SMR
+algorithms~\cite{Lamport98ParttimeParliament,BirmanJoseph87ReliableCommunicationPresenceFailures,OkiLiskov88ViewstampedReplicationGeneralPrimaryCopy,DworkLynchStockmeyer84ConsensusPresencePartialSynchronyPreliminaryVersion}
+were proposed, devising a new SMR algorithm can justify a publication in a top
+conference~\cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments,OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
 
-However, devising new SMR algorithms, optimized with
-particular situations or metrics in mind, is hard: today,
-more than two decades after the first SMR algorithms~\cite{Lamport98ParttimeParliament,BirmanJoseph87ReliableCommunicationPresenceFailures,OkiLiskov88ViewstampedReplicationGeneralPrimaryCopy,DworkLynchStockmeyer84ConsensusPresencePartialSynchronyPreliminaryVersion} were proposed, devising new SMR algorithms is still complex enough to justify a publication in a top conference~\cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments,OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
+The problem is that it is difficult to reuse existing algorithms and ideas
+because SMR algorithms are not modular. When devising a new algorithm, any
+analysis, test, or correctness proof has to be done again from scratch.
 
-The problem is that it is difficult to reuse existing algorithms and ideas because
-SMR algorithms are not modular. When devising a new algorithm, all the careful
-analysis, tests, and proofs have to be done again from scratch.
+To simplify the task of devising new SMR algorithms we propose a framework for
+devising reusable SMR modules. A module in our framework is an SMR algorithm
+augmented with an \emph{abort interface} for aborting its execution and passing
+the baton to another module and with a matching \emph{init interface} for taking
+over the execution of an aborting module. Two modules are composed by passing
+the outputs produced by the abort interface of the first module, called abort
+values, as inputs to the init interface of the second module, called init values
+in the context of the second module.
 
+A module must satisfy a correctness condition that we call Composable
+Generalized Consensus (abbreviated CGC). Any correct module is a safe
+Generalized Consensus~\cite{Lamport05GeneralizeConsensus} algorithm, but the progress guarantees may vary between
+modules: CGC only requires a module to make progress executing commands or to
+abort its execution. CGC also relates the init values, learned values (learned values represent the local state-machine state of individual replicas), and abort values in order for our composition theorem to hold. 
+Generalized Consensus is a specification of SMR algorithms that takes into account the commutativity relation among commands and can off important performance advantages in practice. 
 
-We propose a framework to make existing Generalized Consensus (TODO Generalized Consensus has not been introduced) algorithms modular
-and to enable adding new optimizations incrementally, without modification to
-the existing. Generalized consensus, abbreviated GC, is a precise formulation of
-State-Machine Replication that subsumes consensus. An algorithm in our framework
-is composed of independent modules that can run, abort their execution, and pass
-the baton to any other module on the fly.
+The composition theorem enables incremental development of SMR algorithms
+because it guarantees that any number of correct modules may be composed in
+a sequence to form a correct SMR algorithm. Therefore, our framework allows
+building \emph{dynamic SMR algorithms}, which dynamically change module when
+the currently running module aborts, choosing the module best suited to the
+current operating conditions. Thanks to the composition theorem, new modules can
+be added to a dynamic SMR algorithm without modifying the existing modules and
+with guaranteed correctness. Moreover, the relaxed progress requirements of CGC
+enable a separation of concerns that simplifies optimizing SMR algorithms for
+particular scenarios because there is no need to consider executing commands
+under a situation outside the scenario: the module can just abort in this case.
 
-Crucially, when adding a new module to an existing algorithm, all the
-performance analysis, tests, and proofs of the existing modules remain valid and
-only the new GC module needs to be analyzed: Our composition theorem guarantees
-that the composition of any number of correct modules is a correct GC algorithm,
-thus one can combine different GC algorithms, optimized for different situations
-and metrics, without any changes and with guaranteed correctness. Our framework
-therefore enables incremental development of GC algorithms, where each new
-development can build on the previous ones instead of starting again from
-scratch.
+In practice, we provide a TLA+ specification of CGC that the user of our framework can use to debug and prove new modules correct using the TLA$^+$ toolbox~\cite{TLATools}.
+Moreover, we also provide two TLA+ specifications simplifying the development of modules based on Refined Quorum Systems~\cite{GuerraouiVukolic10RefinedQuorumSystems}. These two specifications both implement CGC and provide a skeleton for a user to build her own module. The two specifications demonstrate how to update the local state of a replica after gathering the states or the init values of a write quorum of replicas, and how to
+produce an abort value after gathering the state of a read quorum of replicas. 
+The two specifications use different combinations of sizes of read and write quorums, which affects the invariants that the replicas must maintain and, in consequence, the latency with which a command can be processed but the module.
+Our two specifications abstract over how to disseminate the commands to the replicas (e.g.\ whether to use a leader as in Paxos, multiple leaders as in MultiCoordinatedPaxos, or whether to broadcast commands without using a leader as in Fast Paxos).
+The user can therefore specify a concrete command dissemination procedure and then model-check that the obtained algorithm refines one of the two specifications.  
+We demonstrate the practical use of our framework by presenting modules based on Paxos~\cite{Lamport98ParttimeParliament}, Fast Paxos\cite{Lamport06FastPaxos}, Chain Replication~\cite{RenesseSchneider04ChainReplicationSupportingHighThroughputAvailability}, a case of Vertical Paxos~\cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, and EPaxos~\cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments}
+(TODO, but would be nice).
 
-Moreover, our framework enables a clear separation of concerns which simplifies
-the design of new individual modules. A composite GC algorithm built with our
-framework works by running the GC module deemed the most appropriate at any
-given time, dynamically changing GC module when needed. Therefore a composable
-GC algorithm is not required to make progress in all situations: if it does
-not make progress, the system can switch to another GC module. Thus algorithms
-designers who want to create a new GC algorithm, optimized for particular
-conditions, can focus only on the particular conditions of interest, knowing
-that the other existing modules will handle the other cases.
-
-The key novelty of our framework lies in its practical applicability:
+Compared to related work, described in \cref{sec:related}, our key contributions are the following.
 \begin{itemize}
-  \item Our framework is based on Generalized Consensus, a generalization of the consensus problem 
-    that allows optimizing the execution of commuting commands.
-  \item Many SMR algorithms are variations on a basic structure consisting of one of two kinds of 
-    quorum systems~\cite{GuerraouiVukolic10RefinedQuorumSystems}. 
-    The first kind, that we call resilient quorums, are used in leader-based algorithms, while the second
-    kind of quorums, that we call fast quorums, are used in leader-less algorithms and can order commuting commands without synchronization.
-    We provide two specifications, at an intermediate level of abstraction, that capture the essence of composing algorithms using these two kinds of quorums.
-    Our two specifications allow to easily check that new modules based on resilient or fast quorums are correct, covering a large spectrum of practical algorithms. 
+    \item We provide tool support for designing CGC modules in the form of two TLA+~\cite{Lamport02SpecifyingSystems} specifications simplifying the design and model-checking of SMR algorithms based on Quorum Systems~\cite{GuerraouiVukolic10RefinedQuorumSystems} and demonstrate their use by designing CGC modules inspired by Paxos, Fast Paxos, and Primary-Backup replication.
+    \item Our framework is based on Generalized Consensus, a generalization of the consensus problem 
+        that allows optimizing the execution of commuting commands, a common practical case.
 \end{itemize}
-
-\begin{comment}
-Allowing the execution of commuting commands to proceed without
-synchronization is an important practical optimization, as commands may
-often commute in practice, for example when operating on disjoint parts
-of a data structure. To enable the synchronization-free execution of
-commuting commands, we have based our framework on Generalized Consensus~\cite{Lamport05GeneralizeConsensus}. Traditional SMR implementations use a
-separate instance of a consensus algorithm to agree on the command to execute
-at each index of the command sequence on which the replicas must agree. Using
-separate consensus instances makes it hard to optimize the execution of
-commuting command because commutativity is not a property of a single command.
-Instead of restricting agreement to a single value, the Generalized Consensus
-problem requires that set of replica servers agree on the state of a growing
-data structure called a command-structure set. A command-structure set is
-a data structure with an append operation such that the order in which two
-commuting commands are appended does not change the resulting state. Thanks to
-this property, two replicas executing commuting commands in a different order
-will not end up in a different state and can continue executing without further
-synchronization. In message-passing systems, this property can be leveraged to
-reduce the latency of processing one command to two message delays instead of
-three. 
-%As we will see, fast execution of commutative requests also enables the processing of read-only commands
-%in two message delays, although read-only commands do not commute with write
-%commands.
-
-In practice, a SMR algorithm must support fast reconfiguration to replace
-faulty components, without which the long-term stability of a system is
-inevitably compromised. Our framework abstracts over how the reconfiguration
-decisions are made, providing an interface allowing to plug in an external
-reconfiguration master implementing the reconfiguration policy of the
-system. The master decides which GC module to run next and which replica
-servers will participate, removing failed replicas and adding new ones. The
-reconfiguration master enables tolerating $k$ failures with $k+1$ replicas~\cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, an important
-improvement over the traditional $2k+1$ needed replicas.
-\end{comment}
-
-To demonstrate the practical applicability of our framework we provide
-composable versions of the generalized variations of popular consensus
-algorithms: Classic Paxos, Fast Paxos, Chain Replication, and multi-coordinated
-Paxos. Thanks to our specifications of algorithms based on quorum-systems, 
-we have checked the correctness of our version of Fast Paxos and Chain Replication with the TLC
-model-checker and we provide all the specifications needed to replicate these
-experiments. Our framework is also fully formalized and its composition theorem
-proved in Isabelle/HOL, a foundational interactive theorem prover, thereby
-certifying the correctness of the composition theorem at the deepest level.
-The TLA+ and Isabelle/HOL development can be found at \url{http://losa.fr/cgc}.
-
-At the heart of our framework lies an abstraction, called Composable Generalized
-Consensus (CGC), of the familiar notion of round (also called epoch, ballot, or
-view in the literature) used in most SMR algorithms. As an example, let us
-consider Fast Paxos, one of the first SMR algorithm which can change strategy
-dynamically. Fast Paxos is a round-based SMR algorithm that has two types of
-rounds: fast rounds and normal rounds. Fast rounds process requests faster
-than normal rounds in contention-free executions but fall back to a slower
-scheme under contention. Normal rounds are the same as in the classic Paxos
-and are slower than fast rounds in contention-free executions. Any process can
-initiate a round change at any point during execution: this allows switching
-between fast and normal rounds as well as changing the leader from one normal
-round to the next, similarly to classic Paxos. Each kind of round maintains
-different invariants relating the state of each process and the values that
-might have been chosen in the previous rounds, thus a given round must know
-which past rounds are fast or normal rounds in order to take over the execution
-safely. When adding more kinds of rounds such an approach will quickly become
-unmanageable, as each type of rounds must have one case for each possible other
-kind of round, making $O(n^2)$ cases to consider in total.
-
-Our notion of Composable Generalized Consensus defines a common interface and a
-common correctness property for a round, abstracting over the particular round
-implementations and making all types of rounds compatible with each other.
-
-Moreover, our interface for rounds enables a crucial optimization seen in
-practical systems: introducing an external reconfiguration master which manages
-the addition of new replicas and the removal of failed ones. Interestingly, as
-explained in~\cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication},
-in a real system it is often possible to implement a reliable reconfiguration
-master which allows to tolerate $f$ faults with $f+1$ replicas instead of the
-traditional $2f+1$ replicas. The reconfiguration master can also make the choice
-of the new type of round to execute, providing the system's reconfiguration
-policy.
+These two contributions set this paper apart from related work, notably the Abstract framework~\cite{GuerraouiETAL10Next700BftProtocols} and the Speculative Linearizability framework~\cite{GuerraouiKuncakLosa12SpeculativeLinearizability}, both described in \cref{sec:related}.
+Our TLA+ specifications can be found at \url{http://losa.fr/cgc}.
+Moreover, we have also formalized the CGC correctness condition and proved the composition theorem in Isabelle/HOL\@, and the Isabelle theories are available at the same URL\@.

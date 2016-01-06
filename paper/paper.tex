@@ -1,4 +1,15 @@
-\input{header.tex}
+\documentclass{llncs}
+\usepackage[english]{babel}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{comment}
+\usepackage{datetime}
+\usepackage[url=true,doi=false,isbn=false,backend=biber]{biblatex}
+\usepackage{mathtools}
+\usepackage{paralist}
+\usepackage{mathtools}
+
+%\input{header.tex}
 \input{defs.tex}
 
 \addbibresource{managed.bib}
@@ -36,23 +47,40 @@
 \section{Related Work}
 \label{sec:related}
 
-\begin{comment}
-SMR is often implemented using a sequence of instances of Consensus.
-There are numerous examples of consensus algorithms in the literature.
-However, Composable Generalized Consensus is based on Generalized Consensus. 
-In Generalized Consensus \cite{Lamport05GeneralizeConsensus}, the learners of a
-SMR algorithm repeatedly learn new values belonging to a \emph{C-struct set}. A
-C-struct can be seen as a data structure encoding  sequences of commands modulo
-the ordering of commands that commute. The advantage of Generalized
-Consensus over Consensus is that
-two servers which receive commuting commands in different orders can still reach
-agreement on C-structs without further synchronization. 
-Our Composable Generalized Consensus can also use C-structs, with the same advantages
-as Generalized Consensus. 
-\end{comment}
+Our work is closely related to the Abstract
+framework~\cite{GuerraouiETAL10Next700BftProtocols}
+and the Speculative Linearizability
+framework~\cite{GuerraouiKuncakLosa12SpeculativeLinearizability}. The
+Abstract framework pioneered the idea of decomposing SMR algorithms in
+independent modules and experimentally showed that the resulting composite
+algorithms outperformed state-of-the-art monolithic algorithms. Compared
+to our work, the Abstract framework is not precisely formalized and lacks
+tools supporting the development of correct algorithms in the framework,
+which are direly needed given the notorious complexity of SMR algorithms.
+Moreover, the Abstract framework does not allow optimizing for the execution
+of commuting commands. However, the Abstract framework supports byzantine
+fault-tolerant~\cite{LamportShostakPease82ByzantineGeneralsProblem} SMR
+algorithms, which we do not. 
 
-Composable Generalized Consensus combines the ideas of the Abstract Framework \cite{GuerraouiETAL10Next700BftProtocols}, Generalized Consensus  \cite{Lamport05GeneralizeConsensus}, and Vertical Paxos \cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication} in a
-unified abstraction. 
+The Speculative Linearizability framework was a
+first attempts by the authors to formalize the Abstract framework, provide
+formal proof support in Isabelle/HOL~\cite{NipkowPaulsonWenzel02IsabelleHOL},
+and extend the Abstract framework to support algorithms that optimize
+the execution of commuting commands by requiring Speculatively
+Linearizable modules to refine Abstract modules (under a forward/backward
+simulation~\cite{LynchVaandrager95ForwardBackwardSimulationsIUntimedSystems})
+modulo an equivalence relation on histories of commands that reflects the
+commutativity relation among commands. However, the simulation technique led to
+complex correctness statements that were hard to scale beyond the examples of
+the paper, and no realistic protocol was built in the framework. The present
+work addresses the shortcoming of the Speculatively Linearizable framework by
+using the notion of command-structure set introduced for the definition of
+Generalized Consensus~\cite{Lamport05GeneralizeConsensus}. Moreover, we show how
+several well known and practical algorithms can be cast and optimized in our
+framework, providing a set of TLA+ specifications that ease the design and model
+checking of algorithms based on quorum systems.
+
+TODO\@: expand the following.
 
 Generalized Consensus is an agreement problem relaxing the ordering constraints
 imposed on commuting commands and Generalized Paxos \cite{Lamport05GeneralizeConsensus} is an algorithm, similar
@@ -78,40 +106,13 @@ an interface and correctness condition for encapsulating the reconfigurable
 instances of SMR algorithms and therefore does not allow the reuse of existing
 algorithms and the incremental development of SMR optimizations.
 
-Our work builds on the Abstract Framework , which proposes to
-build Byzantine Fault-Tolerant algorithms as the succession of abortable rounds
-called Abstract instances. Abstract instances must satisfy the Abstract
-correctness properties. By construction, the composition of any number of
-Abstract instances is a correct SMR implementation. The Abstract
-Framework is similar to our framework but uses totally ordered sequence of commands, making it difficult apply it to 
-practical algorithms that optimize the execution of commuting and read-only commands. 
-
-Finally, the Speculative Linearizability framework
-\cite{GuerraouiKuncakLosa12SpeculativeLinearizability} was a first
-attempt by the authors of the present paper at generalizing the
-Abstract Framework and mechanically proving its properties with the
-Isabelle/HOL interactive proofs assistant.  Like the Abstract Framework, the
-Speculative Linearizability framework is based on totally ordered
-sequences of commands, with the same drawback for the execution of
-commuting and read-only commands. Moreover, Composable Generalized Consensus is both
-conceptually simpler and subsumes the Speculative Linearizability
-property. Composable Generalized Consensus
-and its main property, the composition theorem, are also formalized in Isabelle/HOL.
-
-\begin{comment}
-Composable Generalized Consensus is the most complete framework to date for building
-adaptive replication algorithms out of heterogeneous rounds, making state of the
-art optimization techniques available to algorithm designers, which was not
-possible before.
-\end{comment}
-
 \section{Generalized Consensus}
 \label{sec:gc}
 
 We consider a set of asynchronous servers communicating by message passing in
 an asynchronous network. Servers are not necessarily sequential processes.
 We describe a behavior of the system using a sequence of states,
-where a state is a function from variable names to values (i.e. a valuation of
+where a state is a function from variable names to values (i.e.\ a valuation of
 variables). We specify sets of allowed behaviors using an initial predicate
 and a next-state relation expressed using unprimed variables and primed variables (next-state variables) in the
 style of TLA+ \cite{Lamport02SpecifyingSystems}. However, for succinctness, our
@@ -308,7 +309,7 @@ The set of switchers can be changed from round to round in the same fashion. Mor
 \subsection{The Leader Algorithm} 
 \label{sec:leader}
 
-The Broadcast-Decide algorithm can process a proposal in two message delays when there are no conflicts, i.e. no contention on non-commuting commands. However, if there are repeated conflicts, the algorithm may not make progress despite changing round, as the acceptors of the each new round
+The Broadcast-Decide algorithm can process a proposal in two message delays when there are no conflicts, i.e.\ no contention on non-commuting commands. However, if there are repeated conflicts, the algorithm may not make progress despite changing round, as the acceptors of the each new round
 may be initialized with incompatible histories. The Fast Paxos algorithm \cite{Lamport06FastPaxos} is able to learn new histories under high contention by
 designating a leader server that will totally order the proposals. However, to make our Broadcast-Decide algorithm work like Fast Paxos, we would have to modify it substantially. If we had spent effort testing Broadcast-Decide implementations and proving it correct, this effort would be wasted and we would have to redo all the tests and proofs from scratch.
 
@@ -440,7 +441,7 @@ The transition relation of the composition is the disjunction of the following a
 
 \subsection{The Composition Theorem}
 
-\begin{thm}[Composition Theorem]
+\begin{theorem}[Composition Theorem]
     \label{thm:comp}
 Consider the composition of two rounds as defined above.
 Define the state variable $proposed$ as $proposed_1 \cup proposed_2$. For every learner $l$, define 
@@ -448,7 +449,7 @@ $learned\left[ l \right]$ as the maximum of $learned_1\left[ l \right]$ and $lea
 For every switcher $s$, define $inits\left[ s \right]$ as $inits_1\left[ s \right]$ and $aborts\left[ s \right]$ as $aborts_2\left[ s \right]$.
 
 Then the sequence of states of the variables $proposed$, $learned$, $inits$, and $aborts$ satisfy the specification of Composable Generalized Consensus.
-\end{thm}
+\end{theorem}
 
 The composition theorem can be applied recursively to show that the composition of any number of rounds which individually and independently satisfy Composable Generalized Consensus itself satisfies Composable Generalized Consensus. 
 Therefore SMR algorithms implemented as rounds in our framework can be reused unmodified and optimized by adding new types of rounds incrementally, building on existing work instead of having to redo all the tests and proofs from scratch every time one adds a new optimization to an existing algorithm.
@@ -459,17 +460,17 @@ We provide a mechanically-checked proof of the composition theorem in Isabelle/H
 The proofs uses a version of the specification of CGC that has a more
 executable form that presented in this section. 
 The Isabelle/HOL formalization of CGC uses the theory of I/O automata, which
-is also formalized in Isabelle/HOL. The proof uses a refinement
+is also formalized in Isabelle/HOL\@. The proof uses a refinement
 mapping from the composition of two consecutive CGC instances to a single CGC
 instance.
 
 \begin{comment}
-\begin{thm}[Composition Theorem]
+\begin{theorem}[Composition Theorem]
     \label{thm:comp}
     In every execution of a succession of CGC instances, the history of valuations
     of the variable $proposed$ and, for every learner $l$, of the variables
     $learned\left[ l \right]$ satisfies Generalized Consensus.
-\end{thm}
+\end{theorem}
 \Cref{thm:comp} can be shown by induction on the number of rounds,
 using the following lemma.
 \begin{lem}
@@ -487,7 +488,7 @@ using the following lemma.
   instead of history of commands, the Isabelle/HOL specification uses the more
   general notion of command history, presented in the next subsection.
   The Isabelle/HOL formalization of CGC uses the theory of I/O automata, which
-  is also formalized in the Isabelle/HOL. The proof uses a refinement
+  is also formalized in the Isabelle/HOL\@. The proof uses a refinement
   mapping from the composition of two consecutive CGC instances to a single CGC
   instance.
 \end{proof}
@@ -559,7 +560,7 @@ We provide TLA+ specifications precisely demonstrating how to do so. The refinem
 The specifications are available at \url{http://losa.fr/cgc}.
 
 Fast and resilient CGC round are two specifications, at an
-intermediate level of abstraction, which satisfy CGC. Both
+intermediate level of abstraction, which satisfy CGC\@. Both
 specifications describe how the state of the acceptors should be
 updated, using the notion of quorum, but abstract over the particular communication topology used
 to implement the state accesses: the specifications use a global state
@@ -668,12 +669,12 @@ Define, for every learner $l$, the history variable $\overline{learned}\left[ l 
 updated each time a new local history is accepted by the learner $l$ by
 inserting the new local history in $\overline{learned}\left[ l \right]$ (see \cite{AbadiLamport91ExistenceRefinementMappings} for the
 definition of a history variable).
-\begin{thm}
+\begin{theorem}
   \label{thm:rounds}
     Both resilient and fast CGC round implement CGC under the refinement
     mapping that consists in substituting $\overline{learned\left[ l \right]}$
     for $learned\left[ l \right]$.
-\end{thm}
+\end{theorem}
 
 
 \begin{comment}
@@ -809,9 +810,9 @@ acceptors of the preceeding round, whereas in CGC round, the
 switchers query the acceptors and then send their abort histories to
 the leader. However, changing round is an infrequent event, therefore
 this difference should not have much practical impact on performance.
-\begin{thm}
+\begin{theorem}
   Classic Paxos CGC round satisfy Composable Generalized Consensus.
-\end{thm}
+\end{theorem}
 \begin{proof}
   A Classic Paxos CGC instance implements the specification of Abortable
   Generalized Consensus under the refinement mapping consisting in
@@ -933,5 +934,6 @@ learner $l$, $learned\left[ l \right]$.
 %  \includepdf[pages={2-},pagecommand={},scale=1]{../IsabellePDFS/podctheories.pdf}
   
 \end{appendix}
+
 
 \end{document}

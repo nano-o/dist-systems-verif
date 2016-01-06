@@ -113,7 +113,7 @@ locale CStruct = pre_CStruct +
 
 begin
 
-lemma inf_glb:"is_glb (s1 \<sqinter> s2) s1 s2" 
+lemma inf_glb:"is_glb (s1 \<sqinter> s2) s1 s2"
 proof -
   { fix s s'
     assume "is_glb s s1 s2" and "is_glb s' s1 s2"

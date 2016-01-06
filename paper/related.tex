@@ -1,0 +1,87 @@
+\section{Related Work}
+\label{sec:related}
+
+Generalized Consensus is a specification of SMR algorithms that takes into account the commutativity relation among commands and allows its implementation to optimize the execution of commuting commands. In cases in which many commands commute, which may be frequent in practice, Generalized Consensus algorithms can have a significant performance advantage over traditional consensus algorithms.
+
+Making SMR algorithms efficient has been a long-standing
+challenge and a multitude of algorithms have been proposed, each best suited to a particular use case.
+Examples include Paxos~\cite{lamport2001paxos}, Fast
+Paxos~\cite{Lamport06FastPaxos}, Disk Paxos~\cite{GafniLamport03DiskPaxos},
+Generalized Paxos~\cite{Lamport05GeneralizeConsensus},
+FGGC~\cite{SutraShapiro11FastGenuineGeneralizedConsensus}, Chain
+Replication~\cite{RenesseSchneider04ChainReplicationSupportingHighThroughputAvailability}, Ring
+Paxos~\cite{MarandiETAL10RingPaxosHighthroughputAtomicBroadcastProtocol},
+Egalitarian Paxos
+\cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments},
+Multi-Coordinated Paxos~\cite{CamargosSchmidtPedone07MulticoordinatedPaxos},
+Cheap Paxos~\cite{LamportMassa04CheapPaxos}, Vertical Paxos
+\cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, Paxos-MIC
+\cite{HurfinMoiseNarzul11AdaptiveFastPaxosMakingQuickEverlasting}, Mencius
+\cite{MaoJunqueiraMarzullo08MenciusBuildingEfficientReplicatedStateMachine},
+Fast Mencius~\cite{WeiETAL13FastMenciusMenciusLowCommitLatency},
+the Chandra-Toueg algorithm
+\cite{ChandraToueg96UnreliableFailureDetectorsReliableDistributedSystems}, the
+Ben-Or algorithm~\cite{BenOr83AnotherAdvantageFreeChoiceCompletelyAsynchronous},
+and Raft~\cite{OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
+
+
+Our work is closely related to the Abstract
+framework~\cite{GuerraouiETAL10Next700BftProtocols}
+and the Speculative Linearizability
+framework~\cite{GuerraouiKuncakLosa12SpeculativeLinearizability}. The
+Abstract framework pioneered the idea of decomposing SMR algorithms in
+independent modules and experimentally showed that the resulting composite
+algorithms outperformed state-of-the-art monolithic algorithms. Compared
+to our work, the Abstract framework is not precisely formalized and lacks
+tools supporting the development of correct algorithms in the framework,
+which are direly needed given the notorious complexity of SMR algorithms.
+Moreover, the Abstract framework does not allow optimizing for the execution
+of commuting commands. However, the Abstract framework supports byzantine
+fault-tolerant~\cite{LamportShostakPease82ByzantineGeneralsProblem} SMR
+algorithms, which we do not. 
+
+The Speculative Linearizability framework was a
+first attempts by the authors to formalize the Abstract framework, provide
+formal proof support in Isabelle/HOL~\cite{NipkowPaulsonWenzel02IsabelleHOL},
+and extend the Abstract framework to support algorithms that optimize
+the execution of commuting commands by requiring Speculatively
+Linearizable modules to refine Abstract modules (under a forward/backward
+simulation~\cite{LynchVaandrager95ForwardBackwardSimulationsIUntimedSystems})
+modulo an equivalence relation on histories of commands that reflects the
+commutativity relation among commands. However, the simulation technique led to
+complex correctness statements that were hard to scale beyond the examples of
+the paper, and no realistic protocol was built in the framework. The present
+work addresses the shortcoming of the Speculatively Linearizable framework by
+using the notion of command-structure set introduced for the definition of
+Generalized Consensus~\cite{Lamport05GeneralizeConsensus}. Moreover, we show how
+several well known and practical algorithms can be cast and optimized in our
+framework, providing a set of TLA+ specifications that ease the design and model
+checking of algorithms based on quorum systems.
+
+TODO\@: expand the following.
+
+Generalized Consensus is an agreement problem relaxing the ordering constraints
+imposed on commuting commands and Generalized Paxos~\cite{Lamport05GeneralizeConsensus} is an algorithm, similar
+in structure to Fast Paxos, which takes advantage of the relaxed ordering
+constraint to process commuting commands in two message delays, when three are
+needed in the Classic Paxos algorithm.
+
+Generalized Paxos is also structured in a sequence of rounds, 
+where each round maintains the agreement property of Generalized Consensus.
+In the abstract presentation of Generalized Paxos, Lamport gives a generic and abstract algorithm (not a distributed algorithm, accesses directly the state of all acceptors and rounds) that a round must use to determine the values that are safe to be voted for in the round.
+If all round refine this abstract specification, then the resulting algorithm implements Generalized Consensus. Therefore any set of rounds refining Lamport's abstract specification can be combined to form a correct generalized consensus algorithm.  
+However, no explicit interface for combining rounds is given and specifying a type of round in isolation from the others would require assume-guarantee reasoning. In contrast, our formulation uses encapsulared rounds and does not require assume-guarantee reasoning.
+
+Vertical Paxos algorithms are SMR algorithms whose set of replica servers can
+be reconfigured without stopping to process new commands. Crashed servers can
+therefore be replaced by new servers, ensuring the long-term availability of a
+replicated service. Vertical Paxos algorithms use an external reconfiguration
+master, itself implemented as a replicated state machine, which determines
+the servers that should be removed from or added to the configuration. The
+role of the reconfiguration master is similar to the role of the scheduling
+policy in our framework. In contrast to our work, Vertical Paxos does not define
+an interface and correctness condition for encapsulating the reconfigurable
+instances of SMR algorithms and therefore does not allow the reuse of existing
+algorithms and the incremental development of SMR optimizations.
+
+
