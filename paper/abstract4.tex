@@ -1,19 +1,23 @@
 \begin{abstract}
 
 State-Machine Replication (SMR) algorithms such as Paxos are notoriously hard to
-understand, let alone to devise. Moreover, there is no practical way to reuse and optimize existing SMR
-algorithms, therefore the cost of creating a new SMR algorithm is high.
+understand, let alone to devise. Moreover, there is no practical way to reuse
+and optimize existing SMR algorithms, therefore the cost of creating a new SMR
+algorithm is high.
 
-To lower this cost, we present a framework for building SMR algorithms out of independent and reusable SMR modules. A module is an SMR
-algorithm that can abort and pass the baton to another module, allowing to dynamically switch between modules. 
-We propose Composable
-Generalized Consensus (CGC), a correctness condition for individual modules, and
-we prove that the composition of correct modules is a correct SMR algorithm.
-Our framework consists of TLA$^+$ specifications of CGC and of two abstract
-types of correct modules, fast rounds and conservative rounds, each providing a template to devise new SMR modules with the help of the TLA$^+$
-tools. We show that several well-known SMR algorithms can be modified to
-implement fast or conservative rounds, therefore enabling
-their composition to obtain a single versatile SMR algorithm.
+To lower this cost, we present a framework for building SMR algorithms out of
+independent and reusable SMR modules. A module is an SMR algorithm that can
+abort and pass the baton to another module, allowing to dynamically switch
+between modules. Our composition theorem ensures that the composition of any
+number of modules satisfying Composable Generalized Consensus (CGC), our
+correctness condition for modules, is a correct SMR algorithm.
+
+To help design new modules in practice, we propose TLA$^+$ specifications
+of CGC and of two abstract types of modules, fast rounds and conservative
+rounds, each providing a template to devise new SMR modules with the help of the
+TLA$^+$ tools. We show that several well-known SMR algorithms can be modified to
+implement fast or conservative rounds, therefore enabling their composition to
+obtain a single versatile SMR algorithm.
 
 %With our specifications, algorithm designers can use the TLA$^+$ tools
 %to prototype and debug new SMR algorithms. Moreover, we also provide a
