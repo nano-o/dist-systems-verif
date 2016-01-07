@@ -14,11 +14,11 @@ To lower the cost of designing new SMR algorithms, we present a framework for co
 An SMR module is an SMR algorithm augmented with a composition interface and satisfying a specification called Composable Generalized Consensus. 
 In the composition of two modules, the first module starts executing and can abort its execution and pass the baton to the second module at any time.
 Our composition theorem guarantees that the composition of two SMR modules is itself an SMR module. %; therefore, composition can be applied repeatedly to a sequence of modules.
-Module composition can be dynamic; therefore, our framework allows building SMR algorithms that choose and switch at runtime between a set of modules, and that can be augmented with new modules at any time. 
+Module composition can be dynamic, allowing to build SMR algorithms that choose and switch at runtime between a set of modules, and that can be augmented with new modules at any time. 
 
-To help design new modules in practice, we propose TLA$^+$ specifications that each
-provide a template to devise new modules with the help of the TLA$^+$ tools.
-Using our specifications, we demonstrate that several well-known SMR algorithms can be made modular and composed to form a versatile SMR algorithm.
+To help module designers in practice, we propose TLA$^+$ specifications 
+providing templates to devise SMR modules using the TLA$^+$ tools.
+Using our specifications, we build modular versions of well-known SMR algorithms, enabling their composition and reuse in new SMR algorithms.
 
 %With our specifications, algorithm designers can use the TLA$^+$ tools
 %to prototype and debug new SMR algorithms. Moreover, we also provide a
