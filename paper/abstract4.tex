@@ -5,21 +5,20 @@
 %and optimize existing SMR algorithms, therefore the cost of creating a new SMR
 %algorithm is high.
 
-State-Machine Replication (SMR) algorithms are notoriously hard to understand
-and devising new and more performant SMR algorithms is costly. To lower this
-cost, we present a framework for building SMR algorithms out of independent
-and reusable modules. A module is an SMR algorithm that can abort and pass
-the baton to another module, allowing to dynamically switch between modules.
-Our composition theorem ensures that the composition of any number of modules
-satisfying Composable Generalized Consensus (CGC), our correctness condition for
-modules, is a correct SMR algorithm.
+State-Machine Replication (SMR) algorithms are notoriously hard to understand, and one can trust their correctness only by a costly formal specification and analysis.
+Moreover, it is often impossible to reuse the results of formal analyses because
+existing SMR algorithms are not modular.
+The design of new SMR algorithms is therefore expensive.
 
-To help design new modules in practice, we propose TLA$^+$ specifications
-of CGC and of two abstract types of modules, fast rounds and conservative
-rounds, each providing a template to devise new modules with the help of the
-TLA$^+$ tools. We show that several well-known SMR algorithms can be modified to
-implement fast or conservative rounds, therefore enabling their composition to
-obtain a single versatile SMR algorithm.
+To lower the cost of designing new SMR algorithms, we present a framework for composing independent and reusable SMR modules. 
+An SMR module is an SMR algorithm augmented with a composition interface. 
+In the composition of two modules, the first module starts executing and can abort its execution and pass the baton to the second module at any time.
+Our composition theorem guarantees that the result of composing two SMR modules is again an SMR module and a correct SMR algorithm.
+Module composition can be dynamic; therefore, our framework allows building SMR algorithms that choose and switch at runtime between a set of modules, and that can be augmented with new modules at any time. 
+
+To help design new modules in practice, we propose several TLA$^+$ specifications that each
+provide a template to devise new modules with the help of the TLA$^+$ tools.
+Using our specifications, we demonstrate that several well-known SMR algorithms can be made modular and composed to form a versatile SMR algorithm.
 
 %With our specifications, algorithm designers can use the TLA$^+$ tools
 %to prototype and debug new SMR algorithms. Moreover, we also provide a
