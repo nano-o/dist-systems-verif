@@ -1,47 +1,79 @@
 \section{Introduction}
 
 The State-Machine Replication technique (abbreviated SMR) allows building
-reliable computing services on top of unreliable hardware. The basic idea is
-to replicate a service over several servers and enforce, using a distributed
-protocol, that each server executes the same sequence of deterministic commands.
-In this fashion, a command will produce the same effect on all replicas.
-Therefore, if a replica crashes, clients of the service can be transparently redirected to
-another replica and will have the illusion of accessing a centralized service at
-all times. SMR is often formally specified using the Generalized Consensus
-specification~\cite{Lamport05GeneralizeConsensus}, abbreviated GC\@.
+reliable computing services on top of unreliable hardware. The basic idea
+is to replicate a service over several replica servers and enforce, using
+a distributed algorithm, that each replica executes the same sequence of
+deterministic commands. In this fashion, a command will produce the same effect
+on all replicas. Therefore, if a replica crashes, clients of the service can
+be transparently redirected to another replica and will have the illusion
+of accessing a centralized service at all times. Formally, we will use the
+Generalized Consensus specification~\cite{Lamport05GeneralizeConsensus},
+abbreviated GC, as our correctness condition for SMR algorithms.
 
-Because SMR is part of the basic infrastructure supporting cloud computing,
+SMR is part of the basic infrastructure supporting cloud computing; therefore,
 improving the performance of SMR algorithms can result in performance gains,
 cost reduction, or improved resilience (because SMR may be used where it was
 too costly before) for many online services.
 
-However, devising new SMR algorithms or optimizing existing ones for a
-particular use-case is hard: today, more than two decades after the first SMR
-algorithms~\cite{Lamport98ParttimeParliament,BirmanJoseph87ReliableCommunicationPresenceFailures,OkiLiskov88ViewstampedReplicationGeneralPrimaryCopy,DworkLynchStockmeyer84ConsensusPresencePartialSynchronyPreliminaryVersion}
+However, devising new SMR algorithms is very costly because one has to employ
+formal verification techniques to ensure their correctness. SMR algorithms are
+notoriously difficult to understand and it is easy to overlook catastrophic bugs
+appearing not only in implementations but also in the high level algorithm.
+Moreover, concurrency, network behavior, and faults give rise to a number
+of possible interleavings of actions that is beyond the reach of analysis
+by testing method. Therefore, to gain confidence in the correctness of an
+SMR algorithm, one needs to resort to formal methods like model-checking or
+interactive theorem proving. However, this is costly: model-checking often
+requires manually building an abstraction of the algorithm to simplify the task
+of the model checker, and interactive theorem proving is very time consuming.
+Both require experts trained in the particular tool used for the task. As
+evidence of the difficulty of designing new SMR algorithms, note that today,
+more than two decades after the first SMR algorithms~\cite{Lamport98ParttimeParliament,BirmanJoseph87ReliableCommunicationPresenceFailures,OkiLiskov88ViewstampedReplicationGeneralPrimaryCopy,DworkLynchStockmeyer84ConsensusPresencePartialSynchronyPreliminaryVersion} 
 were proposed, devising a new SMR algorithm can justify a publication in a top
 conference~\cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments,OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
 
-The problem is that it is difficult to reuse existing algorithms and ideas
-because SMR algorithms are not modular. When devising a new algorithm, any
-analysis, test, or correctness proof has to be done again from scratch.
+Surprisingly, at a first glance, many SMR algorithms seem to share a common structure which would indicate that previous formal analysis could be reused. 
+That it because, in many cases, researchers obtained a new SMR algorithm by optimizing an existing SMR algorithm for a particular use case.
+For example, Fast Paxos~\cite{Lamport06FastPaxos} adds fast rounds to MultiPaxos~\cite{lamport2001paxos} to reduce the latency under low contention, 
+Disk Paxos~\cite{GafniLamport03DiskPaxos} optimizes Paxos for systems where disk nodes and processor nodes are distinct, 
+Chain Replication~\cite{RenesseSchneider04ChainReplicationSupportingHighThroughputAvailability} organizes the replicas of Paxos in a ring to distribute commands at a higher throughput but at the expense of latency, 
+FGGC~\cite{SutraShapiro11FastGenuineGeneralizedConsensus} optimizes Generalized Paxos\cite{Lamport05GeneralizeConsensus} to reduce latency when the system contains a reliable and fast leader node, 
+Ring Paxos~\cite{MarandiETAL10RingPaxosHighthroughputAtomicBroadcastProtocol} optimizes the latency and throughput of Paxos when network multicast is available, 
+Multicoordinated Paxos reduces the performance impact of a leader fault in MultiPaxos by implementing a distributed leader, 
+Cheap Paxos~\cite{LamportMassa04CheapPaxos} optimizes Paxos to decrease the load on some replicas in case failures are sufficiently separated in time,
+Mencius~\cite{MaoJunqueiraMarzullo08MenciusBuildingEfficientReplicatedStateMachine} optimizes MultiPaxos for wide-area networks by rotating the role of leader among all replicas, etc.
+Close scrutiny reveals that most SMR algorithms can be seen as variations and optimizations around a few core ideas such as the round structure introduced by Paxos~\cite{Lamport98ParttimeParliament}, quorum systems~\cite{GuerraouiVukolic10RefinedQuorumSystems,Lamport06FastPaxos}, and agreement up to commutativity using command-structure sets~\cite{Lamport05GeneralizeConsensus}.
+
+Given their similarities, one may ask why is it not possible to reuse formal analysis of SMR algorithms.
+The problem is that SMR algorithms are not modular and that, because of their intricate structure, modifying a monolithic SMR algorithm may produce many unforeseen corner cases that invalidate previous analyses. 
 
 To simplify the task of devising new SMR algorithms we propose a framework for
-devising reusable SMR modules. A module in our framework is an SMR algorithm
-augmented with an \emph{abort interface} for aborting its execution and passing
+building reusable SMR modules.  
+For example, in \cref{}, we augment MultiPaxos with our composition interface and prove that it satisfies Composable Generalized Consensus (CGC), our correctness condition for modules.
+We then build an SMR module whose structure is similar to the one of the fast rounds of Fast Paxos and prove that it satisfies CGC\@.
+Our Fast Paxos module has lower latency than our Paxos module when there is low contention among clients, but its performance drops below that of Paxos when contention increases. 
+Finally, we assemble unmodified our MultiPaxos SMR module and our Fast Paxos SMR module in an SMR algorithm that dynamically switch from one to the other depending on the contention level observed in the system, therefore getting the best of both. 
+Crucially, we obtain the correctness of our composite SMR algorithm for free: our generic composition theorem and the correctness of our two SMR modules taken individually imply that the combination of the MultiPaxos SMR module and the Fast Paxos SMR module is a correct SMR algorithm.
+Later, in \cref{}, we present three other SMR modules that can be combined the MultiPaxos SMR module and the Fast Paxos SMR module in a composite SMR algorithm that can switch between 5 different kinds of modules, according to the system's operating conditions.  
+
+A module in our framework is an SMR algorithm
+augmented with \emph{composition interface} and satisfying our correctness condition, called Composable Generalized Consensus (CGC).
+The composition interface consists of an \emph{abort interface} for aborting a module's execution and passing
 the baton to another module and with a matching \emph{init interface} for taking
 over the execution of an aborting module. Two modules are composed by passing
 the outputs produced by the abort interface of the first module, called abort
 values, as inputs to the init interface of the second module, called init values
 in the context of the second module.
-
 A module must satisfy a correctness condition that we call Composable
 Generalized Consensus (abbreviated CGC). Any correct module is a safe
-Generalized Consensus~\cite{Lamport05GeneralizeConsensus} algorithm, but the progress guarantees may vary between
+Generalized Consensus~\cite{Lamport05GeneralizeConsensus} algorithm (i.e.\ a kind of SMR algorithm), but the progress guarantees may vary between
 modules: CGC only requires a module to make progress executing commands or to
 abort its execution. CGC also relates the init values, learned values (learned values represent the local state-machine state of individual replicas), and abort values in order for our composition theorem to hold. 
-Generalized Consensus is a specification of SMR algorithms that takes into account the commutativity relation among commands and can off important performance advantages in practice. 
+%Note that Generalized Consensus is a specification of SMR algorithms that takes into account the commutativity relation among commands and can offer important performance advantages in practice. 
 
-The composition theorem enables incremental development of SMR algorithms
+
+Our composition theorem enables incremental development of SMR algorithms
 because it guarantees that any number of correct modules may be composed in
 a sequence to form a correct SMR algorithm. Therefore, our framework allows
 building \emph{dynamic SMR algorithms}, which dynamically change module when
@@ -55,7 +87,7 @@ under a situation outside the scenario: the module can just abort in this case.
 
 In practice, we provide a TLA+ specification of CGC that the user of our framework can use to debug and prove new modules correct using the TLA$^+$ toolbox~\cite{TLATools}.
 Moreover, we also provide two TLA+ specifications simplifying the development of modules based on Refined Quorum Systems~\cite{GuerraouiVukolic10RefinedQuorumSystems}. These two specifications both implement CGC and provide a skeleton for a user to build her own module. The two specifications demonstrate how to update the local state of a replica after gathering the states or the init values of a write quorum of replicas, and how to
-produce an abort value after gathering the state of a read quorum of replicas. 
+produce an abort value after gathering the state of a read quorum of replicas. Each of the specifications achieves a particular consistency/latency trade-off~\cite{Abadi12ConsistencyTradeoffsModernDistributedDatabaseSystem}.
 The two specifications use different combinations of sizes of read and write quorums, which affects the invariants that the replicas must maintain and, in consequence, the latency with which a command can be processed but the module.
 Our two specifications abstract over how to disseminate the commands to the replicas (e.g.\ whether to use a leader as in Paxos, multiple leaders as in MultiCoordinatedPaxos, or whether to broadcast commands without using a leader as in Fast Paxos).
 The user can therefore specify a concrete command dissemination procedure and then model-check that the obtained algorithm refines one of the two specifications.  
