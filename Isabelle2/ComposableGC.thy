@@ -16,7 +16,7 @@ record ('a,'c,'l)cgc_state =
 
 locale ComposableGC = CStruct + IOA +
   fixes learners::"'c set" (* TODO: without this, we get weird schematic type variables, why? *)
-  assumes "learners \<noteq> {}" and "finite learners"
+  assumes "learners \<noteq> {}"
 begin
 
 definition cgc_asig where
@@ -38,8 +38,6 @@ definition non_trivial where
   "non_trivial r \<equiv> { s . \<exists> S cs . S \<noteq> {} \<and> S \<subseteq> cgc_state.fromPrev r 
     \<and> set cs \<subseteq> propCmd r \<and> s = \<Sqinter>S \<star> cs }"
 
-(* TODO: for using \<Squnion>, we would need a lattice parameterized by an explicit carrier set. See HOL/Algebra/Lattice.thy maybe *)
-(* TODO: what about the relation with fromPrev? Is \<in> non_trivial sufficient?*)
 definition toNext where
   "toNext s r r' \<equiv>
     s \<in> non_trivial r
