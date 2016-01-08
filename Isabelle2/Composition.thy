@@ -54,12 +54,12 @@ definition spec where
 
 named_theorems inv_defs 
 
-definition inv1::"('a,'b,'c)cgc_state \<times> ('a,'b,'c)cgc_state \<Rightarrow> bool" where
+definition inv1 where
   "inv1 r \<equiv> let r1 = fst r; r2 = snd r in
-    (\<forall> s \<in> cgc_state.fromPrev r2 . \<forall> l . \<forall> s' \<in> learned r1 l . s' \<preceq> s)"
+    (\<forall> s \<in> cgc_state.fromPrev r2 . \<forall> l \<in> learners . \<forall> s' \<in> learned r1 l . s' \<preceq> s)"
 declare inv1_def[inv_defs]
 
-definition inv2::"('a,'b,'c)cgc_state \<times> ('a,'b,'c)cgc_state \<Rightarrow> bool" where
+definition inv2 where
   "inv2 r \<equiv> let r1 = fst r; r2 = snd r in 
     cgc_state.fromPrev r2 = cgc_state.toNext r1"
 declare inv2_def[inv_defs]
@@ -71,18 +71,34 @@ declare inv3_def[inv_defs]
 
 definition inv4 where
   "inv4 r \<equiv> let r1 = fst r; r2 = snd r in
-    \<forall> l . \<forall> s \<in> learned r2 l . \<exists> s' \<in> cgc_state.fromPrev r2 . s' \<preceq> s"
+    \<forall> l \<in> learners . \<forall> s \<in> learned r2 l . 
+      \<exists> S cs . S \<noteq> {} \<and> S \<subseteq> cgc_state.fromPrev r2
+        \<and> s = \<Sqinter>S \<star> cs \<and> set cs \<subseteq> propCmd r2"
 declare inv4_def[inv_defs]
 
 definition inv5 where
   "inv5 r \<equiv> let r1 = fst r; r2 = snd r in
-    \<forall> s \<in> cgc_state.toNext r2 . \<exists> s' \<in> cgc_state.fromPrev r2 . s' \<preceq> s"
+    \<forall> s \<in> cgc_state.toNext r2 . 
+      \<exists> S cs . S \<noteq> {} \<and> S \<subseteq> cgc_state.fromPrev r2 
+        \<and> s = \<Sqinter>S \<star> cs \<and> set cs \<subseteq> propCmd r2"
 declare inv5_def[inv_defs]
 
-definition inv6 where
-  "inv6 r \<equiv> let r1 = fst r; r2 = snd r in
-    \<forall> s  \<in> cgc_state.toNext r1 . s \<in> non_trivial r1"
-declare inv6_def[inv_defs]
+definition inv8 where
+  "inv8 r \<equiv> let r1 = fst r; r2 = snd r in
+    \<forall> s \<in> cgc_state.toNext r1 . 
+      \<exists> cs . s = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd r1"
+declare inv8_def[inv_defs]
+
+definition inv9 where
+  "inv9 r \<equiv> let r1 = fst r; r2 = snd r in
+    \<forall> S . S \<noteq> {} \<and> S \<subseteq> cgc_state.toNext r1 \<longrightarrow>
+      (\<exists> cs . \<Sqinter>S = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd r1)"
+declare inv9_def[inv_defs]
+
+definition inv7 where
+  "inv7 r \<equiv> let r1 = fst r; r2 = snd r in
+    finite (cgc_state.toNext r1) \<and> finite (cgc_state.toNext r2)"
+declare inv7_def[inv_defs]
 
 lemmas cgc_ioa_defs = composition_def par2_def asig_comp2_def cgc_ioa_def rename_def
     rename_set_def cgc_asig_def is_trans_def actions_def cgc_trans_def initial_def hide_def 
@@ -95,53 +111,6 @@ named_theorems invs
 named_theorems mydefs
 declare cgc_ioa_defs[mydefs]
 declare actions_defs[mydefs]
-
-method bring_invs =
-  -- "bring all the invariants in the premises"
-  ( (insert invs) -- "insert invariant theorems in the premises; 
-      this will allow us to use [thin] to get rid of them after use",
-    ( (match premises in I[thin]:"invariant composition ?inv"
-        and R:"reachable composition ?s" \<Rightarrow> 
-            \<open>insert I[simplified invariant_def, rule_format, OF R]\<close>)+
-        -- "for each invariant theorem, use the reachability assumption to obtain the invariant",
-      (match premises in R[thin]:"reachable composition ?s" \<Rightarrow> succeed)
-        -- "finally get rid of the reachability assumption"
-        )? -- "don't fail if there are no invariants to bring"
-    )
-
-method try_solve_inv declares mydefs =
-  ( rule invariantI, 
-    force simp add:mydefs inv_defs -- "solve the base case",
-    bring_invs,
-    match premises in T:"?s \<midarrow>a\<midarrow>composition\<longrightarrow> ?t" for a \<Rightarrow> \<open>case_tac a\<close> 
-      -- "do case analysis on the action";
-    auto simp add:mydefs inv_defs)
-
-lemma inv2:"invariant composition inv2"
-  by try_solve_inv
-declare inv2[invs]
-
-lemma inv1:"invariant composition inv1"
-  by try_solve_inv
-declare inv1[invs]
-
-lemma inv3:"invariant composition inv3"
-  by try_solve_inv
-declare inv3[invs]
-
-lemma inv4:"invariant composition inv4"
-  by (try_solve_inv mydefs:non_trivial_def less_eq_def)
-declare inv4[invs]
-
-lemma inv5:"invariant composition inv5"
-  by (try_solve_inv mydefs:non_trivial_def less_eq_def)
-declare inv5[invs]
-
-lemma inv6:"invariant composition inv6"
-  apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
-  apply (metis subset_insertI2)
-  done
-declare inv6[invs]
 
 named_theorems lems
 
@@ -159,10 +128,92 @@ lemma l2[lems]:
 
 declare glb_common_set_obtains[lems]
 
+lemma l3[lems]:
+  assumes "\<And> s . s \<in> S \<Longrightarrow> s\<^sub>0 \<preceq> s" and "finite S" and "S \<noteq> {}"
+  shows "s\<^sub>0 \<preceq> \<Sqinter>S" using assms
+by (metis local.boundedI)
+
+method bring_invs =
+  -- "bring all the invariants in the premises"
+  ( (insert invs) -- "insert invariant theorems in the premises; 
+      this will allow us to use [thin] to get rid of them after use",
+    ( (match premises in I[thin]:"invariant composition ?inv"
+        and R:"reachable composition ?s" \<Rightarrow> 
+            \<open>insert I[simplified invariant_def, rule_format, OF R]\<close>)+
+        -- "for each invariant theorem, use the reachability assumption to obtain the invariant",
+    (match premises in R[thin]:"reachable composition ?s" 
+      and T:"?s \<midarrow>?a\<midarrow>composition\<longrightarrow> ?t" \<Rightarrow> 
+        \<open>insert reachable_n[OF R T]\<close>),
+    (insert invs),(match premises in I[thin]:"invariant composition ?inv"
+        and R:"reachable composition ?s" \<Rightarrow> 
+            \<open>insert I[simplified invariant_def, rule_format, OF R]\<close>)+,
+    (match premises in R[thin]:"reachable composition ?s" \<Rightarrow> succeed)
+        -- "finally get rid of the reachability assumption"
+        )? -- "don't fail if there are no invariants to bring"
+    )
+
+method try_solve_inv declares mydefs =
+  ( rule invariantI, 
+    force simp add:mydefs inv_defs -- "solve the base case",
+    bring_invs,
+    match premises in T:"?s \<midarrow>a\<midarrow>composition\<longrightarrow> ?t" for a \<Rightarrow> \<open>case_tac a\<close> 
+      -- "do case analysis on the action";
+    simp add:mydefs inv_defs )
+
+lemma inv2:"invariant composition inv2"
+  by try_solve_inv
+declare inv2[invs]
+
+lemma inv1:"invariant composition inv1"
+  by try_solve_inv
+declare inv1[invs]
+
+lemma inv3:"invariant composition inv3"
+  by try_solve_inv
+declare inv3[invs]
+
+lemma inv4:"invariant composition inv4"
+  apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
+  apply (metis subset_insertI2)
+  apply (metis subset_insertI2)
+  apply (metis subset_insertI2)
+  apply metis
+  done
+declare inv4[invs]
+
+lemma inv7:"invariant composition inv7"
+  by try_solve_inv
+declare inv7[invs]
+
+lemma inv5:"invariant composition inv5"
+  apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
+  apply (metis subset_insertI2)
+  apply metis
+  apply (metis subset_insertI2)
+  apply metis
+  done
+declare inv5[invs]
+
+lemma inv8:"invariant composition inv8"
+  apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
+  apply (metis subset_insertI2)
+  apply metis
+  apply (metis singleton subset_singletonD)
+  done
+declare inv8[invs]
+
+lemma inv9:"invariant composition inv9"
+  apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
+  apply (metis subset_insertI2)
+  apply metis
+  
+  
+  
+
 definition refmap where
   "refmap r \<equiv> let r1 = fst r; r2 = snd r in 
     \<lparr>cgc_state.propCmd = propCmd r1 \<union> propCmd r2, 
-      cgc_state.learned = (\<lambda> l . learned r1 l \<union> learned r2 l),
+      cgc_state.learned = (\<lambda> l . learned r1 l \<union> learned r2 l) ,
       cgc_state.fromPrev = {\<bottom>}, 
       toNext = cgc_state.toNext r2\<rparr>"
 
@@ -186,18 +237,21 @@ apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
    apply(rule_tac x="refmap (a,b)" in exI)
    apply(rule_tac x="[(Learn1 x31 x32,refmap (aa,ba))]" in exI)
    apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs actions_defs inv_defs refmap_def non_trivial_def)
-   apply(split_conjs?)
-   apply (force)
-   apply (metis Un_iff compat_sym l1 less_eq_def)
-   apply (metis pre_CStruct.trans)
+   apply (split_conjs?)
+   apply (metis Un_upper1 subset_trans)
+   apply (smt ComposableGC.l3 ComposableGC_axioms Un_iff antimono compat_sym l1 pre_CStruct.trans subset_empty)
+   apply (smt ComposableGC.l3 ComposableGC_axioms coboundedI1 less_eq_def pre_CStruct.trans subset subset_empty)
    apply (simp add:fun_eq_iff)
 
    apply(rule_tac x="refmap (a,b)" in exI)
    apply(rule_tac x="[(Learn2 x41 x42,refmap (aa,ba))]" in exI)
    apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs actions_defs inv_defs refmap_def non_trivial_def)
    apply (split_conjs?)
-   apply (metis l2 sup.mono)
-   apply (metis Un_iff l1)
+   defer
+   apply (metis (mono_tags, lifting) ComposableGC.l3 ComposableGC_axioms Un_iff antimono l1 pre_CStruct.trans)
+   apply (simp add:fun_eq_iff)
+   
+   sorry
    apply (simp add:fun_eq_iff)
 
    apply(rule_tac x="refmap (a,b)" in exI)

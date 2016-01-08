@@ -16,6 +16,7 @@ record ('a,'c,'l)cgc_state =
 
 locale ComposableGC = CStruct + IOA +
   fixes learners::"'c set" (* TODO: without this, we get weird schematic type variables, why? *)
+  assumes "learners \<noteq> {}" and "finite learners"
 begin
 
 definition cgc_asig where
@@ -33,21 +34,22 @@ definition propose::"'b \<Rightarrow> ('a,'b,'c)cgc_state \<Rightarrow>  ('a,'b,
 definition fromPrev where
   "fromPrev s r r' \<equiv> (r' = r\<lparr>fromPrev := (cgc_state.fromPrev r) \<union> {s}\<rparr>)"
 
-(* TODO: what about a definition using the longest common prefix of the fromPrev CStructs?*)
 definition non_trivial where
-  "non_trivial r \<equiv> { s . \<exists> s\<^sub>0 cs . s\<^sub>0 \<in> cgc_state.fromPrev r \<and> set cs \<subseteq> propCmd r \<and> s = s\<^sub>0 \<star> cs }"
+  "non_trivial r \<equiv> { s . \<exists> S cs . S \<noteq> {} \<and> S \<subseteq> cgc_state.fromPrev r 
+    \<and> set cs \<subseteq> propCmd r \<and> s = \<Sqinter>S \<star> cs }"
 
 (* TODO: for using \<Squnion>, we would need a lattice parameterized by an explicit carrier set. See HOL/Algebra/Lattice.thy maybe *)
 (* TODO: what about the relation with fromPrev? Is \<in> non_trivial sufficient?*)
 definition toNext where
   "toNext s r r' \<equiv>
     s \<in> non_trivial r
-    \<and> (\<forall> l . \<forall> s' \<in> (learned r l) . s' \<preceq> s)
+    \<and> (\<forall> l \<in> learners . \<forall> s' \<in> (learned r l) . s' \<preceq> s)
     \<and> (r' = r\<lparr>toNext := (cgc_state.toNext r) \<union> {s}\<rparr>)"
 
 definition learn::"'c \<Rightarrow> 'a \<Rightarrow> ('a,'b,'c)cgc_state \<Rightarrow>  ('a,'b,'c)cgc_state \<Rightarrow> bool" where
   "learn l s r r' \<equiv> s \<in> non_trivial r
-    \<and> (\<forall> l . \<forall> s' \<in> learned r l . compat2 s' s)
+    \<and> l \<in> learners
+    \<and> (\<forall> l \<in> learners . \<forall> s' \<in> learned r l . compat2 s' s)
     \<and> (\<forall> s' \<in> cgc_state.toNext r . s \<preceq> s')
     \<and> cgc_state.fromPrev r \<noteq> {}
     \<and> r' = r\<lparr>learned := (learned r)(l := learned r l \<union> {s})\<rparr>"
