@@ -83,11 +83,6 @@ definition inv5 where
         \<and> s = \<Sqinter>S \<star> cs \<and> set cs \<subseteq> propCmd r2"
 declare inv5_def[inv_defs]
 
-definition inv6 where
-  "inv6 r \<equiv> let r1 = fst r; r2 = snd r in
-    finite (propCmd r1) \<and> finite (propCmd r2)"
-declare inv6_def[inv_defs]
-
 definition inv8 where
   "inv8 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> s \<in> cgc_state.toNext r1 . 
@@ -177,10 +172,6 @@ lemma inv3:"invariant composition inv3"
   by try_solve_inv
 declare inv3[invs]
 
-lemma inv6:"invariant composition inv6"
-  by try_solve_inv
-declare inv6[invs]
-
 lemma inv4:"invariant composition inv4"
   apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
   apply (metis subset_insertI2)
@@ -218,7 +209,7 @@ lemma inv9:"invariant composition inv9"
   subgoal premises prems for s t a x5
   proof -
     have 1:"\<And> S s1 . \<lbrakk>S \<subseteq> insert x5 (cgc_state.toNext (fst s)); s1 \<in> S\<rbrakk> 
-      \<Longrightarrow> \<exists>cs. s1 = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd (fst s)" using prems(12) by auto
+      \<Longrightarrow> \<exists>cs. s1 = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd (fst s)" using prems(11) by auto
     have 2:"finite (cgc_state.toNext (fst s))" using prems by auto
     show ?thesis 
     proof clarify
