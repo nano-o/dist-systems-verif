@@ -1,33 +1,7 @@
 \section{Related Work}
 \label{sec:related}
 
-Generalized Consensus is a specification of SMR algorithms that takes into account the commutativity relation among commands and allows its implementation to optimize the execution of commuting commands. In cases in which many commands commute, which may be frequent in practice, Generalized Consensus algorithms can have a significant performance advantage over traditional consensus algorithms.
-
-Making SMR algorithms efficient has been a long-standing
-challenge and a multitude of algorithms have been proposed, each best suited to a particular use case.
-Examples include Paxos~\cite{lamport2001paxos}, Fast
-Paxos~\cite{Lamport06FastPaxos}, Disk Paxos~\cite{GafniLamport03DiskPaxos},
-Generalized Paxos~\cite{Lamport05GeneralizeConsensus},
-FGGC~\cite{SutraShapiro11FastGenuineGeneralizedConsensus}, Chain
-Replication~\cite{RenesseSchneider04ChainReplicationSupportingHighThroughputAvailability}, Ring
-Paxos~\cite{MarandiETAL10RingPaxosHighthroughputAtomicBroadcastProtocol},
-Egalitarian Paxos
-\cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments},
-Multi-Coordinated Paxos~\cite{CamargosSchmidtPedone07MulticoordinatedPaxos},
-Cheap Paxos~\cite{LamportMassa04CheapPaxos}, Vertical Paxos
-\cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, Paxos-MIC
-\cite{HurfinMoiseNarzul11AdaptiveFastPaxosMakingQuickEverlasting}, Mencius
-\cite{MaoJunqueiraMarzullo08MenciusBuildingEfficientReplicatedStateMachine},
-Fast Mencius~\cite{WeiETAL13FastMenciusMenciusLowCommitLatency},
-the Chandra-Toueg algorithm
-\cite{ChandraToueg96UnreliableFailureDetectorsReliableDistributedSystems}, the
-Ben-Or algorithm~\cite{BenOr83AnotherAdvantageFreeChoiceCompletelyAsynchronous},
-and Raft~\cite{OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
-TODO\@: Also M-Ring Paxos, U-Ring Paxos.
-
-TODO\@: Mention the new branch of leaderless algorithms (EPaxos, Alvin).
-
-
+% Abstract framework
 Our work is closely related to the Abstract
 framework~\cite{GuerraouiETAL10Next700BftProtocols}
 and the Speculative Linearizability
@@ -43,6 +17,7 @@ of commuting commands. However, the Abstract framework supports byzantine
 fault-tolerant~\cite{LamportShostakPease82ByzantineGeneralsProblem} SMR
 algorithms, which we do not. 
 
+% Speclin
 The Speculative Linearizability framework was a
 first attempts by the authors to formalize the Abstract framework, provide
 formal proof support in Isabelle/HOL~\cite{NipkowPaulsonWenzel02IsabelleHOL},
@@ -61,8 +36,7 @@ several well known and practical algorithms can be cast and optimized in our
 framework, providing a set of TLA+ specifications that ease the design and model
 checking of algorithms based on quorum systems.
 
-TODO\@: expand the following.
-
+% Generalized Paxos
 Generalized Consensus is an agreement problem relaxing the ordering constraints
 imposed on commuting commands and Generalized Paxos~\cite{Lamport05GeneralizeConsensus} is an algorithm, similar
 in structure to Fast Paxos, which takes advantage of the relaxed ordering
@@ -75,6 +49,7 @@ In the abstract presentation of Generalized Paxos, Lamport gives a generic and a
 If all round refine this abstract specification, then the resulting algorithm implements Generalized Consensus. Therefore any set of rounds refining Lamport's abstract specification can be combined to form a correct generalized consensus algorithm.  
 However, no explicit interface for combining rounds is given and specifying a type of round in isolation from the others would require assume-guarantee reasoning. In contrast, our formulation uses encapsulared rounds and does not require assume-guarantee reasoning.
 
+% Vertical Paxos
 Vertical Paxos algorithms are SMR algorithms whose set of replica servers can
 be reconfigured without stopping to process new commands. Crashed servers can
 therefore be replaced by new servers, ensuring the long-term availability of a

@@ -1,0 +1,41 @@
+\section{Composable Generalized Consensus}
+
+We consider a computing service specified as a deterministic state machine $M$ whose transitions correspond to the commands that clients of the service may issue.
+If $M$ is implemented on a single server then any fault happening on this server may become visible to the clients of the service.
+To mask faults, one can replicate the implementation of $M$ on several replica servers (called replicas for short) and direct clients' commands to replicas which are known to be non-faulty.
+However, the intent of replicatio is to mask faults while preserving the behavior of the service from the point of view of its clients.
+
+State-Machine Replication~\cite{Schneider90ImplementingFaulttolerantServicesUsingStateMachine} aims at orchestrating the execution of the replicas to ensure that clients have the illusion of accessing a unique and centralized implementation of $M$ despite a number of faults, which must remain below a certain maximum depending on the algorithms used.
+State-Machine Replication consists in replicating an implementation of $M$ over the replicas and ensuring with a distributed algorithm $A$ that all the replica execute the same sequence of commands, possibly up to the reordering of commuting commands.
+
+Generalized Consensus~\cite{Lamport05GeneralizeConsensus} is a formal specification of the requirements that the distributed algorithm $A$ must meet in order for SMR to provide the illusion of a centralized fault-tolerant service.
+Generalized Consensus uses the notion of a set of command-structures, or c-structs. C-structs are obtained by appending commands to the c-struct $\bot$. Given a c-struct $s$ and a command $c$, $s \bullet c$ is the c-struct obtained by appending $c$ to $s$. Given a sequence of commands $cs$, $s\star cs$ is the c-struct obtained by repeatedly appending the commands in $cs$ in the order where they appear in $cs$. By appropriately defining the operator $\bullet$ according to the
+definition of $M$, C-structs can describe sequences of commands up the reordering of commuting
+commands: it is possible to have $s \star \left[c_1,c_2\right] = s \star \left[c_2,c_1\right]$.
+Moreover, c-structs must form a partial order under the operator $\preceq$ defined as $s_1 \preceq s_2$ if and only if there exists a sequence of comamnds $cs$ such that $s_2 = s_1 \star cs$; the greatest lower bound of a set of c-structs $S$ must always exists and be constructible from the the same commands as the c-structs in $S$; and a set of c-structs $S$ which has an upper bound, called a compatible set, must have a lowest upper bound which is constructible from the the same commands as the c-structs in $S$. 
+
+Generalized Consensus is formulated in terms of two types of processes: the set $P$ of proposers and the set $L$ of learners, but it is possible for each replica to play the two roles at the same time. Proposers propose commands and learners, which represent replicas, learn about c-structs.
+We describe the execution of learners and proposers using the variable $prop$, which is a set containing all the commands that have been proposed, and the variable $learned$, which maps a learner to the latest c-structs it has learned.
+
+Generalized Consensus requires that for any learner $l$, there is at all times a sequence of proposed commands $cs$ such that $learned\left[l\right] = \bot \bullet cs$ (Nontriviality); that for any learner $l$, $learned\left[ l \right]$ increase with time (Stability); that $\left\{ learned\left[ l \right] :  l \in L\right\}$ is always compatible (Agreement); and that for any proposed command $c$ and learner $l$, a c-struct of the form $s\bullet c$ is eventually learned by $l$ (Liveness).
+We refer the reader to the work of Lamport~\cite{Lamport05GeneralizeConsensus} for a thourough discussion of Generalized Consensus.
+
+Composable Generalized Consensus augments the Generalized Consensus specification with an abort interface that allows an SMR module to abort its execution, and with an init interface which allows an SMR module to start its execution where a preceeding aborted module left off.
+To specify the composition interface, we introduced a third type of processes called the \emph{switchers}. Switchers can receive \emph{init values} from a preceeding aborting modules and can pass \emph{abort values} to pass the baton to a next SMR module when the current SMR module aborts.
+
+We describe the behavior of switchers using the variable $from$, which contains all the init values received by any switcher, and the variable $to$, which contains all the abort values produced by the switchers.
+The variable $prop$ is used as before, but the variable $learned$ now maps learneres to sets of c-structs and, for each learner $l$, $learned\left[ l \right]$ consists of all the c-structs learned so far by $l$.
+We define the set of valid c-structs as the c-structs of the form $t\star cs$ where $cs$ is a sequence of proposed commands, and $t$ is the greatest lower bound of a non-empty subset of the init values received.
+
+Composable Generalized Consensus requires that no value be learned unless at least one init value have been received (Initialization); that for any learner $l$, $learned\left[ l \right]$ is valid (Nontriviality); that $\left\{ learned\left[ l \right] :  l \in L\right\}$ is always compatible (Agreement); that every abort value is valid, that for any abort value $s_a$ and learned value $s_l$ we have $s_l \preceq s_a$ (Safe Abort); and that for any proposed command $c$ and learner $l$, a c-struct
+of the form $s\bullet c$ is eventually learned by $l$ or a switcher eventually produces an abort value (Liveness).
+A TLA$^+$ specification of CGC appears in \cref{fig:cgc}.
+
+\begin{figure}
+\begin{minipage}[t]{.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,trim={129pt 397pt 225pt 123pt},clip]{../TLA/ComposableGC.pdf}
+    \caption{TLA$⁺$ specification of CGC}\label{fig:cgc}%
+\end{minipage}\hfill
+\end{figure}
+

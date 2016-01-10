@@ -2,11 +2,14 @@
 \usepackage[english]{babel}
 \usepackage{hyperref}
 \usepackage{cleveref}
+\usepackage{comment}
 \hypersetup{pdftex,colorlinks=true,allcolors=blue}
 \usepackage{hypcap}
 \usepackage[url=true,doi=false,isbn=false,backend=biber]{biblatex}
 \addbibresource{managed.bib}
 \setcounter{tocdepth}{2}
+\usepackage{pdfpages}
+\usepackage{wrapfig}
 
 \title{Composable Generalized Consensus}
 
@@ -29,6 +32,10 @@
 \input{intro}
 
 \input{related}
+
+\input{cgc}
+
+\input{future}
 
 \printbibliography%
 

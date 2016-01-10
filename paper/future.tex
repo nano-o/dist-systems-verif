@@ -1,0 +1,9 @@
+\section{Future Work}
+
+Competing leaders? How to switch reliably in this case?
+The problem: how to determine the next leader from one Paxos module to the next?
+One solution: use an external reconfiguration master.
+Other solution: explicitly describe a protocol to do that (a special instance of MultiPaxos just for that?).
+The two solutions could build on the same interface: each process gets an indication to switch along with the next config.
+
+How to implement switching policies?
