@@ -100,6 +100,26 @@ definition inv7 where
     finite (cgc_state.toNext r1) \<and> finite (cgc_state.toNext r2)"
 declare inv7_def[inv_defs]
 
+definition inv10 where
+  "inv10 r \<equiv> let r1 = fst r; r2 = snd r in
+    \<forall> l\<^sub>1 \<in> learners. \<forall> l\<^sub>2 \<in> learners . \<forall> s\<^sub>1 \<in> learned r1 l\<^sub>1 . \<forall> s\<^sub>2 \<in> learned r2 l\<^sub>2 . s\<^sub>1 \<preceq> s\<^sub>2"
+declare inv10_def[inv_defs]
+
+definition inv11 where
+  "inv11 r \<equiv> let r1 = fst r; r2 = snd r in
+    \<forall> l\<^sub>1 \<in> learners. \<forall> s\<^sub>1 \<in> learned r1 l\<^sub>1 . \<forall> s\<^sub>2 \<in> cgc_state.toNext r2 . s\<^sub>1 \<preceq> s\<^sub>2"
+declare inv11_def[inv_defs]
+
+definition inv12 where
+  "inv12 r \<equiv> let r1 = fst r; r2 = snd r in
+    \<forall> l \<in> learners. \<forall> s \<in> learned r2 l . \<exists> cs .  s = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd r1 \<union> propCmd r2"
+declare inv12_def[inv_defs]
+
+definition inv13 where
+  "inv13 r \<equiv> let r1 = fst r; r2 = snd r in
+    \<forall> s \<in> cgc_state.toNext r2 . \<exists> cs .  s = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd r1 \<union> propCmd r2"
+declare inv13_def[inv_defs]
+
 lemmas cgc_ioa_defs = composition_def par2_def asig_comp2_def cgc_ioa_def rename_def
     rename_set_def cgc_asig_def is_trans_def actions_def cgc_trans_def initial_def hide_def 
     propose_def 
@@ -108,32 +128,43 @@ lemmas actions_defs = learn_def fromPrev_def toNext_def
 lemmas ref_defs = refines_def actions_def trace_def schedule_def filter_act_def
 
 named_theorems invs
+  -- "named theorem for use by the tactics below"
+named_theorems aux_invs
+  -- "auxiliary invariants used to prove the invariants needed for the refinement proof"
+named_theorems ref_invs
+  -- "the invariants needed for the refinement proof"
 named_theorems mydefs
+  -- "definitions to unfold"
 declare cgc_ioa_defs[mydefs]
 declare actions_defs[mydefs]
 
-named_theorems lems
+text {* A usefull lemma (l4) *}
 
-lemma l1[lems]:
-  assumes "s\<^sub>0 \<preceq> s\<^sub>1" and "s\<^sub>2 = s\<^sub>1 \<star> cs"
-  shows "compat2 s\<^sub>0 s\<^sub>2"
-  using assms
-by (metis less_eq_def local.compat2_def local.trans) 
-
-lemma l2[lems]:
-  assumes "s1 = \<bottom> \<star> cs" and "s2 = s1 \<star> cs'"
-  obtains cs'' where "s2 = \<bottom> \<star> cs''" and "set cs'' = set cs \<union> set cs'"
-  using assms
-  by (metis inf_sup_aci(5) pre_CStruct.exec_append set_append)
-
-declare glb_common_set_obtains[lems]
-
-lemma l3[lems]:
+lemma l3:
   assumes "\<And> s . s \<in> S \<Longrightarrow> s\<^sub>0 \<preceq> s" and "finite S" and "S \<noteq> {}"
   shows "s\<^sub>0 \<preceq> \<Sqinter>S" using assms
 by (metis local.boundedI)
 
-method bring_invs =
+lemma l4:
+  assumes "\<exists> S cs . S \<noteq> {} \<and> S \<subseteq> S\<^sub>i \<and> s = \<Sqinter>S \<star> cs" and "finite S\<^sub>i"
+  and "\<And> s\<^sub>l s\<^sub>i. s\<^sub>l \<in> S\<^sub>l \<and> s\<^sub>i \<in> S\<^sub>i \<Longrightarrow> s\<^sub>l \<preceq> s\<^sub>i" and "s\<^sub>l \<in> S\<^sub>l"
+  shows "s\<^sub>l \<preceq> s" using assms
+  proof -
+    obtain aa :: "'a set \<Rightarrow> 'a \<Rightarrow> 'a" where
+      f1: "\<And>A a. (infinite A \<or> A = {} \<or> aa A a \<in> A \<or> a \<preceq> \<Sqinter> A) \<and> (infinite A \<or> \<not> a \<preceq> aa A a \<or> A = {} \<or> a \<preceq> \<Sqinter> A)"
+      using l3 by moura
+    obtain AA :: "'a set" and bbs :: "'b list" where
+      "AA \<subseteq> S\<^sub>i \<and> {} \<noteq> AA \<and> \<Sqinter> AA \<star> bbs = s"
+      using assms(1) by moura
+    then show ?thesis
+      using f1 by (metis antimono assms(2) assms(3) assms(4) less_eq_def pre_CStruct.trans subset_empty)
+  qed
+
+lemma l5[simp]:
+  "\<lbrakk>S \<subseteq> {\<bottom>}; S \<noteq> {}\<rbrakk> \<Longrightarrow> \<Sqinter>S = \<bottom>"
+by (metis singleton subset_singletonD) 
+
+method bring_invs declares invs =
   -- "bring all the invariants in the premises"
   ( (insert invs) -- "insert invariant theorems in the premises; 
       this will allow us to use [thin] to get rid of them after use",
@@ -152,58 +183,59 @@ method bring_invs =
         )? -- "don't fail if there are no invariants to bring"
     )
 
-method try_solve_inv declares mydefs =
+method try_solve_inv declares mydefs invs =
   ( rule invariantI, 
     force simp add:mydefs inv_defs -- "solve the base case",
-    bring_invs,
+    bring_invs invs:invs,
     match premises in T:"?s \<midarrow>a\<midarrow>composition\<longrightarrow> ?t" for a \<Rightarrow> \<open>case_tac a\<close> 
       -- "do case analysis on the action";
     simp add:mydefs inv_defs )
 
 lemma inv2:"invariant composition inv2"
   by try_solve_inv
-declare inv2[invs]
+declare inv2[aux_invs]
 
 lemma inv1:"invariant composition inv1"
-  by try_solve_inv
-declare inv1[invs]
+  by (try_solve_inv invs:aux_invs)
+declare inv1[aux_invs]
 
 lemma inv3:"invariant composition inv3"
   by try_solve_inv
-declare inv3[invs]
+declare inv3[aux_invs]
+declare inv3[ref_invs]
 
 lemma inv4:"invariant composition inv4"
-  apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
+  apply (try_solve_inv invs:aux_invs  mydefs:non_trivial_def less_eq_def)
   subgoal by (metis subset_insertI2)
   subgoal by (metis subset_insertI2)
   subgoal by (metis subset_insertI2)
   subgoal by metis
   done
-declare inv4[invs]
+declare inv4[aux_invs]
 
 lemma inv7:"invariant composition inv7"
-  by try_solve_inv
-declare inv7[invs]
+  by (try_solve_inv invs:aux_invs)
+declare inv7[aux_invs]
 
 lemma inv5:"invariant composition inv5"
-  apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
+  apply (try_solve_inv invs:aux_invs mydefs:non_trivial_def less_eq_def)
   subgoal by (metis subset_insertI2)
   subgoal by metis
   subgoal by (metis subset_insertI2)
   subgoal by metis
   done
-declare inv5[invs]
+declare inv5[aux_invs]
 
 lemma inv8:"invariant composition inv8"
-  apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
+  apply (try_solve_inv invs:aux_invs mydefs:non_trivial_def less_eq_def)
   subgoal by (metis subset_insertI2)
   subgoal by metis
   subgoal by (metis singleton subset_singletonD)
   done
-declare inv8[invs]
+declare inv8[aux_invs]
 
 lemma inv9:"invariant composition inv9"
-  apply (try_solve_inv mydefs:non_trivial_def less_eq_def)
+  apply (try_solve_inv invs:aux_invs mydefs:non_trivial_def less_eq_def)
   subgoal by (metis subset_insertI2)
   subgoal by metis
   subgoal premises prems for s t a x5
@@ -223,8 +255,43 @@ lemma inv9:"invariant composition inv9"
     qed
   qed
 done
-declare inv9[invs]
-  
+declare inv9[aux_invs]
+
+lemma inv10:"invariant composition inv10"
+  apply (try_solve_inv invs: aux_invs)
+  subgoal by (smt l4 singletonD singletonI)
+  subgoal by (smt insert_iff l4)
+  done
+declare inv10[ref_invs]
+
+lemma inv11:"invariant composition inv11"
+  apply (try_solve_inv invs: aux_invs)
+  subgoal by (smt l4 singletonD singletonI)
+  subgoal by (smt insert_iff l4)
+  done
+declare inv11[ref_invs]
+
+lemma inv12:"invariant composition inv12"
+  apply (try_solve_inv invs: aux_invs)
+  subgoal by (metis subset_insertI2)
+  subgoal by (metis subset_insertI2)
+  defer
+  subgoal by metis
+  subgoal by metis
+  apply (clarsimp simp add:non_trivial_def)
+  subgoal by (metis (full_types) Un_commute pre_CStruct.exec_append set_append sup.mono)
+done
+declare inv12[ref_invs]
+
+lemma inv13:"invariant composition inv13"
+  apply (try_solve_inv invs: aux_invs)
+  subgoal by (metis subset_insertI2)
+  subgoal by (metis subset_insertI2)
+  subgoal by metis
+  subgoal by metis
+  subgoal by (smt inf_sup_aci(5) pre_CStruct.exec_append set_append sup_mono)
+  done
+declare inv13[ref_invs]
 
 definition refmap where
   "refmap r \<equiv> let r1 = fst r; r2 = snd r in 
@@ -240,7 +307,7 @@ lemma refok:"is_ref_map refmap composition spec"
 apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
   subgoal by (force simp add:mydefs)
 
-  apply(bring_invs)
+  apply(bring_invs invs:ref_invs)
   apply(case_tac ab, auto)
 
     apply(rule_tac x="refmap (a,b)" in exI)
@@ -256,67 +323,17 @@ apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
     apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs actions_defs inv_defs refmap_def non_trivial_def)
     apply (split_conjs?)
     subgoal by (metis Un_upper1 subset_trans)
-    subgoal by (smt ComposableGC.l3 ComposableGC_axioms Un_iff antimono compat_sym l1 pre_CStruct.trans subset_empty)
-    subgoal
-    proof -
-    fix a :: "('a, 'b, 'c) cgc_state" and b :: "('a, 'b, 'c) cgc_state" and aa :: "('a, 'b, 'c) cgc_state" and ba :: "('a, 'b, 'c) cgc_state" and x31 :: 'a and x32 :: 'c
-    assume a1: "(\<exists>S. S \<noteq> {} \<and> S \<subseteq> {\<bottom>} \<and> (\<exists>cs. set cs \<subseteq> propCmd a \<and> x31 = \<Sqinter> S \<star> cs)) \<and> x32 \<in> learners \<and> (\<forall>l\<in>learners. \<forall>s'\<in>learned a l. compat2 s' x31) \<and> (\<forall>x\<in>cgc_state.toNext a. x31 \<preceq> x) \<and> aa = a \<lparr>learned := (learned a) (x32 := insert x31 (learned a x32))\<rparr> \<and> b = ba"
-    assume a2: "finite (cgc_state.toNext a) \<and> finite (cgc_state.toNext ba)"
-    assume a3: "\<forall>s\<in>cgc_state.toNext ba. \<exists>S. S \<noteq> {} \<and> S \<subseteq> cgc_state.toNext a \<and> (\<exists>cs. s = \<Sqinter> S \<star> cs \<and> set cs \<subseteq> propCmd ba)"
-    { fix aaa :: 'a
-      obtain AA :: "'a \<Rightarrow> 'a set" and bbs :: "'a \<Rightarrow> 'b list" where
-        ff1: "\<forall>aa. aa \<notin> cgc_state.toNext ba \<or> AA aa \<noteq> {} \<and> AA aa \<subseteq> cgc_state.toNext a \<and> aa = \<Sqinter> AA aa \<star> bbs aa \<and> set (bbs aa) \<subseteq> propCmd ba"
-        using a3 by metis
-      { assume "aaa \<in> cgc_state.toNext ba"
-        { assume "cgc_state.toNext a \<noteq> {}"
-          moreover
-          { assume "cgc_state.toNext a \<noteq> {} \<and> aaa \<in> cgc_state.toNext ba"
-            moreover
-            { assume "AA aaa \<noteq> {} \<and> \<not> x31 \<preceq> aaa \<and> cgc_state.toNext a \<noteq> {}"
-              moreover
-              { assume "\<exists>aa. \<not> aa \<preceq> aaa \<and> AA aaa \<noteq> {} \<and> aa \<preceq> \<Sqinter> cgc_state.toNext a"
-                then have "(\<exists>a. \<not> a \<preceq> aaa \<and> a \<preceq> \<Sqinter> AA aaa) \<or> {} \<noteq> AA aaa \<and> \<not> \<Sqinter> cgc_state.toNext a \<preceq> \<Sqinter> AA aaa \<or> aaa \<notin> cgc_state.toNext ba \<or> x31 \<preceq> aaa"
-                  by (metis local.trans)
-                then have "AA aaa \<subseteq> cgc_state.toNext a \<longrightarrow> aaa \<notin> cgc_state.toNext ba \<or> x31 \<preceq> aaa"
-                  using ff1 a2 by (metis antimono less_eq_def local.trans) }
-              ultimately have "AA aaa \<subseteq> cgc_state.toNext a \<longrightarrow> aaa \<notin> cgc_state.toNext ba \<or> x31 \<preceq> aaa"
-                using a2 a1 by (metis l3) }
-            ultimately have "AA aaa \<subseteq> cgc_state.toNext a \<longrightarrow> aaa \<notin> cgc_state.toNext ba \<or> x31 \<preceq> aaa"
-              using ff1 by metis }
-          ultimately have "AA aaa \<subseteq> cgc_state.toNext a \<longrightarrow> aaa \<notin> cgc_state.toNext ba \<or> x31 \<preceq> aaa"
-            by metis }
-        then have "aaa \<notin> cgc_state.toNext ba \<or> x31 \<preceq> aaa"
-          using ff1 by (metis empty_iff subsetI subset_antisym) }
-      then have "aaa \<notin> cgc_state.toNext ba \<or> x31 \<preceq> aaa"
-        by metis }
-    then show "\<forall>a\<in>cgc_state.toNext ba. x31 \<preceq> a"
-      by metis
-    qed
+    subgoal by (metis Un_iff compat2_def insertI1 local.refl)
+    subgoal by (metis insert_iff)
     subgoal by (simp add:fun_eq_iff)
 
     apply(rule_tac x="refmap (a,b)" in exI)
     apply(rule_tac x="[(Learn2 x41 x42,refmap (aa,ba))]" in exI)
     apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs actions_defs inv_defs refmap_def non_trivial_def)
+    apply clarsimp
     apply (split_conjs?)
-    subgoal
-    proof -
-      fix a :: "('a, 'b, 'c) cgc_state" and b :: "('a, 'b, 'c) cgc_state" and aa :: "('a, 'b, 'c) cgc_state" and ba :: "('a, 'b, 'c) cgc_state" and x41 :: 'a and x42 :: 'c
-      assume a1: "a = aa \<and> (\<exists>S. S \<noteq> {} \<and> S \<subseteq> cgc_state.toNext aa \<and> (\<exists>cs. set cs \<subseteq> propCmd b \<and> x41 = \<Sqinter> S \<star> cs)) \<and> x42 \<in> learners \<and> (\<forall>l\<in>learners. \<forall>s'\<in>learned b l. compat2 s' x41) \<and> (\<forall>x\<in>cgc_state.toNext b. x41 \<preceq> x) \<and> cgc_state.toNext aa \<noteq> {} \<and> ba = b \<lparr>learned := (learned b)(x42 := insert x41 (learned b x42))\<rparr>"
-      assume a2: "\<forall>S. S \<noteq> {} \<and> S \<subseteq> cgc_state.toNext aa \<longrightarrow> (\<exists>cs. \<Sqinter> S = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd aa)"
-      obtain AA :: "'a set" and bbs :: "'b list" where
-        f3: "a = aa \<and> (AA \<noteq> {} \<and> AA \<subseteq> cgc_state.toNext aa \<and> set bbs \<subseteq> propCmd b \<and> x41 = \<Sqinter> AA \<star> bbs) \<and> x42 \<in> learners \<and> (\<forall>c. c \<notin> learners \<or> (\<forall>a. a \<notin> learned b c \<or> compat2 a x41)) \<and> (\<forall>a. a \<notin> cgc_state.toNext b \<or> x41 \<preceq> a) \<and> cgc_state.toNext aa \<noteq> {} \<and> ba = b \<lparr>learned := (learned b)(x42 := insert x41 (learned b x42))\<rparr>"
-        using a1 by auto
-      obtain bbsa :: "'a set \<Rightarrow> 'b list" where
-        f4: "\<forall>A. (A = {} \<or> \<not> A \<subseteq> cgc_state.toNext aa) \<or> \<Sqinter> A = \<bottom> \<star> bbsa A \<and> set (bbsa A) \<subseteq> propCmd aa"
-        using a2 by metis
-      then have "set (bbsa AA) \<union> set bbs \<subseteq> propCmd aa \<union> propCmd b"
-        using f3 by (metis sup.mono)
-      then have "set (append bbs (bbsa AA)) \<subseteq> propCmd b \<union> propCmd aa"
-        by (metis Un_commute set_append)
-      then show "\<exists>A. A \<noteq> {} \<and> A \<subseteq> {\<bottom>} \<and> (\<exists>bs. set bs \<subseteq> propCmd aa \<union> propCmd b \<and> x41 = \<Sqinter> A \<star> bs)"
-        using f4 f3 by (metis Un_commute empty_not_insert pre_CStruct.exec_append singleton subsetI)
-    qed
-    subgoal by (metis (mono_tags, lifting) ComposableGC.l3 ComposableGC_axioms Un_iff antimono l1 pre_CStruct.trans)
+    subgoal by (metis (mono_tags, lifting) insertI1 insert_absorb2 insert_not_empty singleton singleton_insert_inj_eq)
+    subgoal by (metis Un_iff compat2_def insertI1 local.refl)
     subgoal by (simp add:fun_eq_iff)
 
     apply(rule_tac x="refmap (a,b)" in exI)
@@ -326,26 +343,10 @@ apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
     apply (rule_tac x="refmap (a,b)" in exI)
     apply (rule_tac x="[(ToNext x6,refmap (aa,ba))]" in exI)
     apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs actions_defs inv_defs refmap_def non_trivial_def)
+    apply clarsimp
     apply (split_conjs?)
-    subgoal
-    proof -
-      fix a :: "('a, 'b, 'c) cgc_state" and b :: "('a, 'b, 'c) cgc_state" and aa :: "('a, 'b, 'c) cgc_state" and ba :: "('a, 'b, 'c) cgc_state" and x6 :: 'a
-      assume a1: "\<forall>S. S \<noteq> {} \<and> S \<subseteq> cgc_state.toNext aa \<longrightarrow> (\<exists>cs. \<Sqinter> S = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd aa)"
-      assume a2: "\<exists>S. S \<noteq> {} \<and> S \<subseteq> cgc_state.toNext aa \<and> (\<exists>cs. x6 = \<Sqinter> S \<star> cs \<and> set cs \<subseteq> propCmd b)"
-      obtain bbs :: "'a set \<Rightarrow> 'b list" where
-        f3: "\<forall>A. (A = {} \<or> \<not> A \<subseteq> cgc_state.toNext aa) \<or> \<Sqinter> A = \<bottom> \<star> bbs A \<and> set (bbs A) \<subseteq> propCmd aa"
-        using a1 by metis
-      obtain AA :: "'a set" and bbsa :: "'b list" where
-        f4: "AA \<noteq> {} \<and> AA \<subseteq> cgc_state.toNext aa \<and> x6 = \<Sqinter> AA \<star> bbsa \<and> set bbsa \<subseteq> propCmd b"
-        using a2 by moura
-      then have "set (bbs AA) \<union> set bbsa \<subseteq> propCmd aa \<union> propCmd b"
-        using f3 by (metis sup.mono)
-      then have "set (append bbsa (bbs AA)) \<subseteq> propCmd b \<union> propCmd aa"
-        by (metis Un_commute set_append)
-      then show "\<exists>A. A \<noteq> {} \<and> A \<subseteq> {\<bottom>} \<and> (\<exists>bs. set bs \<subseteq> propCmd aa \<union> propCmd b \<and> x6 = \<Sqinter> A \<star> bs)"
-        using f4 f3 by (metis Un_commute empty_not_insert pre_CStruct.exec_append singleton subsetI)
-    qed
-    subgoal by (metis UnE Un_absorb1 finite_Un less_eq_def local.boundedI local.trans subset_eq)
+    subgoal by (metis insert_absorb2 insert_not_empty singleton singleton_insert_inj_eq)
+    subgoal by (metis Un_iff)    
 done
 
 lemma trace_incl:"traces composition \<subseteq> traces spec"
