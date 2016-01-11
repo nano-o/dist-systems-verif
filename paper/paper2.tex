@@ -10,6 +10,12 @@
 \setcounter{tocdepth}{2}
 \usepackage{pdfpages}
 \usepackage{wrapfig}
+\makeatletter
+\newcommand{\setword}[2]{%
+    \phantomsection
+    #1\def\@currentlabel{\unexpanded{#1}}\label{#2}%
+}
+\makeatother
 
 \title{Composable Generalized Consensus}
 

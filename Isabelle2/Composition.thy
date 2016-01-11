@@ -210,7 +210,7 @@ lemma inv9:"invariant composition inv9"
   proof -
     have 1:"\<And> S s1 . \<lbrakk>S \<subseteq> insert x5 (cgc_state.toNext (fst s)); s1 \<in> S\<rbrakk> 
       \<Longrightarrow> \<exists>cs. s1 = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd (fst s)" using prems(11) by auto
-    have 2:"finite (cgc_state.toNext (fst s))" using prems by auto
+    have 2:"finite (cgc_state.toNext (fst s))" using prems by auto 
     show ?thesis 
     proof clarify
       fix S x

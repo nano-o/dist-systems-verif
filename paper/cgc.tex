@@ -3,39 +3,91 @@
 We consider a computing service specified as a deterministic state machine $M$ whose transitions correspond to the commands that clients of the service may issue.
 If $M$ is implemented on a single server then any fault happening on this server may become visible to the clients of the service.
 To mask faults, one can replicate the implementation of $M$ on several replica servers (called replicas for short) and direct clients' commands to replicas which are known to be non-faulty.
-However, the intent of replicatio is to mask faults while preserving the behavior of the service from the point of view of its clients.
+However, the intent of replication is to mask faults while preserving the behavior of the service from the point of view of its clients.
 
 State-Machine Replication~\cite{Schneider90ImplementingFaulttolerantServicesUsingStateMachine} aims at orchestrating the execution of the replicas to ensure that clients have the illusion of accessing a unique and centralized implementation of $M$ despite a number of faults, which must remain below a certain maximum depending on the algorithms used.
 State-Machine Replication consists in replicating an implementation of $M$ over the replicas and ensuring with a distributed algorithm $A$ that all the replica execute the same sequence of commands, possibly up to the reordering of commuting commands.
+
+\subsection{Generalized Consensus}
 
 Generalized Consensus~\cite{Lamport05GeneralizeConsensus} is a formal specification of the requirements that the distributed algorithm $A$ must meet in order for SMR to provide the illusion of a centralized fault-tolerant service.
 Generalized Consensus uses the notion of a set of command-structures, or c-structs. C-structs are obtained by appending commands to the c-struct $\bot$. Given a c-struct $s$ and a command $c$, $s \bullet c$ is the c-struct obtained by appending $c$ to $s$. Given a sequence of commands $cs$, $s\star cs$ is the c-struct obtained by repeatedly appending the commands in $cs$ in the order where they appear in $cs$. By appropriately defining the operator $\bullet$ according to the
 definition of $M$, C-structs can describe sequences of commands up the reordering of commuting
 commands: it is possible to have $s \star \left[c_1,c_2\right] = s \star \left[c_2,c_1\right]$.
-Moreover, c-structs must form a partial order under the operator $\preceq$ defined as $s_1 \preceq s_2$ if and only if there exists a sequence of comamnds $cs$ such that $s_2 = s_1 \star cs$; the greatest lower bound of a set of c-structs $S$ must always exists and be constructible from the the same commands as the c-structs in $S$; and a set of c-structs $S$ which has an upper bound, called a compatible set, must have a lowest upper bound which is constructible from the the same commands as the c-structs in $S$. 
+Moreover, c-structs must satisfy a number of properties: \setword{property 1}{prop:1}, c-structs must form a partial order under the operator $\preceq$ defined as: $s_1 \preceq s_2$ if and only if there exists a sequence of commands $cs$ such that $s_2 = s_1 \star cs$; \setword{property 2}{prop:2}, the greatest lower bound of a set of c-structs $S$ must always exists and be constructible from the same commands as the c-structs in $S$; and \setword{property 3}{prop:3}, a set of c-structs $S$ which has an upper bound, called a compatible set, must have a lowest upper bound which is constructible from the same commands as the c-structs in $S$. 
 
 Generalized Consensus is formulated in terms of two types of processes: the set $P$ of proposers and the set $L$ of learners, but it is possible for each replica to play the two roles at the same time. Proposers propose commands and learners, which represent replicas, learn about c-structs.
 We describe the execution of learners and proposers using the variable $prop$, which is a set containing all the commands that have been proposed, and the variable $learned$, which maps a learner to the latest c-structs it has learned.
 
-Generalized Consensus requires that for any learner $l$, there is at all times a sequence of proposed commands $cs$ such that $learned\left[l\right] = \bot \bullet cs$ (Nontriviality); that for any learner $l$, $learned\left[ l \right]$ increase with time (Stability); that $\left\{ learned\left[ l \right] :  l \in L\right\}$ is always compatible (Agreement); and that for any proposed command $c$ and learner $l$, a c-struct of the form $s\bullet c$ is eventually learned by $l$ (Liveness).
-We refer the reader to the work of Lamport~\cite{Lamport05GeneralizeConsensus} for a thourough discussion of Generalized Consensus.
+Generalized Consensus requires the following properties: non-triviality, stating that for any learner $l$, there is at all times a sequence of proposed commands $cs$ such that $learned\left[l\right] = \bot \bullet cs$; stability, stating that for any learner $l$, $learned\left[ l \right]$ increase with time; agreement, stating that $\left\{ learned\left[ l \right] :  l \in L\right\}$ is always compatible; and liveness, stating that for any proposed command $c$ and learner $l$, a c-struct of the form $s\bullet c$ is eventually learned by $l$.
+Note that the FLP theorem~\cite{FischerLynchPaterson83ImpossibilityDistributedConsensusOneFaultyProcess} implies that the liveness property cannot be achieved in a networked system where processes may fail. Therefore, the liveness property guaranteed by Generalized Consensus algorithms is necessary weaker that the liveness property state above, maybe adding assumptions about faults and synchrony.
+We refer the reader to the work of Lamport~\cite{Lamport05GeneralizeConsensus} for a thorough discussion of Generalized Consensus.
 
-Composable Generalized Consensus augments the Generalized Consensus specification with an abort interface that allows an SMR module to abort its execution, and with an init interface which allows an SMR module to start its execution where a preceeding aborted module left off.
-To specify the composition interface, we introduced a third type of processes called the \emph{switchers}. Switchers can receive \emph{init values} from a preceeding aborting modules and can pass \emph{abort values} to pass the baton to a next SMR module when the current SMR module aborts.
+\subsection{Composable Generalized Consensus}
+
+Composable Generalized Consensus augments the Generalized Consensus specification with an abort interface that allows an SMR module to abort its execution, and with an init interface which allows an SMR module to start its execution where a preceding aborted module left off.
+To specify the composition interface, we introduced a third type of processes called the \emph{switchers}. Switchers can receive \emph{init values} from a preceding aborting modules and can pass \emph{abort values} to pass the baton to a next SMR module when the current SMR module aborts.
 
 We describe the behavior of switchers using the variable $from$, which contains all the init values received by any switcher, and the variable $to$, which contains all the abort values produced by the switchers.
-The variable $prop$ is used as before, but the variable $learned$ now maps learneres to sets of c-structs and, for each learner $l$, $learned\left[ l \right]$ consists of all the c-structs learned so far by $l$.
+The variable $prop$ is used as before, but the variable $learned$ now maps learners to sets of c-structs and, for each learner $l$, $learned\left[ l \right]$ consists of all the c-structs learned so far by $l$.
 We define the set of valid c-structs as the c-structs of the form $t\star cs$ where $cs$ is a sequence of proposed commands, and $t$ is the greatest lower bound of a non-empty subset of the init values received.
 
 Composable Generalized Consensus requires that no value be learned unless at least one init value have been received (Initialization); that for any learner $l$, $learned\left[ l \right]$ is valid (Nontriviality); that $\left\{ learned\left[ l \right] :  l \in L\right\}$ is always compatible (Agreement); that every abort value is valid, that for any abort value $s_a$ and learned value $s_l$ we have $s_l \preceq s_a$ (Safe Abort); and that for any proposed command $c$ and learner $l$, a c-struct
 of the form $s\bullet c$ is eventually learned by $l$ or a switcher eventually produces an abort value (Liveness).
 A TLA$^+$ specification of CGC appears in \cref{fig:cgc}.
 
+We say that an algorithm implementing CGC under some refinement mapping is a \emph{CGC instance}, and that two CGC instances $i_1$ and $i_2$ are compatible if they update disjoint variables except for the $to$ variable of $i_1$ and the $from$ variable of $i_2$, which must be identical.
+Note that in the execution of two compatible instances, any abort value produced by the first instance is an init value for the second instance.
+We say that a CGC instance is an initial instance when its set of init values is always a subset of $\left\{ \bot \right\}$.   
+
+CGC enjoys two main properties: first, the composition of two CGC instances is itself a CGC instance when the first instance is an initial instance; second, an initial CGC instance satisfies the safety properties of Generalized Consensus under the restrictions explained below.
+We call the first property the \emph{composition theorem}.
+A formal statement of the composition theorem appears in \cref{fig:compthm}, and an informal proof appears in \cref{sec:compproof}. 
+Note that TLA$^+$ is a second order logic and can therefore not express the composition theorem as stated above because we cannot quantify of modules.
+Instead, we state the composition theorem for two CGC instances obtained by only renaming the variables of the CGC specification.
+Any CGC instance would trivially refine both of the two instances used in formalization of the composition theorem because a CGC instance refines the CGC specification.
+Therefore, we obtain the composition theorem by transitivity and monotonicity of refinement~\cite{AbadiLamport91ExistenceRefinementMappings}.
+
 \begin{figure}
 \begin{minipage}[t]{.49\textwidth}
     \centering
-    \includegraphics[width=\textwidth,trim={129pt 397pt 225pt 123pt},clip]{../TLA/ComposableGC.pdf}
-    \caption{TLA$⁺$ specification of CGC}\label{fig:cgc}%
+    \includegraphics[width=\textwidth,trim={129pt 397pt 225pt 128pt},clip]{../TLA/ComposableGC.pdf}
+    \caption{TLA$⁺$ specification of CGC.}\label{fig:cgc}%
+\end{minipage}\hfill
+\begin{minipage}[t]{.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,trim={129pt 373pt 220pt 128pt},clip]{../TLA/CompositionTheorem.pdf}
+    \caption{The composition theorem in TLA$^⁺$.}\label{fig:compthm}%
+\end{minipage}
+\end{figure}
+
+\begin{figure}
+\begin{minipage}[t]{.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,trim={129pt 455 220pt 128pt},clip]{../TLA/InitialIsGC.pdf}
+    \caption{Initial instances implement Generalized Consensus.}\label{fig:cgc}%
 \end{minipage}\hfill
 \end{figure}
 
+\subsection{Proof of the Composition Theorem}%
+\label{sec:compproof}
+To prove the composition theorem, as expressed in \cref{fig:compthm}, we must show that $Init$ implies $CGC!Init$ and that every transition of $Spec \equiv Init \wedge \box\left[Next\right]_{vars}$ is a transition of $CGC!Spec$.
+Below we sketch a proof of the second condition.
+
+First note that the following invariants hold of the execution of $Spec$: invariant 1, stating that any learned c-struct of $CGC1$ is smaller than any abort c-struct of $CGC1$; invariant 2, stating that for any non-empty subset $S$ of the abort c-structs of $CGC1$, there is a sequence $cs$ of commands proposed in $CGC1$ such that $\operatorname{GLB}\left( S \right) = \bot\star cs$; and invariant 3, stating that for every learned c-struct or abort c-struct $s$ of $CGC2$, there is a non-empty subset $S$ of the init c-structs of $CGC2$ and a sequence of commands proposed in $CGC2$ such that $s  = \operatorname{GLB}\left( S \right)\star cs$.
+Invariant 1 is enforced by the first conjunct of the $Learn(l)$ transition of $CGC1$, and invariant 3 is enforced by the quantifier bound of the $Learn(l)$ and $Abort$ transition of $CGC2$, using the definition of $Valid$. 
+To see why invariant 2 holds, note that the quantifier bound of the $Abort$ transition of $CGC1$, the fact that the only init c-struct of $CGC1$ is $\left\{ \bot \right\}$, and the definition of $Valid$ ensure that any abort c-struct of $CGC1$ is of the form $\bot\star cs$ where $cs$ is a sequence of proposed commands of $CGC1$. Then, we obtain invariant 2 using the~\ref{prop:2} of c-structs.
+
+We now prove that each transition of $Spec$ is a transition of $CGC!Spec$:
+The transition $CGC1!Propose$ inserts a command $c$ in the set $CCG1!prop$, and, since $CGC!prop = CGC1!prop \cup CGC2!prop$, the transition inserts $c$ in the set $CGC!prop$; therefore, $CGC1!Propose$ implies $CGC!Propose$.
+By an analogous reasoning, $CGC2!Propose$ implies $CGC!Propose$.
+The transition $CGC1!InitM$ inserts $\bot$ in the set $CGC1!from$ (because $CGC1$ is an initial instance), and, since $CGC!prop = CGC1!prop$, the transition also inserts $\bot$ in $CGC!prop$; therefore, $CGC1!InitM$ implies $CGC!InitM$.
+The $CGC1!Abort$ transition does not modify any variable of the module instance $CGC$; therefore, $CGC1!Abort$ is a stuttering transition of $CGC$.
+Similarly, the $CGC2!InitM$ transition does not modify any variable of the module instance $CGC$; therefore, $CGC2!InitM$ is a stuttering transition of $CGC$.
+TODO\@: complete.
+We have formalized informal proof above in Isabelle/HOL (and not TLAPS~\cite{CousineauETAL12TlaProofs}, because the authors are proficient in Isabelle/HOL but not in TLAPS); the proof is available at \url{http://losa.fr/cgc}.
+
+
+\section{Deploying SMR modules in practice}
+
+\subsection{Agreeing on the Next Module}
