@@ -94,14 +94,14 @@ for aborting an SMR module's execution and passing the baton to another
 SMR module and with a matching \emph{init interface} for taking over the
 execution of an aborting SMR module. Two SMR modules are composed by passing
 the outputs produced by the abort interface of the first SMR module, called
-abort values, as inputs to the init interface of the second SMR module,
-called init values in the context of the second SMR module. A SMR module
+abort c-structs, as inputs to the init interface of the second SMR module,
+called init c-structs in the context of the second SMR module. A SMR module
 must satisfy a correctness condition that we call Composable Generalized
 Consensus (abbreviated CGC). Any correct SMR module is a safe Generalized
 Consensus~\cite{Lamport05GeneralizeConsensus} algorithm (i.e.\ a kind of SMR
 algorithm), but the progress guarantees may vary between SMR modules: CGC only
 requires a SMR module to make progress executing commands or to abort its
-execution. CGC also relates the init values, learned values (learned values
+execution. CGC also relates the init c-structs, learned values (learned values
 represent the local state-machine state of individual replicas), and abort
 values in order for our composition theorem to hold.
 %Note that Generalized Consensus is a specification of SMR algorithms that takes into account the commutativity relation among commands and can offer important performance advantages in practice. 
@@ -120,8 +120,8 @@ particular scenarios because there is no need to consider executing commands
 under a situation outside the scenario: the module can just abort in this case.
 
 In practice, we provide a TLA+ specification of CGC that the user of our framework can use to debug and prove new modules correct using the TLA$^+$ toolbox~\cite{TLATools}.
-Moreover, we also provide two TLA+ specifications simplifying the development of modules based on Refined Quorum Systems~\cite{GuerraouiVukolic10RefinedQuorumSystems}. These two specifications both implement CGC and provide a skeleton for a user to build her own module. The two specifications demonstrate how to update the local state of a replica after gathering the states or the init values of a write quorum of replicas, and how to
-produce an abort value after gathering the state of a read quorum of replicas. Each of the specifications achieves a particular consistency/latency trade-off~\cite{Abadi12ConsistencyTradeoffsModernDistributedDatabaseSystem}.
+Moreover, we also provide two TLA+ specifications simplifying the development of modules based on Refined Quorum Systems~\cite{GuerraouiVukolic10RefinedQuorumSystems}. These two specifications both implement CGC and provide a skeleton for a user to build her own module. The two specifications demonstrate how to update the local state of a replica after gathering the states or the init c-structs of a write quorum of replicas, and how to
+produce an abort c-struct after gathering the state of a read quorum of replicas. Each of the specifications achieves a particular consistency/latency trade-off~\cite{Abadi12ConsistencyTradeoffsModernDistributedDatabaseSystem}.
 The two specifications use different combinations of sizes of read and write quorums, which affects the invariants that the replicas must maintain and, in consequence, the latency with which a command can be processed but the module.
 Our two specifications abstract over how to disseminate the commands to the replicas (e.g.\ whether to use a leader as in Paxos, multiple leaders as in MultiCoordinatedPaxos, or whether to broadcast commands without using a leader as in Fast Paxos).
 The user can therefore specify a concrete command dissemination procedure and then model-check that the obtained algorithm refines one of the two specifications.  
