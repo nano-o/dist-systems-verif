@@ -25,10 +25,10 @@ definition cgc_asig where
       outputs = { a . \<exists> s p . a = Learn s p } \<union> { a . \<exists> s . a = ToNext s },
       internals = {} \<rparr>"
 
-definition cgc_start::"('a,'b,'c)cgc_state set" where
+definition cgc_start where
   "cgc_start \<equiv> {\<lparr>propCmd = {}, learned = \<lambda> p . {}, fromPrev = {}, toNext = {} \<rparr>}"
 
-definition propose::"'b \<Rightarrow> ('a,'b,'c)cgc_state \<Rightarrow>  ('a,'b,'c)cgc_state \<Rightarrow> bool" where
+definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
 
 definition fromPrev where
@@ -44,7 +44,7 @@ definition toNext where
     \<and> (\<forall> l \<in> learners . \<forall> s' \<in> (learned r l) . s' \<preceq> s)
     \<and> (r' = r\<lparr>toNext := (cgc_state.toNext r) \<union> {s}\<rparr>)"
 
-definition learn::"'c \<Rightarrow> 'a \<Rightarrow> ('a,'b,'c)cgc_state \<Rightarrow>  ('a,'b,'c)cgc_state \<Rightarrow> bool" where
+definition learn where
   "learn l s r r' \<equiv> s \<in> non_trivial r
     \<and> l \<in> learners
     \<and> (\<forall> l \<in> learners . \<forall> s' \<in> learned r l . compat2 s' s)
