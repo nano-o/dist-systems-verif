@@ -43,7 +43,7 @@ definition from_prev where
 
 definition to_next where
   "to_next s r r' \<equiv> \<exists> p \<in> acceptors .
-    acc_cstruct r p = s
+    acc_cstruct r p = s \<and> acc_status r p = Ready
     \<and> (r' = r\<lparr>to_next := (q_state.to_next r) \<union> {s},
         acc_status := (acc_status r)(p := Stopped)\<rparr>)"
 
@@ -142,11 +142,40 @@ method bring_invs declares invs =
 
 method try_solve_inv declares mydefs invs =
   ( rule invariantI, 
-    force simp add:mydefs inv_defs -- "solve the base case",
+    simp add:mydefs inv_defs -- "solve the base case",
     bring_invs invs:invs,
     match premises in T:"?s \<midarrow>a\<midarrow>q_ioa\<longrightarrow> ?t" for a \<Rightarrow> \<open>case_tac a\<close> 
       -- "do case analysis on the action";
     simp add:mydefs inv_defs )
+
+definition inv1 where
+  "inv1 r \<equiv> \<forall> p \<in> acceptors . q_state.acc_status r p \<noteq> Idle \<longrightarrow> q_state.from_prev r \<noteq> {}"
+declare inv1_def[inv_defs]
+
+definition inv2 where
+  "inv2 r \<equiv> \<forall> p \<in> acceptors . q_state.acc_status r p \<noteq> Idle \<longrightarrow> \<Sqinter> (q_state.from_prev r) \<preceq> acc_cstruct r p"
+declare inv2_def[inv_defs]
+
+lemma inv1:"invariant q_ioa inv1"
+apply try_solve_inv
+subgoal by auto
+subgoal by auto
+subgoal by (clarsimp, metis)
+done
+declare inv1[invs]
+
+lemma inv2:"invariant q_ioa inv2"
+apply try_solve_inv
+subgoal by clarify (meson glb_anti pre_CStruct.trans)
+subgoal premises prems for s t a x
+  -- "TODO: here we would need some method instantiating exI"
+  proof -
+  from prems(2) have "\<exists> p \<in> acceptors  . acc_status s p \<noteq> Idle" by force
+  hence "q_state.from_prev s \<noteq> {}" using prems(3) by blast
+  with glb_anti and prems show ?thesis apply clarsimp
+  by (metis acc_status.distinct(1)) 
+  qed
+
 
 lemma refok:"is_ref_map refmap q_ioa spec" 
 apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)

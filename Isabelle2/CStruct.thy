@@ -229,6 +229,10 @@ proof -
   with that show thesis by metis 
 qed
 
+lemma glb_anti:"S \<noteq> {} \<Longrightarrow> \<Sqinter> (insert x S) \<preceq> \<Sqinter> S"
+by (metis antimono finite_insert infinite order_iff_strict subset_insertI)
+
+
 end
 
 end

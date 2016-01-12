@@ -1,7 +1,7 @@
 theory ComposableGC
 imports CStruct "/home/nano/Documents/IO-Automata/IOA"
 begin
- 
+
 datatype ('a,'c,'l) cgc_action = 
   Propose 'c 
 | Learn 'a 'l
