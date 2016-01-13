@@ -96,6 +96,9 @@ by (metis pre_CStruct.exec.simps(1) pre_CStruct.exec.simps(2) pre_CStruct.less_e
 lemma compat_sym:"compat2 s1 s2 \<longleftrightarrow> compat2 s2 s1"
 by (metis compat2_def)
 
+lemma less_bullet:"s \<preceq> s \<bullet> c"
+by (metis pre_CStruct.exec.simps(1) pre_CStruct.exec_cons pre_CStruct.less_eq_def) 
+
 end
 
 subsection {* The CStruct locale *}
@@ -229,9 +232,18 @@ proof -
   with that show thesis by metis 
 qed
 
-lemma glb_anti:"S \<noteq> {} \<Longrightarrow> \<Sqinter> (insert x S) \<preceq> \<Sqinter> S"
+lemma glb_insert:"S \<noteq> {} \<Longrightarrow> \<Sqinter> (insert x S) \<preceq> \<Sqinter> S"
 by (metis antimono finite_insert infinite order_iff_strict subset_insertI)
 
+lemma glb_anti:"\<lbrakk>finite S; S \<noteq> {}; finite S'; S' \<noteq> {}; S \<subseteq> S'\<rbrakk> \<Longrightarrow> \<Sqinter>S' \<preceq> \<Sqinter>S"
+  proof (induct S arbitrary:S' rule:finite_ne_induct)
+    case (singleton s) thus ?case by (simp add: coboundedI)
+    next
+    case (insert s ss) thus ?case by (meson antimono insert_not_empty)
+qed
+
+lemma glb_singleton:"\<lbrakk>finite S; S \<noteq> {}; s \<in> S\<rbrakk> \<Longrightarrow> \<Sqinter>S \<preceq> s"
+by (simp add: coboundedI)
 
 end
 
