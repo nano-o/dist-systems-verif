@@ -33,10 +33,10 @@ more than two decades after the first SMR algorithms~\cite{Lamport98ParttimeParl
 were proposed, devising a new SMR algorithm can justify a publication in a top
 conference~\cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments,OngaroOusterhout14SearchUnderstandableConsensusAlgorithm}.
 
-Surprisingly, at a first glance, many SMR algorithms seem to share a
-common structure which would indicate that previous formal analysis could
-be reused. That is because, in many cases, researchers obtained a new SMR
-algorithm by optimizing an existing SMR algorithm for a particular use
+Surprisingly, at a first glance, many SMR algorithms seem to share a common
+structure which would indicate that previous formal analysis could be reused.
+This similarity in structure exists because, in many cases, researchers obtained
+a new SMR algorithm by optimizing an existing SMR algorithm for a particular use
 case. For example, Fast Paxos~\cite{Lamport06FastPaxos} adds fast rounds
 to MultiPaxos~\cite{lamport2001paxos} to reduce the latency under low
 contention, Disk Paxos~\cite{GafniLamport03DiskPaxos} optimizes Paxos
@@ -59,65 +59,67 @@ among all replicas, etc. Close scrutiny reveals that most SMR algorithms can
 be seen as variations and optimizations around a few core ideas such as the
 round structure introduced by Paxos~\cite{Lamport98ParttimeParliament}, quorum
 systems~\cite{GuerraouiVukolic10RefinedQuorumSystems,Lamport06FastPaxos},
-and agreement up to commutativity using command-structure
-sets~\cite{Lamport05GeneralizeConsensus}.
+and agreement up to commutativity based on command-structures~\cite{Lamport05GeneralizeConsensus}.
 
-Given their similarities, one may ask why is it not possible to reuse formal
-analysis of SMR algorithms. The problem is that SMR algorithms are not modular
-and that, because of their intricate structure, modifying a monolithic SMR
-algorithm may produce many unforeseen corner cases that invalidate previous
-analyses.
+Given the similarities shared by many SMR algorithms, one may ask why is it
+not possible to reuse formal analyses to simplify the verification of new
+algorithms. The problem is that SMR algorithms are not modular and that, because
+of their intricate structure, modifying a monolithic SMR algorithm may produce
+many unforeseen corner cases that invalidate previous analyses.
 
-To simplify the task of devising new SMR algorithms we propose a framework
-for building reusable SMR modules. For example, in \cref{}, we augment
-MultiPaxos with our composition interface and prove that it satisfies Composable
-Generalized Consensus (CGC), our correctness condition for modules. We then
-build an SMR module whose structure is similar to the one of the fast rounds of
-Fast Paxos and prove that it satisfies CGC\@. Our Fast Paxos module has lower
-latency than our Paxos module when there is low contention among clients, but
-its performance drops below that of Paxos when contention increases. Finally,
-we assemble unmodified our MultiPaxos SMR module and our Fast Paxos SMR module
-in an SMR algorithm that dynamically switch from one to the other depending on
-the contention level observed in the system, therefore getting the best of both.
-Crucially, we obtain the correctness of our composite SMR algorithm for free:
-our generic composition theorem and the correctness of our two SMR modules taken
-individually imply that the combination of the MultiPaxos SMR module and the
-Fast Paxos SMR module is a correct SMR algorithm. Later, in \cref{}, we present
-three other SMR modules that can be combined the MultiPaxos SMR module and the
-Fast Paxos SMR module in a composite SMR algorithm that can switch between 5
-different kinds of SMR modules, according to the system's operating conditions.
+To simplify the task of devising new SMR algorithms we propose a framework for
+building self-contained and reusable SMR modules whose analysis is independent
+of the other modules they may be composed with. For example, in \cref{}, we
+augment MultiPaxos with our composition interface, and we prove that it satisfies
+our correctness condition for modules, called Composable Generalized Consensus (CGC).
+We then build an SMR module whose structure is similar to the one of the fast
+rounds of Fast Paxos, and we prove that it satisfies CGC\@. Finally, we assemble
+unmodified our MultiPaxos SMR module and our Fast Paxos SMR module in an SMR
+algorithm that dynamically switches from one to the other depending on the
+contention level observed in the system. This composite algorithm combines the
+advantages of both its SMR modules: in cases of low contention, our Fast Paxos
+module executes commands in two message delays, while MultiPaxos would need
+three, whereas the MultiPaxos module maintains its throughput in high contention
+cases, in which the performance of the Fast Paxos module would have been
+significantly reduced.
 
-An SMR module is an SMR algorithm augmented with a \emph{composition interface}
-and satisfying our correctness condition, called Composable Generalized
-Consensus (CGC). The composition interface consists of an \emph{abort interface}
+Crucially, we obtain the correctness of our composite
+SMR algorithm for free: our generic composition theorem and the correctness
+of our two SMR modules taken individually imply that the combination of the
+MultiPaxos SMR module and the Fast Paxos SMR module is a correct SMR algorithm.
+Later, in \cref{}, we present three other SMR modules that can be combined the
+MultiPaxos SMR module and the Fast Paxos SMR module in a composite SMR algorithm
+that can switch between 4 different kinds of SMR modules, according to the
+system's operating conditions.
+
+More generally, an SMR module is an SMR algorithm augmented with a \emph{composition interface}
+and satisfying a correctness condition that we call \emph{Composable Generalized
+Consensus}, abbreviated CGC\@. The composition interface consists of an \emph{abort interface}
 for aborting an SMR module's execution and passing the baton to another
 SMR module and with a matching \emph{init interface} for taking over the
 execution of an aborting SMR module. Two SMR modules are composed by passing
 the outputs produced by the abort interface of the first SMR module, called
-abort c-structs, as inputs to the init interface of the second SMR module,
-called init c-structs in the context of the second SMR module. A SMR module
-must satisfy a correctness condition that we call Composable Generalized
-Consensus (abbreviated CGC). Any correct SMR module is a safe Generalized
+\emph{abort c-structs}, as inputs to the init interface of the second SMR module,
+called \emph{init c-structs} in the context of the second SMR module. Any correct SMR module is a safe Generalized
 Consensus~\cite{Lamport05GeneralizeConsensus} algorithm (i.e.\ a kind of SMR
 algorithm), but the progress guarantees may vary between SMR modules: CGC only
-requires a SMR module to make progress executing commands or to abort its
-execution. CGC also relates the init c-structs, learned values (learned values
+requires an SMR module to make progress executing commands or to abort its
+execution. CGC also relates the init c-structs, learned values (learned c-structs 
 represent the local state-machine state of individual replicas), and abort
-values in order for our composition theorem to hold.
-%Note that Generalized Consensus is a specification of SMR algorithms that takes into account the commutativity relation among commands and can offer important performance advantages in practice. 
-
+c-structs in order to guarantee that an SMR module consistently takes over the execution of its predecessor, as expressed in our composition theorem.
+Finally, our framework allows building \emph{dynamic SMR
+algorithms}, which dynamically change module when the currently running module
+aborts, choosing the module best suited to the current operating conditions.
 
 Our composition theorem enables incremental development of SMR algorithms
-because it guarantees that any number of correct modules may be composed in
-a sequence to form a correct SMR algorithm. Therefore, our framework allows
-building \emph{dynamic SMR algorithms}, which dynamically change module when
-the currently running module aborts, choosing the module best suited to the
-current operating conditions. Thanks to the composition theorem, new modules can
-be added to a dynamic SMR algorithm without modifying the existing modules and
-with guaranteed correctness. Moreover, the relaxed progress requirements of CGC
-enable a separation of concerns that simplifies optimizing SMR algorithms for
-particular scenarios because there is no need to consider executing commands
-under a situation outside the scenario: the module can just abort in this case.
+because it guarantees that any number of correct modules may be composed in a
+sequence to form a correct SMR algorithm. Thanks to the composition theorem,
+new modules can be added to a dynamic SMR algorithm without modifying the
+existing modules and with guaranteed correctness. Moreover, the relaxed progress
+requirements of CGC enable a separation of concerns that simplifies optimizing
+SMR algorithms for particular scenarios because there is no need to consider
+executing commands under a situation outside the scenario: the module can just
+abort in this case. 
 
 In practice, we provide a TLA+ specification of CGC that the user of our framework can use to debug and prove new modules correct using the TLA$^+$ toolbox~\cite{TLATools}.
 Moreover, we also provide two TLA+ specifications simplifying the development of modules based on Refined Quorum Systems~\cite{GuerraouiVukolic10RefinedQuorumSystems}. These two specifications both implement CGC and provide a skeleton for a user to build her own module. The two specifications demonstrate how to update the local state of a replica after gathering the states or the init c-structs of a write quorum of replicas, and how to
@@ -125,13 +127,12 @@ produce an abort c-struct after gathering the state of a read quorum of replicas
 The two specifications use different combinations of sizes of read and write quorums, which affects the invariants that the replicas must maintain and, in consequence, the latency with which a command can be processed but the module.
 Our two specifications abstract over how to disseminate the commands to the replicas (e.g.\ whether to use a leader as in Paxos, multiple leaders as in MultiCoordinatedPaxos, or whether to broadcast commands without using a leader as in Fast Paxos).
 The user can therefore specify a concrete command dissemination procedure and then model-check that the obtained algorithm refines one of the two specifications.  
-We demonstrate the practical use of our framework by presenting modules based on Paxos~\cite{Lamport98ParttimeParliament}, Fast Paxos\cite{Lamport06FastPaxos}, Chain Replication~\cite{RenesseSchneider04ChainReplicationSupportingHighThroughputAvailability}, a case of Vertical Paxos~\cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}, and EPaxos~\cite{MoraruAndersenKaminsky13ThereIsMoreConsensusEgalitarianParliaments}
-(TODO, but would be nice).
+We demonstrate the practical use of our framework by presenting modules based on Paxos~\cite{Lamport98ParttimeParliament}, Fast Paxos\cite{Lamport06FastPaxos}, Chain Replication~\cite{RenesseSchneider04ChainReplicationSupportingHighThroughputAvailability}, a case of Vertical Paxos~\cite{LamportMalkhiZhou09VerticalPaxosPrimarybackupReplication}.
 
 Compared to related work, described in \cref{sec:related}, our key contributions are the following.
 \begin{itemize}
-    \item We present the first framework to allowing to build Generalized Consensus algorithms our of independent modules.
-    \item We provide tool support for designing CGC modules in the form of two TLA+~\cite{Lamport02SpecifyingSystems} specifications simplifying the design and model-checking of SMR algorithms based on Quorum Systems~\cite{GuerraouiVukolic10RefinedQuorumSystems} and demonstrate their use by designing CGC modules inspired by Paxos, Fast Paxos, and Primary-Backup replication.
+    \item We present the first framework allowing to build Generalized Consensus algorithms our of independent and reusable modules supporting modular formal analysis.
+    \item We provide tool support for designing CGC modules in the form of two TLA+~\cite{Lamport02SpecifyingSystems} specifications simplifying the design and model-checking of SMR algorithms based on Quorum Systems~\cite{GuerraouiVukolic10RefinedQuorumSystems} and demonstrate their use by designing four CGC modules inspired by MultiPaxos, Fast Paxos, Chain Replication, and Primary-Backup replication.
 \end{itemize}
 These two contributions set this paper apart from related work, notably the Abstract framework~\cite{GuerraouiETAL10Next700BftProtocols} and the Speculative Linearizability framework~\cite{GuerraouiKuncakLosa12SpeculativeLinearizability}, both described in \cref{sec:related}.
 Our TLA+ specifications can be found at \url{http://losa.fr/cgc}.
