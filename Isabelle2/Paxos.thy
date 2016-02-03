@@ -201,7 +201,7 @@ end
 
 datatype ('v,'a) msg =
   Phase1a (leader: 'a) (ballot:nat)
-| Phase1b (last_ballot:"nat option") (last_vote:"'v option") (new_ballot: nat) (acceptor:'a)
+| Phase1b (last_vote:"('v \<times> nat) option") (new_ballot: nat) (acceptor:'a)
 | Phase2a (for_ballot:nat) (suggestion:'v)
 | Phase2b (ballot:nat) (vote:'v)
 
@@ -213,22 +213,34 @@ record ('v,'a) pimp_state =
   ballot :: "'a \<Rightarrow> nat option"
   vote :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   highest_seen :: "'a \<Rightarrow> nat option"
-  onebs :: "'a \<Rightarrow> nat \<Rightarrow> ('a \<times>'v \<times> nat) list"
+  onebs :: "'a \<Rightarrow> nat \<Rightarrow> ('a \<times> ('v \<times> nat) option) list"
   
 definition quorum_received where
   "quorum_received a b s acceptors \<equiv> 2 * length (onebs s a b) > card acceptors"
 
+definition map_opt where
+  "map_opt ao bo f \<equiv> Option.bind ao (\<lambda> a . Option.bind bo (\<lambda> b . Some (f a b)))"
+
 definition highest_voted where
   "highest_voted a b s \<equiv>
-    let received = onebs s a b in
-    fst (fold (\<lambda> x y . if (snd x > snd y) then x else y) (map snd received) (snd (hd received)))"
+    let received = onebs s a b; 
+        filtered = map snd received;
+        max_pair = (\<lambda> x y . if (snd x > snd y) then x else y);
+        max_pairo = (\<lambda> x y . map_opt x y max_pair)
+    in case (fold max_pairo filtered (hd filtered)) of None \<Rightarrow> None | Some (v,b) \<Rightarrow> Some v"
 
-(* value "let received = [(3,1,23),(10,3,(4::nat))] in
-  fold (\<lambda> x y . if (snd x > snd y) then x else y) (map snd received) (snd (hd received))" *)
-        
+value "let received = [(3,Some (1,53)),(10, Some (3,(40::nat)))]; 
+        filtered = map snd received;
+        max_pair = (\<lambda> x y . if (snd x > snd y) then x else y);
+        max_pairo = (\<lambda> x y . map_opt x y max_pair)
+    in case (fold max_pairo filtered (hd filtered)) of None \<Rightarrow> None | Some (v,b) \<Rightarrow> Some v"
+
+definition next_ballot_nat
+  where "next_ballot_nat a b N \<equiv> (b div N + 1) * N + a"
+
 fun next_ballot where
-  "next_ballot a (hso::nat option) N = 
-    ( let hs = (case hso of None \<Rightarrow> 0 | Some hs \<Rightarrow> hs) in (hs div N + 1) * N + a)"
+  "next_ballot a None N = next_ballot_nat a 0 N"
+| "next_ballot a (Some b) N = next_ballot_nat a b N"
 
 fun propose_2 where
   "propose_2 a c s acceptors = 
@@ -241,20 +253,23 @@ fun receive_1a where
       (if (bal = (None::nat option) \<or> ((the bal) < b)) 
        then 
           (let 
-            msg_1b = Phase1b bal (if bal = None then None else (vote s) a (the bal)) b a;
+            to_send = (\<lambda> bal . case (vote s a bal) of None \<Rightarrow> None | Some v \<Rightarrow> Some (bal, v));
+            msg_1b = Phase1b (Option.bind bal to_send) b a;
             pack = Packet a l msg_1b in
           (s\<lparr>ballot := (ballot s)(a := Some b)\<rparr>, {pack}))
        else (s,{})))"
 | "receive_1a a _ s = (s,{})"
 
-fun receive_1b where 
- "receive_1b a (Phase1b last_bal last_v sender new_bal) s = (
+text {* Let's assume that we are using TCP, and therefore have no duplicates *}
+fun receive_1b where
+ "receive_1b a (Phase1b last_bal last_v senderr new_bal) s = (
     if (new_bal = the (ballot s a)) 
-    then (s\<lparr>
-      onebs := (onebs s)(a := 
-        ((onebs s a)(
-          the (ballot s a) := 
-            (onebs s a)(the (ballot s a)) \<union> {sender})))\<rparr>, {})
+    then (
+      s\<lparr>
+        onebs := (onebs s)(a := 
+          ((onebs s a)(
+            the (ballot s a) := 
+              (senderr, last_v, last_bal) # (onebs s a)(the (ballot s a)))))\<rparr>, {})
     else (s,{}))"
 | "receive_1b a _ s = (s, {})"
 
