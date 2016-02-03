@@ -1,3 +1,5 @@
+section {* Definitions for the composition theorem *}
+
 theory Composition
 imports ComposableGC "/home/nano/Documents/IO-Automata/Simulations" "~~/src/HOL/Eisbach/Eisbach_Tools"
 begin
@@ -51,6 +53,8 @@ definition composition where
 
 definition spec where
   "spec \<equiv> rename initial rn3"
+
+section {* The invariants *}
 
 named_theorems inv_defs 
 
@@ -120,6 +124,9 @@ definition inv13 where
     \<forall> s \<in> cgc_state.toNext r2 . \<exists> cs .  s = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd r1 \<union> propCmd r2"
 declare inv13_def[inv_defs]
 
+(*<*)
+subsection {* Automation setup *}
+
 lemmas cgc_ioa_defs = composition_def par2_def asig_comp2_def cgc_ioa_def rename_def
     rename_set_def cgc_asig_def is_trans_def actions_def cgc_trans_def initial_def hide_def 
     propose_def 
@@ -137,32 +144,6 @@ named_theorems mydefs
   -- "definitions to unfold"
 declare cgc_ioa_defs[mydefs]
 declare actions_defs[mydefs]
-
-text {* A usefull lemma (l4) *}
-
-lemma l3:
-  assumes "\<And> s . s \<in> S \<Longrightarrow> s\<^sub>0 \<preceq> s" and "finite S" and "S \<noteq> {}"
-  shows "s\<^sub>0 \<preceq> \<Sqinter>S" using assms
-by (metis local.boundedI)
-
-lemma l4:
-  assumes "\<exists> S cs . S \<noteq> {} \<and> S \<subseteq> S\<^sub>i \<and> s = \<Sqinter>S \<star> cs" and "finite S\<^sub>i"
-  and "\<And> s\<^sub>l s\<^sub>i. s\<^sub>l \<in> S\<^sub>l \<and> s\<^sub>i \<in> S\<^sub>i \<Longrightarrow> s\<^sub>l \<preceq> s\<^sub>i" and "s\<^sub>l \<in> S\<^sub>l"
-  shows "s\<^sub>l \<preceq> s" using assms
-  proof -
-    obtain aa :: "'a set \<Rightarrow> 'a \<Rightarrow> 'a" where
-      f1: "\<And>A a. (infinite A \<or> A = {} \<or> aa A a \<in> A \<or> a \<preceq> \<Sqinter> A) \<and> (infinite A \<or> \<not> a \<preceq> aa A a \<or> A = {} \<or> a \<preceq> \<Sqinter> A)"
-      using l3 by moura
-    obtain AA :: "'a set" and bbs :: "'b list" where
-      "AA \<subseteq> S\<^sub>i \<and> {} \<noteq> AA \<and> \<Sqinter> AA \<star> bbs = s"
-      using assms(1) by moura
-    then show ?thesis
-      using f1 by (metis antimono assms(2) assms(3) assms(4) less_eq_def pre_CStruct.trans subset_empty)
-  qed
-
-lemma l5[simp]:
-  "\<lbrakk>S \<subseteq> {\<bottom>}; S \<noteq> {}\<rbrakk> \<Longrightarrow> \<Sqinter>S = \<bottom>"
-by (metis singleton subset_singletonD) 
 
 method bring_invs declares invs =
   -- "bring all the invariants in the premises"
@@ -191,6 +172,36 @@ method try_solve_inv declares mydefs invs =
       -- "do case analysis on the action";
     simp add:mydefs inv_defs )
 
+(*>*)
+
+subsection {* Usefull lemmas *}
+
+lemma l3:
+  assumes "\<And> s . s \<in> S \<Longrightarrow> s\<^sub>0 \<preceq> s" and "finite S" and "S \<noteq> {}"
+  shows "s\<^sub>0 \<preceq> \<Sqinter>S" using assms
+by (metis local.boundedI)
+
+lemma l4:
+  assumes "\<exists> S cs . S \<noteq> {} \<and> S \<subseteq> S\<^sub>i \<and> s = \<Sqinter>S \<star> cs" and "finite S\<^sub>i"
+  and "\<And> s\<^sub>l s\<^sub>i. s\<^sub>l \<in> S\<^sub>l \<and> s\<^sub>i \<in> S\<^sub>i \<Longrightarrow> s\<^sub>l \<preceq> s\<^sub>i" and "s\<^sub>l \<in> S\<^sub>l"
+  shows "s\<^sub>l \<preceq> s" using assms
+  proof -
+    obtain aa :: "'a set \<Rightarrow> 'a \<Rightarrow> 'a" where
+      f1: "\<And>A a. (infinite A \<or> A = {} \<or> aa A a \<in> A \<or> a \<preceq> \<Sqinter> A) \<and> (infinite A \<or> \<not> a \<preceq> aa A a \<or> A = {} \<or> a \<preceq> \<Sqinter> A)"
+      using l3 by moura
+    obtain AA :: "'a set" and bbs :: "'b list" where
+      "AA \<subseteq> S\<^sub>i \<and> {} \<noteq> AA \<and> \<Sqinter> AA \<star> bbs = s"
+      using assms(1) by moura
+    then show ?thesis
+      using f1 by (metis antimono assms(2) assms(3) assms(4) less_eq_def pre_CStruct.trans subset_empty)
+  qed
+
+lemma l5[simp]:
+  "\<lbrakk>S \<subseteq> {\<bottom>}; S \<noteq> {}\<rbrakk> \<Longrightarrow> \<Sqinter>S = \<bottom>"
+by (metis singleton subset_singletonD) 
+
+subsection {* The proofs *}
+
 lemma inv2:"invariant composition inv2"
   by try_solve_inv
 declare inv2[aux_invs]
@@ -206,7 +217,7 @@ declare inv3[ref_invs]
 
 lemma inv4:"invariant composition inv4"
   apply (try_solve_inv invs:aux_invs  mydefs:non_trivial_def less_eq_def)
-  subgoal by (metis subset_insertI2)
+  subgoal by (meson subset_insertI2) 
   subgoal by (metis subset_insertI2)
   subgoal by (metis subset_insertI2)
   subgoal by metis
@@ -240,7 +251,7 @@ lemma inv9:"invariant composition inv9"
   subgoal by metis
   subgoal premises prems for s t a x5
   proof -
-    have 1:"\<And> S s1 . \<lbrakk>S \<subseteq> insert x5 (cgc_state.toNext (fst s)); s1 \<in> S\<rbrakk> 
+    have 1:"\<And> S s1 . \<lbrakk>S \<subseteq> insert x5 (cgc_state.toNext (fst s)); s1 \<in> S\<rbrakk>
       \<Longrightarrow> \<exists>cs. s1 = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd (fst s)" using prems(11) by auto
     have 2:"finite (cgc_state.toNext (fst s))" using prems by auto 
     show ?thesis 
@@ -293,6 +304,8 @@ lemma inv13:"invariant composition inv13"
   done
 declare inv13[ref_invs]
 
+section {* The final refinement proof *}
+
 definition refmap where
   "refmap r \<equiv> let r1 = fst r; r2 = snd r in 
     \<lparr>cgc_state.propCmd = propCmd r1 \<union> propCmd r2, 
@@ -342,7 +355,7 @@ apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
 
     apply (rule_tac x="refmap (a,b)" in exI)
     apply (rule_tac x="[(ToNext x6,refmap (aa,ba))]" in exI)
-    apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs actions_defs inv_defs refmap_def non_trivial_def)
+    apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs inv_defs refmap_def non_trivial_def)
     apply clarsimp
     apply (split_conjs?)
     subgoal by (metis insert_absorb2 insert_not_empty singleton singleton_insert_inj_eq)

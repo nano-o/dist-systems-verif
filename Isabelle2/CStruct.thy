@@ -1,21 +1,8 @@
 theory CStruct
-imports Main
+imports Main "/home/nano/Documents/IO-Automata/Sequences"
 begin
 
-locale Sequences 
-begin
-
-text {* We reverse the order of application of @{term "op #"} and 
-  @{term "op @"} because it we think that it is easier to think of sequences as growing 
-  to the right. *}
-no_notation Cons (infixr "#" 65)
-abbreviation Append  (infixl "#" 65)
-  where "Append xs x \<equiv> Cons x xs"
-no_notation append (infixr "@" 65)
-abbreviation Concat  (infixl "@" 65)
-  where "Concat xs ys \<equiv> append ys xs"
-
-end
+section {* Command Structures *}
 
 subsection {* The pre-CStruct locale *}
 
@@ -90,7 +77,7 @@ next
     by (auto simp add:contains_def) (metis exec_cons set_rev_mp set_subset_Cons)
 qed
 
-lemma preceq_star: "s \<star> (rs#r) \<preceq> s' \<Longrightarrow> s \<star> rs \<preceq> s'"
+lemma preceq_star: "s \<star> (rs#r) \<preceq> s' \<Longrightarrow> (s \<star> rs)  \<preceq> s'"
 by (metis pre_CStruct.exec.simps(1) pre_CStruct.exec.simps(2) pre_CStruct.less_eq_def trans)
 
 lemma compat_sym:"compat2 s1 s2 \<longleftrightarrow> compat2 s2 s1"
@@ -200,7 +187,8 @@ shows "\<exists> rs . \<Sqinter> ss = \<bottom> \<star> rs \<and> set rs \<subse
 using assms
 proof (induct ss rule:finite_ne_induct)
   case (singleton s)
-  obtain rs where "s = \<bottom> \<star> rs \<and> set rs \<subseteq> rset" using singleton by force
+  obtain rs where "s = \<bottom> \<star> rs \<and> set rs \<subseteq> rset"
+    using singleton.prems by auto 
   moreover have "\<Sqinter> {s} = s" using singleton by auto
   ultimately show "\<exists> rs . \<Sqinter> {s} = \<bottom> \<star> rs \<and> set rs \<subseteq> rset" by blast
 next

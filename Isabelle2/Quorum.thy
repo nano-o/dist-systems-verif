@@ -1,5 +1,6 @@
 theory Quorum
-imports ComposableGC  "~~/src/HOL/Eisbach/Eisbach_Tools" "/home/nano/Documents/IO-Automata/Simulations"
+imports ComposableGC  "~~/src/HOL/Eisbach/Eisbach_Tools" 
+  "/home/nano/Documents/IO-Automata/Simulations"
 begin
 
 datatype ('a,'c,'l) q_action =
@@ -23,6 +24,7 @@ record ('a,'c,'l,'p) q_state =
 
 locale Quorum = CStruct + IOA +
   fixes learners::"'l set" and acceptors::"'p set"
+  assumes "acceptors \<noteq> {}"
 begin
 
 definition q_asig where
@@ -170,41 +172,23 @@ lemma inv1:"invariant q_ioa inv1"
 apply try_solve_inv
 subgoal by auto
 subgoal by auto
-subgoal by (clarsimp, metis)
+subgoal by force
 done
 declare inv1[invs]
 
+method my_bexE = match premises in E[thin]:"\<exists> p \<in> ?S . ?P p" \<Rightarrow> 
+    \<open>rule_tac E[THEN bexE]\<close>
+    -- "a useless method (just do elim bexE)"
+
 lemma inv2:"invariant q_ioa inv2"
 apply try_solve_inv
-subgoal by clarify (meson glb_insert pre_CStruct.trans)
-subgoal premises prems for s t a x
-  -- "TODO: here we would need some method instantiating exI"
-  proof -
-  from prems(2) have "\<exists> p \<in> acceptors  . acc_status s p \<noteq> Idle" by force
-  hence "q_state.from_prev s \<noteq> {}" using prems(4) by blast
-  with glb_anti and prems show ?thesis apply clarsimp
-  by (metis acc_status.distinct(1)) 
-  qed
-subgoal premises prems for s t a
-  proof auto
-  fix p
-  assume 1:"p \<in> acceptors" and 2:"acc_status t p \<noteq> Idle"
-  from prems(2) obtain q cstr where 3:"acc_status s q = Idle \<and>
-    cstr \<in> q_state.from_prev s \<and> t = s\<lparr>acc_status := (acc_status s)(q := Ready),
-      acc_cstruct := (acc_cstruct s)(q := cstr)\<rparr>" by blast
-  from 1 2 3 prems(1,3,4,5) glb_anti show "\<Sqinter> q_state.from_prev t \<preceq> acc_cstruct t p" 
-  by(clarsimp, insert coboundedI, auto)
-  qed
-subgoal premises prems for s t a
-  proof -
-  obtain p c where 1:"p \<in> acceptors \<and> acc_status s p \<noteq> Idle 
-    \<and> t = s\<lparr>acc_status := (acc_status s)(p := Ready),
-            acc_cstruct := (acc_cstruct s)(p := acc_cstruct s p \<bullet> c)\<rparr>" using prems(2) by force
-  from 1 prems(1) show "\<forall>p\<in>acceptors. acc_status t p \<noteq> Idle \<longrightarrow>
-    \<Sqinter> q_state.from_prev t \<preceq> acc_cstruct t p" 
-    by auto (metis less_bullet pre_CStruct.trans) 
-  qed
-done
+apply auto
+apply (metis (no_types, lifting) equals0D glb_insert pre_CStruct.trans)
+apply (metis acc_status.distinct(1))
+apply (metis (full_types) coboundedI)
+apply (metis (full_types) coboundedI)
+by (smt less_bullet pre_CStruct.trans)
+declare inv2[invs]
 
 lemma refok:"is_ref_map refmap q_ioa spec" 
 apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
