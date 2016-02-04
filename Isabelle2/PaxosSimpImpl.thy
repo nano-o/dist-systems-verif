@@ -12,6 +12,8 @@ datatype ('v,'a)  packet =
   Packet (sender: 'a) (dst: 'a) (msg: "('v,'a) msg") 
 
 record ('v,'a) pimp_state =
+  acceptors :: "'a set"
+    -- {* The set of all acceptors *}
   ballot :: "'a \<Rightarrow> nat option"
     -- {* the highest ballot in which an acceptor participated *}
   vote :: "'a \<Rightarrow> 'v option"
@@ -31,6 +33,18 @@ record ('v,'a) pimp_state =
       this is the list of all the 2b messages receive by a in b *}
   decided :: "'a \<Rightarrow> 'v option"
     -- {* For an acceptor a, this is Some v if a has decided v in some ballot *}
+
+definition init_state :: "'a set \<Rightarrow> ('v,'a) pimp_state" where
+  "init_state accs \<equiv> \<lparr>
+    pimp_state.acceptors = accs,
+    ballot = (\<lambda> a . None),
+    vote = (\<lambda> a . None),
+    last_ballot = (\<lambda> a . None),
+    highest_seen = (\<lambda> a . None),
+    onebs = (\<lambda> a . \<lambda> b . []),
+    pending = (\<lambda> a . None),
+    twobs = (\<lambda> a . \<lambda> b . []),
+    decided = (\<lambda> a . None)\<rparr>"
   
 definition quorum_received where
   "quorum_received a b s acceptors \<equiv> 2 * length (onebs s a b) > card acceptors"
