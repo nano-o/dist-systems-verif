@@ -5,7 +5,7 @@ begin
 datatype ('v,'a) msg =
   Phase1a (leader: 'a) (ballot:nat)
 | Phase1b (last_vote:"('v \<times> nat) option") (new_ballot: nat) (acceptor:'a)
-| Phase2a (for_ballot:nat) (suggestion:'v)
+| Phase2a (for_ballot:nat) (suggestion:'v) (leader: 'a)
 | Phase2b (ballot:nat) (acceptor: 'a)
 
 datatype ('v,'a)  packet =
@@ -102,7 +102,10 @@ fun receive_1b where
     then (
       (let new_onebs = (a2, last_v) # (onebs s a)(the (ballot s a));
            suggestion = (case (highest_voted a new_bal s) of None \<Rightarrow> the (pending s a) | Some v \<Rightarrow> v);
-           msgs = (if (2 * length new_onebs > N) then {Phase2a new_bal suggestion} else {});
+           msgs = 
+           (if (2 * length new_onebs > N) 
+            then {Packet a a2 (Phase2a new_bal suggestion a) | a2 . a2 \<in> acceptors s}
+            else {});
            new_state = s\<lparr>
             onebs := (onebs s)(a := ((onebs s a)(the (ballot s a) := new_onebs))),
             pending := (pending s)(a := Some suggestion)\<rparr>
@@ -111,10 +114,10 @@ fun receive_1b where
 | "receive_1b a _ s N = (s, {})"
 
 fun receive_2a where 
-  "receive_2a a (Phase2a b v) s = 
+  "receive_2a a (Phase2a b v l) s = 
     (let bal = (ballot s a) in
       (if (bal = Some b)
-      then (s\<lparr>vote := (vote s)(a := Some v)\<rparr>, {Phase2b b a})
+      then (s\<lparr>vote := (vote s)(a := Some v)\<rparr>, {Packet a l (Phase2b b a)})
       else (s, {})))"
 | "receive_2a a _ s = (s, {})"
 
@@ -136,6 +139,6 @@ fun receive_2b where
     in (s,{}))"
 | "receive_2b a _ s N = (s, {})"
       
-export_code send_1a receive_1a receive_1b receive_2a receive_2b in Scala file "simplePaxos.scala"
+export_code send_1a receive_1a receive_1b receive_2a receive_2b init_state in Scala file "simplePaxos.scala"
 
 end
