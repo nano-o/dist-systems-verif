@@ -47,7 +47,7 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a) pimp_state" where
     decided = (\<lambda> a . None)\<rparr>"
   
 definition quorum_received where
-  "quorum_received a b s acceptors \<equiv> 2 * length (onebs s a b) > card acceptors"
+  "quorum_received a b s \<equiv> 2 * length (onebs s a b) > card (acceptors s)"
 
 definition map_opt where
   "map_opt ao bo f \<equiv> ao \<bind> (\<lambda> a . bo \<bind> (\<lambda> b . Some (f a b)))"
@@ -78,9 +78,9 @@ fun next_ballot where
 | "next_ballot a (Some b) N = next_ballot_nat a b N"
 
 fun send_1a where
-  "send_1a a v s acceptors =
-    (let msg_1a = Phase1a a (next_ballot a (highest_seen s a) (card acceptors)) in
-      (s\<lparr>pending := (pending s)(a := Some v)\<rparr>, {Packet a b msg_1a | b . b \<in> acceptors}))"
+  "send_1a a v s =
+    (let msg_1a = Phase1a a (next_ballot a (highest_seen s a) (card (acceptors s))) in
+      (s\<lparr>pending := (pending s)(a := Some v)\<rparr>, {Packet a b msg_1a | b . b \<in> (acceptors s)}))"
 
 fun receive_1a where
   "receive_1a a (Phase1a l b) s = 
