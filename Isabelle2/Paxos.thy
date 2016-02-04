@@ -1,6 +1,6 @@
 theory Paxos
 imports "/home/nano/Documents/IO-Automata/IOA"  "~~/src/HOL/Eisbach/Eisbach_Tools" 
-  "/home/nano/Documents/IO-Automata/Simulations"
+  "/home/nano/Documents/IO-Automata/Simulations" "~~/src/HOL/Library/Monad_Syntax"
 begin
 
 class wellorder_bot = wellorder + bot +
@@ -21,7 +21,7 @@ record ('v,'acc, 'b::linorder) p_state =
   vote :: "'acc \<Rightarrow> 'b \<Rightarrow> 'v option"
 
 definition (in linorder) max_opt where
-  "max_opt ao bo \<equiv> Option.bind ao (\<lambda> a . Option.bind bo (\<lambda> b . Some (max a b)))"
+  "max_opt ao bo \<equiv> ao \<bind> (\<lambda> a . bo \<bind> (\<lambda> b . Some (max a b)))"
   
 interpretation x: folding_idem max_opt "None::('b::linorder) option"
 apply unfold_locales 
@@ -203,7 +203,7 @@ datatype ('v,'a) msg =
   Phase1a (leader: 'a) (ballot:nat)
 | Phase1b (last_vote:"('v \<times> nat) option") (new_ballot: nat) (acceptor:'a)
 | Phase2a (for_ballot:nat) (suggestion:'v)
-| Phase2b (ballot:nat) (vote:'v)
+| Phase2b (ballot:nat)
 
 datatype ('v,'a)  packet =
   Packet (sender: 'a) (dst: 'a) (msg: "('v,'a) msg") 
@@ -211,25 +211,32 @@ datatype ('v,'a)  packet =
 record ('v,'a) pimp_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> nat option"
-  vote :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  vote :: "'a \<Rightarrow> 'v option"
+  last_ballot :: "'a \<Rightarrow> nat option"
+    -- {* The ballot in which vote was cast *}
   highest_seen :: "'a \<Rightarrow> nat option"
   onebs :: "'a \<Rightarrow> nat \<Rightarrow> ('a \<times> ('v \<times> nat) option) list"
+  pending :: "'a \<Rightarrow> 'v option"
   
 definition quorum_received where
   "quorum_received a b s acceptors \<equiv> 2 * length (onebs s a b) > card acceptors"
 
 definition map_opt where
-  "map_opt ao bo f \<equiv> Option.bind ao (\<lambda> a . Option.bind bo (\<lambda> b . Some (f a b)))"
+  "map_opt ao bo f \<equiv> ao \<bind> (\<lambda> a . bo \<bind> (\<lambda> b . Some (f a b)))"
+
+definition f_opt where
+  "f_opt ao bo f \<equiv> (case ao of None \<Rightarrow> (case bo of None \<Rightarrow> None | Some b \<Rightarrow> Some b) |
+    Some a \<Rightarrow> (case bo of None \<Rightarrow> Some a | Some b \<Rightarrow> Some (f a b)))"
 
 definition highest_voted where
   "highest_voted a b s \<equiv>
     let received = onebs s a b; 
         filtered = map snd received;
         max_pair = (\<lambda> x y . if (snd x > snd y) then x else y);
-        max_pairo = (\<lambda> x y . map_opt x y max_pair)
+        max_pairo = (\<lambda> x y . f_opt x y max_pair)
     in case (fold max_pairo filtered (hd filtered)) of None \<Rightarrow> None | Some (v,b) \<Rightarrow> Some v"
 
-value "let received = [(3,Some (1,53)),(10, Some (3,(40::nat)))]; 
+value "let received = [(3,Some (1,5)),(10, Some (3,(40::nat)))];
         filtered = map snd received;
         max_pair = (\<lambda> x y . if (snd x > snd y) then x else y);
         max_pairo = (\<lambda> x y . map_opt x y max_pair)
@@ -243,18 +250,18 @@ fun next_ballot where
 | "next_ballot a (Some b) N = next_ballot_nat a b N"
 
 fun propose_2 where
-  "propose_2 a c s acceptors = 
+  "propose_2 a v s acceptors =
     (let msg_1a = Phase1a a (next_ballot a (highest_seen s a) (card acceptors)) in
-      (s, {Packet a b msg_1a | b . b \<in> acceptors}))"
+      (s\<lparr>pending := (pending s)(a := Some v)\<rparr>, {Packet a b msg_1a | b . b \<in> acceptors}))"
 
 fun receive_1a where
   "receive_1a a (Phase1a l b) s = 
-    (let bal = ballot s a in
-      (if (bal = (None::nat option) \<or> ((the bal) < b)) 
+    (let bal = last_ballot s a in
+      (if (bal = None \<or> ((the bal) < b)) 
        then 
           (let 
-            to_send = (\<lambda> bal . case (vote s a bal) of None \<Rightarrow> None | Some v \<Rightarrow> Some (bal, v));
-            msg_1b = Phase1b (Option.bind bal to_send) b a;
+            to_send = (vote s a) \<bind> (\<lambda> v . bal \<bind> (\<lambda> b . Some (v, b)));
+            msg_1b = Phase1b to_send b a;
             pack = Packet a l msg_1b in
           (s\<lparr>ballot := (ballot s)(a := Some b)\<rparr>, {pack}))
        else (s,{})))"
@@ -262,26 +269,28 @@ fun receive_1a where
 
 text {* Let's assume that we are using TCP, and therefore have no duplicates *}
 fun receive_1b where
- "receive_1b a (Phase1b last_bal last_v senderr new_bal) s = (
+ "receive_1b a (Phase1b last_v new_bal a2) s N = (
     if (new_bal = the (ballot s a)) 
     then (
-      s\<lparr>
-        onebs := (onebs s)(a := 
-          ((onebs s a)(
-            the (ballot s a) := 
-              (senderr, last_v, last_bal) # (onebs s a)(the (ballot s a)))))\<rparr>, {})
+      (let new_onebs = (a2, last_v) # (onebs s a)(the (ballot s a));
+           suggestion = (case (highest_voted a new_bal s) of None \<Rightarrow> the (pending s a) | Some v \<Rightarrow> v);
+           msgs = (if (2 * length new_onebs > N) then {Phase2a new_bal suggestion} else {});
+           new_state = s\<lparr>
+            onebs := (onebs s)(a := ((onebs s a)(the (ballot s a) := new_onebs))),
+            pending := (pending s)(a := Some suggestion)\<rparr>
+       in (new_state, msgs)))
     else (s,{}))"
-| "receive_1b a _ s = (s, {})"
+| "receive_1b a _ s N = (s, {})"
 
-fun send_2a where 
-  "send_2a a s = (s, {})"
-| "send_2a a _ s = (s, {})"
-      
 fun receive_2a where 
-  "receive_2a a (Phase1b balo vo sender) s = (s, {})"
+  "receive_2a a (Phase2a b v) s = 
+    (let bal = (ballot s a) in
+      (if (bal = Some b)
+      then (s\<lparr>vote := (vote s)(a := Some v)\<rparr>, {Phase2b b})
+      else (s, {})))"
 | "receive_2a a _ s = (s, {})"
       
-export_code propose_2 receive_1a in Scala file "propose.scala"
+export_code propose_2 receive_1a receive_1b receive_2a in Scala file "propose.scala"
     
 locale PaxosImpl = Paxos +
 fixes ballots and rep_num::"'a \<Rightarrow> nat" and div_op::"nat \<Rightarrow> nat \<Rightarrow> nat"
