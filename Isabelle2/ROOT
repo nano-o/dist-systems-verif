@@ -1,0 +1,5 @@
+session CGC = IOAutomata +
+  options [document = pdf, document_output = "output", document_variants="document:outline=/proof"]
+  theories CStruct ComposableGC Composition
+  document_files
+    "root.tex"

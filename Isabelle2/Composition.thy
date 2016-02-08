@@ -104,6 +104,9 @@ definition inv7 where
     finite (cgc_state.toNext r1) \<and> finite (cgc_state.toNext r2)"
 declare inv7_def[inv_defs]
 
+text {* Below are the invariants used in the refinement proof (with @{term inv3}). 
+  The other invariants are auxiliary invariants that are only used to prove the invariants below. *} 
+
 definition inv10 where
   "inv10 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> l\<^sub>1 \<in> learners. \<forall> l\<^sub>2 \<in> learners . \<forall> s\<^sub>1 \<in> learned r1 l\<^sub>1 . \<forall> s\<^sub>2 \<in> learned r2 l\<^sub>2 . s\<^sub>1 \<preceq> s\<^sub>2"
@@ -261,7 +264,7 @@ lemma inv9:"invariant composition inv9"
       hence 4:"\<And> s1 . s1 \<in> S \<Longrightarrow> \<exists>cs. s1 = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd (fst s)" 
         using 1 by auto
       have 5:"finite S" using 2 a2 by (metis finite_insert infinite_super) 
-      from 4 5 a1 glb_common_set[of "S" "propCmd (fst s)"] 
+      from 4 5 a1 GLB_constuct[of "S" "propCmd (fst s)"] 
         show "\<exists>cs. \<Sqinter> S = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd (fst s)" by fast
     qed
   qed

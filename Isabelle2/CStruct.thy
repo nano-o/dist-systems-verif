@@ -2,16 +2,20 @@ theory CStruct
 imports Main "/home/nano/Documents/IO-Automata/Sequences"
 begin
 
-section {* Command Structures *}
+section {* A formalization of command ctructures (C-Structs)*}
 
-subsection {* The pre-CStruct locale *}
+text {* C-Structs were introduced by Leslie Lamport in \cite{Lamport05GeneralizeConsensus} 
+  for the definition of Generalized Consensus *}
+
+subsection {* The pre-CStruct locale fixes constants and makes some definitions that 
+  are used in the C-Struct locale to state the properties of C-Structs.*}
 
 locale pre_CStruct = Sequences +
   fixes \<delta>::"'a \<Rightarrow> 'c \<Rightarrow> 'a" (infix "\<bullet>" 65)
   and bot::'a ("\<bottom>")
 begin
 
-fun exec::"'a \<Rightarrow> 'c list \<Rightarrow> 'a" (infix "\<star>" 65) where 
+fun exec::"'a \<Rightarrow> 'c list \<Rightarrow> 'a" (infix "\<star>" 65) where
   "exec s Nil = s"
 | "exec s (rs#r) = (exec s rs) \<bullet> r"
 
@@ -43,12 +47,13 @@ definition sup  (infix "\<squnion>" 65) where
   "sup s1 s2 \<equiv> THE s . is_lub s s1 s2"
 
 definition compat2 where
+  -- {* Two c-structs are compatible when they have a common upper-bound. *}
   "compat2 s1 s2 \<equiv> \<exists> s3 . s1 \<preceq> s3 \<and> s2 \<preceq> s3"
 
 definition compat where
   "compat S \<equiv> \<forall> s1 \<in> S . \<forall> s2 \<in> S .compat2 s1 s2"
 
-subsection {* Useful Lemmas in the pre-CStruct locale *}
+subsection {* Lemmas in the pre-CStruct locale *}
 
 lemma exec_cons: 
   "s \<star> (rs # r)= (s \<star> rs) \<bullet> r" by simp
@@ -90,8 +95,7 @@ end
 
 subsection {* The CStruct locale *}
 
-text {* Properties of CStructs. Since we are only concerned about safety we may be able
-  to reduce the number of properties *}
+text {* Properties of CStructs *}
 
 locale CStruct = pre_CStruct +
   assumes antisym:"\<And> s1 s2 . s1 \<preceq> s2 \<and> s2 \<preceq> s1 \<Longrightarrow> s1 = s2"
@@ -125,9 +129,10 @@ proof -
       by (auto simp add:sup_def) (metis (lifting) assms theI)
 qed
 
-text {* CStructs form a partial order *}
+
 
 sublocale ordering less_eq less
+  -- {* CStructs form a partial order *}
 proof
   fix s
   show "s \<preceq> s"
@@ -178,8 +183,10 @@ next
 qed
 
 notation F ("\<Sqinter> _" [99])
+  -- {* The GLB of a set of c-structs. *}
 
-lemma glb_common_set:
+lemma GLB_constuct:
+  -- {* A direct consequence of glb_constuct*}
 fixes ss rset 
 assumes "finite ss"  and "ss \<noteq> {}"
 and "\<And> s . s \<in> ss \<Longrightarrow> \<exists> rs . s = \<bottom> \<star> rs \<and> set rs \<subseteq> rset"
@@ -209,13 +216,13 @@ next
     using 7 9 by blast
 qed
 
-lemma glb_common_set_obtains:
+lemma GLB_constuct_obtains:
 fixes ss rset 
 assumes "finite ss"  and "ss \<noteq> {}"
 and "\<And> s . s \<in> ss \<Longrightarrow> \<exists> rs . s = \<bottom> \<star> rs \<and> set rs \<subseteq> rset"
 obtains rs where "\<Sqinter> ss = \<bottom> \<star> rs" and "set rs \<subseteq> rset"
 proof -
-  from assms and glb_common_set
+  from assms and GLB_constuct
   have "\<exists> rs . \<Sqinter> ss = \<bottom> \<star> rs \<and> set rs \<subseteq> rset" by simp
   with that show thesis by metis 
 qed
