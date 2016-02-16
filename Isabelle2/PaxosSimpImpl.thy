@@ -89,11 +89,11 @@ fun send_1a where
 
 fun receive_1a where
   "receive_1a a (Phase1a l b) s =
-    (let bal = last_ballot s a in
+    (let bal = ballot s a in
       (if (bal = None \<or> ((the bal) < b))
        then
           (let 
-            to_send = (vote s a) \<bind> (\<lambda> v . bal \<bind> (\<lambda> b . Some (v, b)));
+            to_send = (vote s a) \<bind> (\<lambda> v . (last_ballot s a) \<bind> (\<lambda> b . Some (v, b)));
             msg_1b = Phase1b to_send b a;
             pack = Packet a l msg_1b in
           (s\<lparr>ballot := (ballot s)(a := Some b),
