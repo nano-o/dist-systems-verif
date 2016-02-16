@@ -79,19 +79,25 @@ fun next_ballot where
 
 fun send_1a where
   "send_1a a v s =
-    (let msg_1a = Phase1a a (next_ballot a (highest_seen s a) (card (acceptors s))) in
-      (s\<lparr>pending := (pending s)(a := Some v)\<rparr>, {Packet a b msg_1a | b . b \<in> (acceptors s)}))"
+    (let
+        next_bal = next_ballot a (highest_seen s a) (card (acceptors s));
+        msg_1a = Phase1a a next_bal in
+      (s\<lparr>pending := (pending s)(a := Some v),
+          highest_seen := (highest_seen s)(a := Some next_bal)\<rparr>,
+          {Packet a b msg_1a | b . b \<in> (acceptors s)}))"
 
 fun receive_1a where
-  "receive_1a a (Phase1a l b) s = 
+  "receive_1a a (Phase1a l b) s =
     (let bal = last_ballot s a in
-      (if (bal = None \<or> ((the bal) < b)) 
-       then 
+      (if (bal = None \<or> ((the bal) < b))
+       then
           (let 
             to_send = (vote s a) \<bind> (\<lambda> v . bal \<bind> (\<lambda> b . Some (v, b)));
             msg_1b = Phase1b to_send b a;
             pack = Packet a l msg_1b in
-          (s\<lparr>ballot := (ballot s)(a := Some b)\<rparr>, {pack}))
+          (s\<lparr>ballot := (ballot s)(a := Some b),
+            highest_seen := (highest_seen s)(a := Some b)\<rparr>, 
+              {pack}))
        else (s,{})))"
 | "receive_1a a _ s = (s,{})"
 
@@ -102,8 +108,8 @@ fun receive_1b where
     then (
       (let new_onebs = (a2, last_v) # (onebs s a)(the (ballot s a));
            suggestion = (case (highest_voted a new_bal s) of None \<Rightarrow> the (pending s a) | Some v \<Rightarrow> v);
-           msgs = 
-           (if (2 * length new_onebs > N) 
+           msgs =
+           (if (2 * length new_onebs > N)
             then {Packet a a2 (Phase2a new_bal suggestion a) | a2 . a2 \<in> acceptors s}
             else {});
            new_state = s\<lparr>
@@ -113,11 +119,12 @@ fun receive_1b where
     else (s,{}))"
 | "receive_1b a _ s N = (s, {})"
 
-fun receive_2a where 
-  "receive_2a a (Phase2a b v l) s = 
+fun receive_2a where
+  "receive_2a a (Phase2a b v l) s =
     (let bal = (ballot s a) in
       (if (bal = Some b)
-      then (s\<lparr>vote := (vote s)(a := Some v)\<rparr>, {Packet a l (Phase2b b a)})
+      then (s\<lparr>vote := (vote s)(a := Some v), 
+              last_ballot := (last_ballot s)(a := bal)\<rparr>, {Packet a l (Phase2b b a)})
       else (s, {})))"
 | "receive_2a a _ s = (s, {})"
 
@@ -138,7 +145,25 @@ fun receive_2b where
         s)
     in (s,{}))"
 | "receive_2b a _ s N = (s, {})"
-      
+
+inductive reachable :: "nat set \<Rightarrow> (nat,nat) pimp_state \<times> (nat,nat)packet set \<Rightarrow> bool" for replicas where
+  "reachable replicas ((init_state replicas),{})"
+| "\<lbrakk>reachable replicas (s,n); (t,n') = (send_1a a v s)\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
+| "\<lbrakk>reachable replicas (s,n); p \<in> n; dst p = l; (t,n') = receive_1a l (msg p) s\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
+| "\<lbrakk>reachable replicas (s,n); p \<in> n; dst p = a; (t,n') = receive_1b a (msg p) s (card replicas)\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
+| "\<lbrakk>reachable replicas (s,n); p \<in> n; dst p = a; (t,n') = receive_2a a (msg p) s\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
+| "\<lbrakk>reachable replicas (s,n); p \<in> n; dst p = a; (t,n') = receive_2b a (msg p) s (card replicas)\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
+
+(* definition decided where
+  "decided s v \<equiv> \<exists> q . q \<subseteq> acceptors s \<and> card q \<ge> (card (acceptors s) div 2) \<and> \<exists> b . \<forall> a \<in> q . " *)
+
+definition decided where   
+  "decided s v \<equiv> \<exists> a \<in> acceptors s . pimp_state.decided s a = v"
+
+lemma 
+  "reachable {0,1} (x,y) \<Longrightarrow> \<forall> v1 v2 . decided x v1 \<and> decided x v2 \<longrightarrow> v1 = v2" (*nitpick[card nat=2,show_all]*)
+oops
+
 export_code send_1a receive_1a receive_1b receive_2a receive_2b init_state in Scala file "simplePaxos.scala"
 
 end
