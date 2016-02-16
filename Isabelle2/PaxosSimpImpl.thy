@@ -61,8 +61,9 @@ definition highest_voted where
     let received = onebs s a b; 
         filtered = map snd received;
         max_pair = (\<lambda> x y . if (snd x > snd y) then x else y);
-        max_pairo = (\<lambda> x y . f_opt x y max_pair)
-    in case (fold max_pairo filtered (hd filtered)) of None \<Rightarrow> None | Some (v,b) \<Rightarrow> Some v"
+        max_pairo = (\<lambda> x y . f_opt x y max_pair);
+        init_val = (if filtered = [] then None else (hd filtered))
+    in case (fold max_pairo filtered init_val) of None \<Rightarrow> None | Some (v,b) \<Rightarrow> Some v"
 
 value "let received = [(3,Some (1,5)),(10, Some (3,(40::nat)))];
         filtered = map snd received;
