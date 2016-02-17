@@ -1,10 +1,15 @@
 theory MultiPaxos
-imports Main  "~~/src/HOL/Library/Monad_Syntax"
+imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat"
 begin
+
+text {* We assume reliable channels (TCP) *}
 
 datatype ('v,'a,'b) msg =
   Phase1a (leader: 'a) (ballot:'b)
-| Phase1b (last_vote:"nat \<Rightarrow> ('v \<times> nat) option") (new_ballot: 'b) (acceptor:'a)
+| Phase1b (last_vote:"('v \<times> 'b) option list") (new_ballot: 'b) (acceptor:'a)
+  -- {* last_vote contains the list of all instances in which the sender has participated, 
+    along with what it voted and in which ballot. The intended meaning is also that the acceptor 
+    did not participate in any instance numbered greater than the length of the list. *}
 | Phase2a (inst: nat) (for_ballot:'b) (suggestion:'v) (leader: 'a)
 | Phase2b (inst: nat) (ballot:'b) (acceptor: 'a)
 | Vote (inst: nat) (val: 'v)
@@ -15,6 +20,9 @@ datatype ('v,'a,'b) msg =
 datatype ('v,'a,'b)  packet =
   -- {* A message with sender/destination information *}
   Packet (sender: 'a) (dst: 'a) (msg: "('v,'a,'b) msg")
+
+datatype 'v Safe = NoneSafe | Safe (the_safe: 'v) | All
+  -- {* Describes which values are safe *}
 
 record ('v,'a,'b) mp_state =
   acceptors :: "'a set"
@@ -38,8 +46,9 @@ record ('v,'a,'b) mp_state =
       this is the list of all the 2b messages receive by a in b *}
   decided :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
     -- {* For an acceptor a, this is Some v if a has decided v in some ballot *}
-  nxt_instance :: "'a \<Rightarrow> nat"
+  highest_instance :: "'a \<Rightarrow> nat"
     -- {* When a is a leader, the next instance to use. *}
+  safe :: "'a \<Rightarrow> nat \<Rightarrow> 'b \<Rightarrow> 'v Safe"
 
 definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
   "init_state accs \<equiv> \<lparr>
@@ -52,7 +61,8 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
     pending = (\<lambda> a . \<lambda> i . None),
     twobs = (\<lambda> a . \<lambda> i . \<lambda> b . []),
     decided = (\<lambda> a . \<lambda> i . None),
-    nxt_instance = (\<lambda> a . 0)\<rparr>"
+    highest_instance = (\<lambda> a . 0),
+    safe = (\<lambda> a . \<lambda> i . \<lambda> b . NoneSafe)\<rparr>"
 
 definition one_b_quorum where
   "one_b_quorum a i b s \<equiv> 2 * length (onebs s a i b) > card (acceptors s)"
@@ -103,8 +113,9 @@ definition leader where
     (b mod (nr s))"
 
 definition propose where 
-  -- {* If leader, then go ahead with 2a, otherwise forward to the leader. TODO: how to choose an instance? 
-    Maintain a list of available instances? or maybe just a variable last_instance will suffice. 
+  -- {* If leader, then go ahead with 2a, otherwise forward to the leader.
+    TODO: how to choose an instance?
+    Maintain a list of available instances? or maybe just a variable last_instance will suffice.
     How to record the pending command? *}
   "propose a v s \<equiv>
     (if (leader s (ballot s a) = a)
@@ -115,20 +126,23 @@ fun send_1a where
   -- {* a tries to become the leader *}
   "send_1a a s =
     (let
-        next_bal = nx_bal a (highest_seen s a) (card (acceptors s));
-        msg_1a = Phase1a a next_bal in
-      (s\<lparr>pending := (pending s)(i := (pending s i)(a := Some v)),
-          highest_seen := (highest_seen s)(a := Some next_bal)\<rparr>,
-          {Packet a b msg_1a | b . b \<in> (acceptors s)}))"
+        b = nx_bal a (highest_seen s a) (card (acceptors s));
+        msg_1a = Phase1a a b in
+      (s\<lparr>highest_seen := (highest_seen s)(a := Some b)\<rparr>,
+          {Packet a a2 msg_1a | a2 . a2 \<in> (acceptors s)}))"
 
 fun receive_1a where
+  -- {* Upon receiving a 1a message for a higher ballot, send a list containing the highest 
+    vote cast in every instance the acceptor participated in. *}
   "receive_1a a (Phase1a l b) s =
     (let bal = ballot s a in
       (if (bal = None \<or> ((the bal) < b))
        then
           (let
-            to_send = (\<lambda> i . (vote s a i) \<bind> (\<lambda> v . bal \<bind> (\<lambda> b . Some (v, b))));
-            msg_1b = Phase1b to_send b a;
+            is = [0..(int (highest_instance s a))];
+            get_vote = (\<lambda> i . (vote s i a) \<bind> (\<lambda> v . (last_ballot s a i) \<bind> (\<lambda> b . Some (v, b))));
+            votes = [get_vote v . v \<leftarrow> map nat is];
+            msg_1b = Phase1b votes b a;
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := (ballot s)(a := Some b),
                       highest_seen := (highest_seen s)(a := Some b)\<rparr>
@@ -137,13 +151,10 @@ fun receive_1a where
        else (s,{})))"
 | "receive_1a a _ s = (s,{})"
 
-definition test where "test \<equiv> (\<lambda> i . 0::nat)"
-
-export_code test in Scala file "test.scala"
-
-
-text {* Let's assume that we are using TCP, and therefore have no duplicates *}
 fun receive_1b where
+  -- {* Upon receiving a quorum of 1b messages, update the "safe" variable, then complete all 
+    pending instances. If the leader is restricted to start a new instance only when the previous 
+    has finished, then there should be at most one pending instance to complete. *}
  "receive_1b a (Phase1b last_vs new_bal a2) s N = (
     if (new_bal = the (ballot s a))
     then (

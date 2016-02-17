@@ -121,10 +121,11 @@ fun receive_1b where
 | "receive_1b a _ s N = (s, {})"
 
 fun receive_2a where
+  -- {* Here we could use "the bal \<le> Some b" instead, and update ballot if "the bal < Some b" *}
   "receive_2a a (Phase2a b v l) s =
     (let bal = (ballot s a) in
-      (if (bal = Some b)
-      then (s\<lparr>vote := (vote s)(a := Some v), 
+      (if (bal = Some b) 
+      then (s\<lparr>vote := (vote s)(a := Some v),
               last_ballot := (last_ballot s)(a := bal)\<rparr>, {Packet a l (Phase2b b a)})
       else (s, {})))"
 | "receive_2a a _ s = (s, {})"
