@@ -33,7 +33,7 @@ record ('v, 'a, 'b) mp_state =
     -- {* The last vote cast by an acceptor *}
   last_ballot :: "'a \<Rightarrow> nat \<Rightarrow> 'b option"
     -- {* For an acceptor a, this is the ballot in which "vote a" was cast *}
-  onebs :: "'a \<Rightarrow> ('b \<Rightarrow> ('a \<times> ('v \<times> 'b) option) list) list"
+  onebs :: "'a \<Rightarrow> 'b \<Rightarrow> (('a \<times> ('v \<times> 'b) option) list) list option"
     -- {* For an acceptor a and a ballot b, 
       this is the list of all the 1b messages receive by a in b *}
   twobs :: "'a \<Rightarrow> ('b \<Rightarrow> 'a list) list"
@@ -51,14 +51,19 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
     ballot = (\<lambda> a . None),
     vote = (\<lambda> a . \<lambda> i . None),
     last_ballot = (\<lambda> a . \<lambda> i . None),
-    onebs = (\<lambda> a . []),
+    onebs = (\<lambda> a . \<lambda> b . None),
     twobs = (\<lambda> a .[]),
     decided = (\<lambda> a . \<lambda> i . None),
     highest_instance = (\<lambda> a . 0),
     lowest_instance = (\<lambda> a . 0)\<rparr>"
 
+definition nr where
+  "nr s \<equiv> card (acceptors s)"
+
 definition one_b_quorum where
-  "one_b_quorum a i b s \<equiv> 2 * length (((onebs s a)!i) b) > card (acceptors s)"
+  "one_b_quorum a i b s \<equiv> 
+    case onebs s a b of None \<Rightarrow> False 
+    | Some l \<Rightarrow> 2 * length (l!i) > nr s"
 
 definition map_opt where
   "map_opt ao bo f \<equiv> ao \<bind> (\<lambda> a . bo \<bind> (\<lambda> b . Some (f a b)))"
@@ -70,9 +75,9 @@ definition max_opt where
     Some a \<Rightarrow> (case bo of None \<Rightarrow> Some a | Some b \<Rightarrow> Some (f a b)))"
 
 definition highest_voted where
-  "highest_voted a i b s \<equiv>
-    let received = ((onebs s a)!i) b; 
-        filtered = map snd received;
+  "highest_voted l \<equiv>
+    let 
+        filtered = map snd l;
         max_pair = (\<lambda> x y . if (snd x > snd y) then x else y);
         max_pairo = (\<lambda> x y . max_opt x y max_pair);
         init_val = (if filtered = [] then None else (hd filtered))
@@ -97,9 +102,6 @@ definition one_a_msgs where
       next_bal = nx_bal a (ballot s a) (card (acceptors s));
       msg_1a = Phase1a a next_bal 
     in {Packet a b msg_1a | b . b \<in> (acceptors s)}"
-
-definition nr where
-  "nr s \<equiv> card (acceptors s)"
 
 definition leader where
   "leader s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow> 
@@ -133,7 +135,7 @@ fun receive_1a where
           (let
             is = case bal of None \<Rightarrow> [] | Some b \<Rightarrow>  [0..(int b)];
             get_vote = (\<lambda> i . (vote s i a) \<bind> (\<lambda> v . (last_ballot s a i) \<bind> (\<lambda> b . Some (v, b))));
-            votes = [get_vote v . v \<leftarrow> map nat is];
+            votes = [get_vote (nat i) . i \<leftarrow> is];
             msg_1b = Phase1b votes b a;
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := (ballot s)(a := Some b)\<rparr>
@@ -142,56 +144,55 @@ fun receive_1a where
        else (s,{})))"
 | "receive_1a a _ s = (s,{})"
 
+value "None \<bind> (\<lambda> v . Some (v+1))"
+
 definition update_onebs where 
   -- {* Update the list of highest voted values when receiving a onebs 
     message from a2 for ballot bal containing last_vs*}
   "update_onebs s a bal a2 last_vs \<equiv>
     let 
-      is = if last_vs = [] then [] else [0..(int (length last_vs)-1)];
-      update = \<lambda> i . \<lambda> b . 
-        if (b = bal) 
-        then (a2, (last_vs!i)) # (((onebs s a)!i) bal)
-        else ((onebs s a)!i) b;
-      onebs_a = [update (nat i) . i  \<leftarrow> is]  in
-    s\<lparr>onebs := (onebs s)(a := onebs_a)\<rparr>"
+      is = if last_vs = [] then [] else [1..(int (length last_vs))];
+      for_i = \<lambda> i . 
+        let l = case (onebs s a bal) of None \<Rightarrow> [] | Some l' \<Rightarrow> l';
+            old = if (length l \<ge> i) then l!i else [] 
+        in 
+          (a2,(last_vs!i)) # old;
+      new = [for_i (nat i) . i \<leftarrow> is]
+    in
+      s\<lparr>onebs := (onebs s)(a := (onebs s a)(bal := Some new))\<rparr>"
 
-fun max_inst where
-  "max_inst [] = None"
-| "max_inst x#xs = "
+fun add_index where
+  "add_index [] _ = []"
+| "add_index (x#xs) n = (x,n)#(add_index xs (n-1))"
 
-definition max_instance where
-  "max_instance s a b \<equiv>
-    "
+definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 . a2 \<in> acceptors s}"
+
+definition fold_union where "fold_union l \<equiv> (fold (\<lambda> x y . x \<union> y) l {})"
 
 fun receive_1b where
+  -- {* TODO: if we have no value for an instance, for now we leave it uncomplete. *}
  "receive_1b a (Phase1b last_vs new_bal a2) s = (
     if (new_bal = the (ballot s a))
     then (
-      (let msgs = {};
-           new_state = update_onebs s a new_bal a2 last_vs
+      (let 
+           new_state = update_onebs s a new_bal a2 last_vs;
+           onebs' = onebs s a new_bal;
+           quorum_received = 2 * length (the onebs') > nr s;
+           msgs = 
+            if (quorum_received)
+            then 
+              let
+                received = the (onebs s a new_bal);
+                safe = add_index [highest_voted l . l \<leftarrow> received] 1;
+                msg = (* Here we don't have anything to propose in case opt is None *)
+                  (\<lambda> (opt,i) . (case opt of None \<Rightarrow> None | Some v \<Rightarrow> Some (Phase2a i new_bal v a)));
+                msgs = 
+                  [(case (msg x) of None \<Rightarrow> {} | Some m \<Rightarrow> send_all s a m) . x \<leftarrow> safe ]
+              in fold_union msgs
+            else {}
        in (new_state, msgs)))
     else (s,{}))"
 | "receive_1b a _ s = (s, {})"
-
-fun receive_1b where
-  -- {* Upon receiving a quorum of 1b messages, update the "safe" variable, then complete all 
-    pending instances. If the leader is restricted to start a new instance only when the previous 
-    has finished, then there should be at most one pending instance to complete. *}
- "receive_1b a (Phase1b last_vs new_bal a2) s = (
-    if (new_bal = the (ballot s a))
-    then (
-      (let new_onebs = (\<lambda> i . (a2, (last_vs!i)) # (onebs s a i (the (ballot s a))));
-           suggestion = (case (highest_voted a i new_bal s) of None \<Rightarrow> the (pending s a i) | Some v \<Rightarrow> v);
-           msgs =                              
-           (if (2 * length new_onebs > N)
-            then {Packet a a2 (Phase2a  new_bal suggestion a (highest_instance s a)) | a2 . a2 \<in> acceptors s}
-            else {});
-           new_state = s\<lparr>
-            onebs := (onebs s)(a := ((onebs s a)(the (ballot s a) := new_onebs))),
-            pending := (pending s)(a := (\<lambda>v. Some suggestion))\<rparr>
-       in (new_state, msgs)))
-    else (s,{}))"
-| "receive_1b a _ s N = (s, {})"
 
 fun receive_2a where
   "receive_2a a (Phase2a b v l) s =
@@ -220,28 +221,6 @@ fun receive_2b where
     in (s,{}))"
 | "receive_2b a _ s N = (s, {})"
 
-inductive reachable :: "nat set \<Rightarrow> (nat,nat) mp_state \<times> (nat,nat)packet set \<Rightarrow> bool" for replicas where
-  "reachable replicas ((init_state replicas),{})"
-| "\<lbrakk>reachable replicas (s,n); (t,n') = (send_1a a v s)\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
-| "\<lbrakk>reachable replicas (s,n); p \<in> n; dst p = l; (t,n') = receive_1a l (msg p) s\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
-| "\<lbrakk>reachable replicas (s,n); p \<in> n; dst p = a; (t,n') = receive_1b a (msg p) s (card replicas)\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
-| "\<lbrakk>reachable replicas (s,n); p \<in> n; dst p = a; (t,n') = receive_2a a (msg p) s\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
-| "\<lbrakk>reachable replicas (s,n); p \<in> n; dst p = a; (t,n') = receive_2b a (msg p) s (card replicas)\<rbrakk> \<Longrightarrow> reachable replicas (t,n \<union> n')" 
-
-(* definition decided where
-  "decided s v \<equiv> \<exists> q . q \<subseteq> acceptors s \<and> card q \<ge> (card (acceptors s) div 2) \<and> \<exists> b . \<forall> a \<in> q . " *)
-
-definition decided where
-  "decided s v \<equiv> \<exists> a \<in> acceptors s . mp_state.decided s a = v"
-
-lemma
-  "reachable {0,1} (x,y) \<Longrightarrow> \<forall> v1 v2 . decided x v1 \<and> decided x v2 \<longrightarrow> v1 = v2" 
-    nitpick[card nat=2, show_all, timeout=300, verbose,
-      card "nat list" = 5, card "(nat \<times> nat) option list" = 25, card "(nat \<times> (nat \<times> nat) option) list" = 25, card "nat option" = 3, card "(nat \<times> nat) option" = 25,
-    card "(nat, nat) mp_state \<times> (nat, nat) packet set" = 1000, card "(nat, nat) msg" = 100, card unit = 1, card "(nat, nat) packet" = 100, card "(nat, nat) mp_state" = 100, iter reachable = 1, 
-    bits = 1]
-oops
-
-export_code send_1a receive_1a receive_1b receive_2a receive_2b init_state in Scala file "simplePaxos.scala"
+export_code send_1a receive_1a receive_1b  init_state in Scala file "simplePaxos.scala"
 
 end
