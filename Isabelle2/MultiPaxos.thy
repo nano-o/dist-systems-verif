@@ -132,14 +132,14 @@ fun receive_1a where
        then
           (let
             is = case bal of None \<Rightarrow> [] | Some b \<Rightarrow>  [0..(int b)];
-            get_vote = (\<lambda> i . (vote s i a) \<bind> (\<lambda> v . (last_ballot s a i) \<bind> (\<lambda> b . Some (v, b))));
+            get_vote = (\<lambda> i . (vote s i a) \<bind> (\<lambda> v . (last_ballot s a i)  \<bind> (\<lambda> b . Some (v, b))));
             votes = [get_vote v . v \<leftarrow> map nat is];
             msg_1b = Phase1b votes b a;
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := (ballot s)(a := Some b)\<rparr>
           in
           (state, {packet}))
-       else (s,{})))"
+       else (s,{})))"                                                        
 | "receive_1a a _ s = (s,{})"
 
 definition update_onebs where 

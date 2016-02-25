@@ -1,6 +1,6 @@
 theory Paxos
-imports "/home/nano/Documents/IO-Automata/IOA"  "~~/src/HOL/Eisbach/Eisbach_Tools" 
-  "/home/nano/Documents/IO-Automata/Simulations" "~~/src/HOL/Library/Monad_Syntax"
+imports "../../IO-Automata/IOA"  "~~/src/HOL/Eisbach/Eisbach_Tools" 
+  "../../IO-Automata/Simulations" "~~/src/HOL/Library/Monad_Syntax"
 begin
 
 class wellorder_bot = wellorder + bot +
