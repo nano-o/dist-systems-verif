@@ -117,8 +117,8 @@ definition well_formed where
 lemma "safe_at r v (bot::'b::wellorder_bot)"
 by (auto simp add:safe_at_def)
 
-lemma
-  assumes "chosen_at r v (b::nat)"
+lemma chosen_at_is_choosable:
+  assumes "chosen_at r v b"
   shows "choosable r v b" using assms
   by (auto simp add:chosen_at_def choosable_def) (smt option.case_eq_if)
 
@@ -127,11 +127,17 @@ lemma safe_at_prec:
   shows "safe_at r v b2"
   using assms by (meson order.strict_trans safe_at_def)
 
+lemma quorum_inter_witness:
+  assumes "q1 \<in> quorums" and "q2 \<in> quorums"
+  obtains a where "a \<in> q1" and "a \<in> q2"
+  using assms Paxos_axioms Paxos_def
+by (metis disjoint_iff_not_equal)
+
 lemma quorum_vote:
   assumes "q1 \<in> quorums" and "q2 \<in> quorums"
   and "\<And> a . a \<in> q1 \<Longrightarrow> vote r a b = Some v1"
   and "\<And> a . a \<in> q2 \<Longrightarrow> vote r a b = Some v2"
-  shows "v1 = v2" 
+  shows "v1 = v2"
 proof -
   obtain a where "a \<in> q1" and "a \<in> q2"
   proof -
@@ -149,134 +155,46 @@ lemma chosen_at_same:
   shows "v1 = v2" using quorum_vote assms
   by (auto simp add:chosen_at_def) fast
 
-lemma 
+lemma
   assumes "\<And> (v::'v) . choosable r v b"
   and "safe_at r v (Suc b)" and "(v1::'v) \<noteq> v2"
   shows False using assms 
-  by (auto simp add:safe_at_def)(metis lessI) 
+  by (auto simp add:safe_at_def)(metis lessI)
 
-lemma
-  assumes "safe_at (r::('v, 'acc, nat)p_state) v b" and "(v1::'v) \<noteq> v2" and "b \<noteq> 0"
-  shows "\<exists> q \<in> quorums . \<forall> a \<in> q . case ballot r a of None \<Rightarrow> False | Some b2 \<Rightarrow> b2 \<ge> b"
-  using assms
-  proof(induct b)
-    case 0 thus ?case by auto
-  next
-    case (Suc b)
-    assume "b \<noteq> 0"
-    obtain q where "q \<in> quorums" and "\<And> a . a \<in> q \<Longrightarrow> case ballot r a of None \<Rightarrow> False | Some b2 \<Rightarrow> b2 \<ge> b"
-      using Suc.hyps Suc.prems(2,3)
-    by auto (metis (full_types) Suc.hyps Suc.prems(1) \<open>b \<noteq> 0\<close> lessI safe_at_prec)
-    assume "case ballot r a of None \<Rightarrow> False | Some b2 \<Rightarrow> b2 = b" if "a \<in> q" for a
-    hence "choosable r v b" for v
-      by (smt Suc_leI Suc_n_not_le_n \<open>q \<in> quorums\<close> choosable_def option.case_eq_if)
-    hence False using Suc.prems(1)
-      by (auto simp add:safe_at_def) (metis assms(2) lessI)
-    oops
-    
-lemma
-  fixes v b v1 v2 r
-  assumes "safe_at (r::('v, 'acc, nat)p_state) v (Suc b)" and "(v1::'v) \<noteq> v2"
-  obtains q co where
-  "q \<in> quorums" and "\<And> a . a \<in> q \<Longrightarrow> case ballot r a of None \<Rightarrow> False | Some b2 \<Rightarrow> b2 \<ge> Suc b"
-  and "case co of None \<Rightarrow> True | Some c \<Rightarrow> (
-    c \<le> b 
-    \<and> safe_at r v c
-    \<and> (\<forall> a \<in> q . (case vote r a c of None \<Rightarrow> True | Some v2 \<Rightarrow> v2 = v))
-    \<and> (\<forall> a \<in> q . \<forall> d . (d > c \<and> d \<le> b) \<longrightarrow> vote r a d = None))"
-  and "\<And> d a . \<lbrakk>d \<ge> (case co of None \<Rightarrow> (0::nat) | Some c \<Rightarrow> Suc c); d \<le> b; a \<in> q\<rbrakk> \<Longrightarrow> vote r a d = None"
-    nitpick[card 'acc=1, card 'l = 1, card 'v=2, show_all, card "'x option"=50,
-      card nat = 2, show_all]
-
-lemma safe1:
-  assumes "safe (r::('v, 'acc, nat)p_state)"
-  and "chosen_at r v1 b1" and "chosen_at r v2 b2"
-  and "b1 \<le> b2"
-  shows "v1 = v2" using assms
-proof (induct b2) print_cases
-  case 0 
-  from "0.prems"(2-4) show ?case using quorum_vote
-  by (auto simp add:chosen_at_def) fast
-next
-  case (Suc b2)
-  { assume "b1 = Suc b2"
-    hence ?thesis using Suc.hyps Suc.prems chosen_at_same by metis }
+lemma safe_is_safe:
+  assumes "safe r" and "chosen r v\<^sub>1" and "chosen r v\<^sub>2"
+  shows "v\<^sub>1 = v\<^sub>2"
+  -- {* This follows the proof of Proposition 1 from "Generalized Consensus and Paxos" *}
+proof -
+  text {* The main argument as a lemma to avoid repetitions*}
+  { fix b\<^sub>1 b\<^sub>2 v\<^sub>1 v\<^sub>2
+    assume 1:"chosen_at r v\<^sub>1 b\<^sub>1" and 2:"chosen_at r v\<^sub>2 b\<^sub>2"
+    with this obtain q\<^sub>1 and q\<^sub>2 where 3:"\<And> a . a \<in> q\<^sub>1 \<Longrightarrow> (vote r) a b\<^sub>1 = (Some v\<^sub>1)" 
+    and 4:"\<And> a . a \<in> q\<^sub>2 \<Longrightarrow> (vote r) a b\<^sub>2 = (Some v\<^sub>2)" and 5:"q\<^sub>1 \<in> quorums" and 6:"q\<^sub>2 \<in> quorums"
+    by (auto simp add:chosen_at_def)
+    have "v\<^sub>1 = v\<^sub>2" if "b\<^sub>1 < b\<^sub>2"
+    proof -
+      have 9:"choosable r v\<^sub>1 b\<^sub>1" using 1 chosen_at_is_choosable by fast
+      have 10:"safe_at r v\<^sub>2 b\<^sub>2"
+      proof -
+        obtain a where "a \<in> q\<^sub>2" using 6 by (metis quorum_inter_witness)
+        with this assms(1) 4 6 have "safe_at r (the (vote r a b\<^sub>2)) b\<^sub>2"
+          by (metis Paxos_axioms Paxos_def option.discI safe_def subsetCE)
+        moreover have "the (vote r a b\<^sub>2) = v\<^sub>2" using `a \<in> q\<^sub>2` 4 by force
+        ultimately show ?thesis by auto
+      qed
+      thus ?thesis using 9 10 assms(1) that by (metis safe_at_def)
+    qed }
+  note main = this
+  obtain b\<^sub>1 and b\<^sub>2 where 1:"chosen_at r v\<^sub>1 b\<^sub>1" and 2:"chosen_at r v\<^sub>2 b\<^sub>2" using assms(2,3)
+  by (auto simp add:chosen_def)
+  have ?thesis if "b\<^sub>1 = b\<^sub>2" by (metis "1" "2" chosen_at_same that)
   moreover
-  { assume "b1 \<le> b2"
-    hence ?thesis sorry }
-  ultimately show ?thesis by (metis Suc.prems(4) le_SucE) 
+  have ?thesis if "b\<^sub>1 < b\<^sub>2" using main 1 2 that by blast
+  moreover 
+  have ?thesis if "b\<^sub>2 < b\<^sub>1" using main 1 2 that by blast
+  ultimately show ?thesis by fastforce
 qed
-
-lemma safe:
-  assumes "safe (r::('v, 'acc, nat)p_state)"
-  and "chosen r v1" and "chosen r v2"
-  shows "v1 = v2" 
-proof -
-  obtain b1 b2 where b1:"chosen_at r v1 b1"
-  and b2:"chosen_at r v2 b2" using assms(2,3) 
-    by (auto simp add:chosen_def)
-  have ?thesis if "b1 \<le> b2" using safe1 assms(1) b1 b2 that by metis
-  moreover
-  have ?thesis if "b2 \<le> b1" using safe1 assms(1) b1 b2 that by metis
-  ultimately show ?thesis by linarith
-qed
-  
-  
-  
-(* 
-lemma 
-  assumes "safe_at r (v::'v) (b::nat)" and "v1 \<noteq> (v2::'v)"
-  obtains 
-    "b = 0"
-  | Q where "Q \<in> quorums"
-    and "\<And> a . a \<in> Q \<Longrightarrow> ballot r a \<noteq> None" 
-proof -
-  { assume "b \<noteq> 0"
-    { assume "\<And> Q . Q \<in> quorums \<Longrightarrow> (\<And> a . a \<in> Q \<Longrightarrow> ballot r a = None)"
-      hence "\<And> v . choosable r v b" using Paxos_axioms by (auto simp add:choosable_def Paxos_def)
-      with assms and `b \<noteq> 0` have False apply (auto simp add:safe_at_def choosable_def)  }
-    hence "\<exists> Q "
-  thus ?thesis using that 
-    
-
-lemma 
-  assumes "safe_at r v (b::nat)"
-  obtains 
-    "b = bot"
-  | Q where "Q \<in> quorums"
-    and "\<And> a . a \<in> Q \<Longrightarrow> ballot r a \<noteq> None \<and> the (ballot r a) \<ge> b" 
-proof -
-  { assume notbot:"b \<noteq> bot"
-    assume "\<And> Q \<in> quorums . \<forall> a \<in> Q . ballot r a \<noteq> None \<and> the (ballot r a) \<ge> b"
-    have "\<exists> Q \<in> quorums . \<forall> a \<in> Q . ballot r a \<noteq> None \<and> the (ballot r a) \<ge> b"
-    
-    }
-  
-  { assume "b \<noteq> bot"
-    hence "\<exists> Q \<in> quorums . \<forall> a \<in> Q . ballot r a \<noteq> None \<and> the (ballot r a) \<ge> b"
-      using assms
-      apply (induct b)
-      subgoal by (simp add:safe_at_def)
-      apply (simp add:safe_at_def choosable_def) 
-    }
-  with that show ?thesis (*by blast*)
-qed
-  
-  
-lemma 
-  assumes "safe_at r v (b::'b::wellorder_bot)"
-  obtains 
-    "b = bot"
-  | Q where "Q \<in> quorums"
-    and "\<And> a . a \<in> Q \<Longrightarrow> ballot r a \<noteq> None \<and> the (ballot r a) \<ge> b"
-  (*nitpick[card 'a = 2, card 'acc = 1, card 'b = 4]*)
-
-lemma 
-  assumes "well_formed r" and "safe r"
-  and "chosen r v1" and "chosen r v2"
-  shows "v1 = v2" (*nitpick[card 'a = 2, card 'acc = 3, card 'b = 4]*)
-  oops    
- *)
  
 (* 
 fun p_trans_fun  where
@@ -303,7 +221,6 @@ begin
 
 fun next_ballot where
   "next_ballot a (hs::nat) = ((div_op hs (card acceptors) + 1) * (card acceptors) + (rep_num a))"
-
 
 end
   

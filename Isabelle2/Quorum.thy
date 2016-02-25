@@ -1,6 +1,6 @@
 theory Quorum
 imports ComposableGC  "~~/src/HOL/Eisbach/Eisbach_Tools" 
-  "/home/nano/Documents/IO-Automata/Simulations"
+  "../../IO-Automata/Simulations"
 begin
 
 datatype ('a,'c,'l) q_action =

@@ -3,7 +3,7 @@ imports Main  "~~/src/HOL/Library/Monad_Syntax"
 begin
 
 datatype ('v,'a) msg =
-  Phase1a (leader: 'a) (ballot:nat)
+  Phase1a (leader: 'a) (ballot: nat)
 | Phase1b (last_vote:"('v \<times> nat) option") (new_ballot: nat) (acceptor:'a)
 | Phase2a (for_ballot:nat) (suggestion:'v) (leader: 'a)
 | Phase2b (ballot:nat) (acceptor: 'a)
@@ -164,7 +164,8 @@ definition decided where
 
 lemma 
   "reachable {0,1} (x,y) \<Longrightarrow> \<forall> v1 v2 . decided x v1 \<and> decided x v2 \<longrightarrow> v1 = v2" (*nitpick[card nat=2,show_all]*)
-oops
+proof
+  
 
 export_code send_1a receive_1a receive_1b receive_2a receive_2b init_state in Scala file "simplePaxos.scala"
 
