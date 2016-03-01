@@ -1,5 +1,5 @@
 theory MultiPaxos
-imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat"
+imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat" Log
 begin
 
 text {* We assume reliable channels (TCP) *}
@@ -49,6 +49,7 @@ record ('v, 'a, 'b) mp_state =
   pending :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   (*lowest_instance :: "'a \<Rightarrow> nat"
     -- {* When a is a leader, the next instance to use. *}*)
+  log :: "'a \<Rightarrow> (nat \<times> 'v) list"
 
 definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
   "init_state accs \<equiv> \<lparr>
@@ -60,7 +61,9 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
     twobs = (\<lambda> a . \<lambda> i . \<lambda> b . []),
     decided = (\<lambda> a . \<lambda> i . None),
     highest_instance = (\<lambda> a . 0),
-    pending = (\<lambda> a . \<lambda> i . None)\<rparr>"
+    pending = (\<lambda> a . \<lambda> i . None),
+    log = ( \<lambda> a . [])
+    \<rparr> "
 
 definition nr where
   "nr s \<equiv> card (acceptors s)"
@@ -233,7 +236,8 @@ fun receive_2b where
           (if (2 * length new_twobs > card (acceptors s)) 
           then
             s\<lparr>twobs := (twobs s)(a := (twobs s a)(i := (twobs s a i)(b := new_twobs))),
-              decided := (decided s)(a := (decided s a)(i := pending s a i))\<rparr>
+              decided := (decided s)(a := (decided s a)(i := pending s a i)),
+              log := (log s)(a := distinct_Sorted_Insert (i, the (pending s a i)) (log s a)) \<rparr>
           else
             s\<lparr>twobs := (twobs s)(a := (twobs s a)(i := (twobs s a i)(b := new_twobs)))\<rparr>))
       else 
@@ -243,6 +247,6 @@ fun receive_2b where
 
 
 export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b receive_fwd 
-  in Scala file "simplePaxos.scala"
+  largestprefix in Scala file "simplePaxos.scala"
 
 end
