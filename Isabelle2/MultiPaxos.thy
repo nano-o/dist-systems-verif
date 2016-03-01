@@ -14,7 +14,7 @@ datatype ('v,'a,'b) msg =
 | Phase2a (inst: nat) (for_ballot:'b) (suggestion:'v) (leader: 'a)
 | Phase2b (inst: nat) (ballot:'b) (acceptor: 'a)
 | Vote (inst: nat) (val: 'v)
-  -- {* Instructs a learner that a value has been decided *}
+  -- {* Instructs a learner that a value has been decided. Not used for now... *}
 | Fwd (val: 'v)
   -- {* Forwards a proposal to another proposer (the leader) *}
 
@@ -46,6 +46,7 @@ record ('v, 'a, 'b) mp_state =
   decided :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
     -- {* For an acceptor a, this is Some v if a has decided v in some ballot *}
   highest_instance :: "'a \<Rightarrow> nat"
+  pending :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   (*lowest_instance :: "'a \<Rightarrow> nat"
     -- {* When a is a leader, the next instance to use. *}*)
 
@@ -58,7 +59,8 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
     onebs = (\<lambda> a . \<lambda> b . None),
     twobs = (\<lambda> a . \<lambda> i . \<lambda> b . []),
     decided = (\<lambda> a . \<lambda> i . None),
-    highest_instance = (\<lambda> a . 0)\<rparr>"
+    highest_instance = (\<lambda> a . 0),
+    pending = (\<lambda> a . \<lambda> i . None)\<rparr>"
 
 definition nr where
   "nr s \<equiv> card (acceptors s)"
@@ -117,15 +119,16 @@ definition leader where
 
 definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 . a2 \<in> acceptors s}"
 
-definition propose where 
+definition propose where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "propose (a::nat) v s \<equiv>
     (if (leader s (ballot s a) = a)
-      then 
-        (let 
+      then
+        (let
             inst = highest_instance s a + 1;
             msg = Phase2a inst (the (ballot s a)) v a;
-            new_state = s\<lparr>highest_instance := (highest_instance s)(a := inst)\<rparr>
+            new_state = s\<lparr>highest_instance := (highest_instance s)(a := inst),
+              pending := (pending s)(a := (pending s a)(inst := Some v))\<rparr>
         in
           (new_state, send_all s a msg))
       else (s, {Packet a (leader s (ballot s a)) (Fwd v)}))"
@@ -213,22 +216,22 @@ fun receive_2a where
 | "receive_2a a _ s = (s, {})"
 
 fun receive_2b where
-  "receive_2b a (Phase2b i b a2) s =
+  "receive_2b (a::'a) (Phase2b i b a2) s =
     (let s = 
       (if (decided s a i = None)
-      then 
+      then
         (let new_twobs = a2 # (twobs s a i b)
         in
           (if (2 * length new_twobs > card (acceptors s)) 
           then
             s\<lparr>twobs := (twobs s)(a := (twobs s a)(i := (twobs s a i)(b := new_twobs))),
-              decided := (decided s)(a := (decided s a)(i := Some (hd (twobs s a i b))))\<rparr>
+              decided := (decided s)(a := (decided s a)(i := pending s a i))\<rparr>
           else
             s\<lparr>twobs := (twobs s)(a := (twobs s a)(i := (twobs s a i)(b := new_twobs)))\<rparr>))
       else 
         s)
     in (s,{}))"
-| "receive_2b a _ s = (s, {})"
+| "receive_2b a _ s = (s, ({}::('v,'a,'d)packet set))"
 
 export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b in Scala file "simplePaxos.scala"
 
