@@ -146,8 +146,8 @@ definition safe where
     (let vote = (vote r) a b in (vote \<noteq> None \<longrightarrow> safe_at r (the vote) b))"
   
 definition well_formed where
-  "well_formed r \<equiv> \<forall> a . a |\<in>| acceptors \<longrightarrow> 
-    (\<forall> b . (ballot r) a < Some b  \<longrightarrow> (vote r) a b = None)"
+  "well_formed r \<equiv> \<forall> a b . a |\<in>| acceptors \<and> (ballot r) a < b  
+    \<longrightarrow> (vote r) a (the b) = None"
 
 lemma "safe_at r v (bot::'a::linorder_bot)"
 by (auto simp add:safe_at_def)
@@ -275,7 +275,7 @@ definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) |\<union>| {|c|}\<rparr>)"
 
 definition join_ballot where
-  "join_ballot a b s s' \<equiv> s' = s\<lparr>ballot := (ballot s)(a := b)\<rparr>"
+  "join_ballot a b s s' \<equiv> b > (ballot s a) \<and> s' = s\<lparr>ballot := (ballot s)(a := b)\<rparr>"
 
 definition start_ballot where
   "start_ballot b s s' \<equiv> suggestion s b = None \<and>
@@ -287,7 +287,7 @@ definition do_vote where
     bo \<noteq> None \<and> vote s a b = None \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(b := suggestion s b))\<rparr>"
 
 definition learn where
-  "learn l v s s' = chosen s v"
+  "learn l v s s' \<equiv> chosen s v \<and> s = s'"
 
 fun p_trans_fun  where
   "p_trans_fun r (Propose c) r' = propose c r r'"
@@ -300,6 +300,25 @@ definition p_trans where
 
 definition p_ioa where
   "p_ioa \<equiv> \<lparr>ioa.asig = p_asig, start = p_start, trans = p_trans\<rparr>"
+
+definition inv1 where
+  "inv1 s \<equiv> well_formed s"
+
+lemma gt_not_none:
+  "b\<^sub>1 < (b\<^sub>2::'a::linorder option) \<Longrightarrow> b\<^sub>2 \<noteq> None"
+by (metis less_def less_o.elims(2) option.discI)
+
+lemma
+  assumes "inv1 s" and "p_trans_fun s a s'"
+  shows "inv1 s'" using assms
+apply (induct rule:p_trans_fun.induct) 
+        subgoal by (auto simp add:inv1_def well_formed_def propose_def)
+      subgoal by (auto simp add:inv1_def well_formed_def join_ballot_def)
+    apply (auto simp add:inv1_def well_formed_def do_vote_def)
+    subgoal by (metis (no_types, lifting) fun_upd_apply gt_not_none neq_iff option.discI 
+      option.expand p_state.select_convs(2) p_state.select_convs(3) p_state.surjective p_state.update_convs(3))
+  subgoal by (auto simp add:inv1_def well_formed_def learn_def)
+done
 
 lemma 
   "\<lbrakk>reachable p_ioa s; chosen s v\<^sub>1; chosen s v\<^sub>2\<rbrakk> \<Longrightarrow> v\<^sub>1 = v\<^sub>2 " oops
