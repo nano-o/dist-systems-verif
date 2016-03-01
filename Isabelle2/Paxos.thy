@@ -8,13 +8,14 @@ begin
 datatype ('v,'acc,'l, 'b::linorder) p_action =
   Propose 'v
 | Learn 'v 'l
-| Vote 'v 'acc
+| Vote 'acc
 | JoinBallot 'b 'acc
 
 record ('v,'acc, 'b::linorder) p_state =
   propCmd :: "'v fset"
   ballot :: "'acc \<Rightarrow> 'b option"
   vote :: "'acc \<Rightarrow> 'b \<Rightarrow> 'v option"
+  suggestion :: "'b \<Rightarrow> 'v option"
 
 fun less_eq_o where 
   "less_eq_o None _ = True"
@@ -94,19 +95,6 @@ begin
 text {* If Nitpick can find a model then the assumptions are not contradictory *}
 lemma False nitpick oops
 
-definition p_asig where
-  "p_asig \<equiv> 
-    \<lparr> inputs = { a . \<exists> c . a = Propose c  },
-      outputs = { a . \<exists> v . \<exists> l . l |\<in>| learners \<and> a = Learn v l },
-      internals = {a . \<exists> v . \<exists> acc . acc |\<in>| acceptors \<and> a = Vote v acc} 
-        \<union> {a . \<exists> b . \<exists> acc . acc |\<in>| acceptors \<and> a = JoinBallot b acc}\<rparr>"
-
-definition p_start where
-  "p_start \<equiv> {\<lparr>propCmd = {||}, ballot = (\<lambda> a . None), vote = (\<lambda> a b . None)\<rparr>}"
-
-definition propose where
-  "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) |\<union>| {|c|}\<rparr>)"
-
 definition conservative where
   "conservative r b \<equiv> \<forall> a1 . \<forall> a2 . a1 |\<in>| acceptors \<and> a2 |\<in>| acceptors \<longrightarrow> (
     let v1 = (vote r) a1 b; v2 = (vote r) a2 b in 
@@ -132,9 +120,10 @@ definition max_vote where
     
 definition proved_safe_at where
   "proved_safe_at r Q b v \<equiv>
-    case (max_vote r Q (b-1)) of
+    case b of 0 \<Rightarrow> True
+  | Suc c \<Rightarrow> (case (max_vote r Q c) of
       None \<Rightarrow> True
-    | Some v' \<Rightarrow> v = v'"
+    | Some v' \<Rightarrow> v = v')"
 
 definition chosen_at where
   "chosen_at r v b \<equiv> \<exists> q . q |\<in>| quorums \<and> (\<forall> a . a |\<in>| q \<longrightarrow> (vote r) a b = (Some v))"
@@ -271,21 +260,50 @@ lemma
   
 section {* Paxos IOA *}
 
-(* 
+definition p_asig where
+  "p_asig \<equiv> 
+    \<lparr> inputs = { a . \<exists> c . a = Propose c  },
+      outputs = { a . \<exists> v . \<exists> l . l |\<in>| learners \<and> a = Learn v l },
+      internals = {a . \<exists> acc . acc |\<in>| acceptors \<and> a = Vote acc} 
+        \<union> {a . \<exists> b . \<exists> acc . acc |\<in>| acceptors \<and> a = JoinBallot b acc}\<rparr>"
+
+definition p_start where
+  "p_start \<equiv> {\<lparr>propCmd = {||}, ballot = (\<lambda> a . None), vote = (\<lambda> a b . None), 
+    suggestion = (\<lambda> b . None) \<rparr>}"
+
+definition propose where
+  "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) |\<union>| {|c|}\<rparr>)"
+
+definition join_ballot where
+  "join_ballot a b s s' \<equiv> s' = s\<lparr>ballot := (ballot s)(a := b)\<rparr>"
+
+definition start_ballot where
+  "start_ballot b s s' \<equiv> suggestion s b = None \<and>
+    (\<exists> q v . q |\<in>| quorums \<and> proved_safe_at s q b v
+      \<and> v |\<in>| propCmd s \<and> s' = s\<lparr>suggestion := (suggestion s)(b := Some v)\<rparr>)"
+
+definition do_vote where
+  "do_vote a s s' \<equiv> let bo = ballot s a; b = the bo in
+    bo \<noteq> None \<and> vote s a b = None \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(b := suggestion s b))\<rparr>"
+
+definition learn where
+  "learn l v s s' = chosen s v"
+
 fun p_trans_fun  where
   "p_trans_fun r (Propose c) r' = propose c r r'"
-| "p_trans_fun r (FromPrev s) r' = from_prev s r r'"
-| "p_trans_fun r (ToNext s) r' = to_next s r r'"
-| "p_trans_fun r (Learn s l) r' = learn l s r r'"
-| "p_trans_fun r (Init_Acc) r' = init_acc r r'"
-| "p_trans_fun r (Accept) r' = accept r r'"
+| "p_trans_fun r (JoinBallot b a) r' = join_ballot a b r r'"
+| "p_trans_fun r (Vote a) r' = do_vote a r r'"
+| "p_trans_fun r (Learn v l) r' = learn l v r r'"
 
 definition p_trans where
   "p_trans \<equiv> { (r,a,r') . p_trans_fun r a r'}"
 
 definition p_ioa where
-  "p_ioa \<equiv> \<lparr>ioa.asig = p_asig, start = p_start, trans = p_trans\<rparr>" *)
+  "p_ioa \<equiv> \<lparr>ioa.asig = p_asig, start = p_start, trans = p_trans\<rparr>"
 
-end 
+lemma 
+  "\<lbrakk>reachable p_ioa s; chosen s v\<^sub>1; chosen s v\<^sub>2\<rbrakk> \<Longrightarrow> v\<^sub>1 = v\<^sub>2 " oops
+
+end
 
 end
