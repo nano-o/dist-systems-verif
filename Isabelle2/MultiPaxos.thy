@@ -119,20 +119,28 @@ definition leader where
 
 definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 . a2 \<in> acceptors s}"
 
+definition do_2a where
+  "do_2a s a v\<equiv> 
+    let
+      inst = highest_instance s a + 1;
+      msg = Phase2a inst (the (ballot s a)) v a;
+      new_state = s\<lparr>highest_instance := (highest_instance s)(a := inst),
+        pending := (pending s)(a := (pending s a)(inst := Some v))\<rparr>
+    in
+      (new_state, send_all s a msg)"
+
 definition propose where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "propose (a::nat) v s \<equiv>
     (if (leader s (ballot s a) = a)
-      then
-        (let
-            inst = highest_instance s a + 1;
-            msg = Phase2a inst (the (ballot s a)) v a;
-            new_state = s\<lparr>highest_instance := (highest_instance s)(a := inst),
-              pending := (pending s)(a := (pending s a)(inst := Some v))\<rparr>
-        in
-          (new_state, send_all s a msg))
+      then do_2a s a v
       else (s, {Packet a (leader s (ballot s a)) (Fwd v)}))"
  
+fun receive_fwd where
+  "receive_fwd a (Fwd v) s = 
+    (if (leader s (ballot s a) = a) then do_2a s a v else (s, ({})))"
+| "receive_fwd a _ s = (s, ({}))"
+
 fun send_1a where
   -- {* a tries to become the leader *}
   "send_1a a s =
@@ -233,6 +241,8 @@ fun receive_2b where
     in (s,{}))"
 | "receive_2b a _ s = (s, ({}::('v,'a,'d)packet set))"
 
-export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b in Scala file "simplePaxos.scala"
+
+export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b receive_fwd 
+  in Scala file "simplePaxos.scala"
 
 end
