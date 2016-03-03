@@ -1,5 +1,5 @@
 theory Paxos
-imports "/home/nano/Documents/IO-Automata/IOA"  "~~/src/HOL/Eisbach/Eisbach_Tools"
+imports "/home/nano/Documents/IO-Automata/IOA_Automation"  "~~/src/HOL/Eisbach/Eisbach_Tools"
   "/home/nano/Documents/IO-Automata/Simulations" "~~/src/HOL/Library/Monad_Syntax"
   "~~/src/HOL/Library/FSet"
   Transfer
@@ -11,7 +11,8 @@ datatype ('v,'acc,'l, 'b::linorder) p_action =
 | Vote 'acc
 | JoinBallot 'b 'acc
 
-record ('v, 'acc, 'b::linorder) p_state =
+(* TODO: using 'b::linorder confuses the record package. *)
+record ('v, 'acc, 'b) p_state =
   propCmd :: "'v fset"
   ballot :: "'acc \<Rightarrow> 'b option"
   vote :: "'acc \<Rightarrow> 'b \<Rightarrow> 'v option"
@@ -298,82 +299,59 @@ fun p_trans_fun  where
 definition p_trans where
   "p_trans \<equiv> { (r,a,r') . p_trans_fun r a r'}"
 
-(* we instantiate all type vars to nat because of problems with match in Eisbach *)
-definition p_ioa::"((nat, 'acc, nat) p_state,
-    (nat, 'acc, 'l, nat option) p_action) ioa" where
+definition p_ioa where
   "p_ioa \<equiv> \<lparr>ioa.asig = p_asig, start = p_start, trans = p_trans\<rparr>"
+
+end 
+
+text {* We create a locale for the proof in order to fix the type variables appearing in p_ioa_def
+  Otherwise we run into problem with polymorphism and Eisbach *}
+
+locale paxos_proof = IOA + Paxos +
+  fixes the_ioa
+  defines "the_ioa \<equiv> p_ioa"
+begin
 
 lemmas p_ioa_defs =  
    is_trans_def actions_def p_trans_def p_start_def
    externals_def p_ioa_def p_asig_def
 
-named_theorems inv_defs
-named_theorems invs
-  -- "named theorem for use by the tactics below"
-named_theorems mydefs
-  -- "definitions to unfold"
-declare p_ioa_defs[mydefs]
-
-method bring_invs declares invs =
-  -- "bring all the invariants in the premises"
-  ( (insert invs) -- "insert invariant theorems in the premises; 
-      this will allow us to use [thin] to get rid of them after use",
-    ( (match premises in I[thin]:"invariant p_ioa ?inv"
-        and R:"reachable p_ioa ?s" \<Rightarrow> 
-            \<open>insert I[simplified invariant_def, rule_format, OF R]\<close>)+
-        -- "for each invariant theorem, use the reachability assumption to obtain the invariant",
-    (match premises in R[thin]:"reachable p_ioa ?s" 
-      and T:"?s \<midarrow>?a\<midarrow>p_ioa\<longrightarrow> ?t" \<Rightarrow> 
-        \<open>insert reachable_n[OF R T]\<close>),
-    (insert invs),(match premises in I[thin]:"invariant p_ioa ?inv"
-        and R:"reachable p_ioa ?s" \<Rightarrow> 
-            \<open>insert I[simplified invariant_def, rule_format, OF R]\<close>)+,
-    (match premises in R[thin]:"reachable p_ioa ?s" \<Rightarrow> succeed)
-        -- "finally get rid of the reachability assumption"
-        )? -- "don't fail if there are no invariants to bring"
-    )
-
-method try_solve_inv declares mydefs invs =
-  ( rule invariantI,
-    force simp add:mydefs inv_defs -- "solve the base case",
-    (*(match premises in reach[thin]:"reachable ?x ?y" \<Rightarrow> \<open>print_fact reach\<close>),*)
-    bring_invs invs:invs,
-    match premises in T:"?s \<midarrow>a\<midarrow>p_ioa\<longrightarrow> ?t" for a \<Rightarrow> \<open>case_tac a\<close> 
-      -- "do case analysis on the action";
-    simp add:mydefs inv_defs )
+declare p_ioa_defs[inv_proofs_defs]
 
 lemma gt_not_none:
-  "b\<^sub>1 < (b\<^sub>2::'a::linorder option) \<Longrightarrow> b\<^sub>2 \<noteq> None"
+  "b\<^sub>1 < (b\<^sub>2::'e::linorder option) \<Longrightarrow> b\<^sub>2 \<noteq> None"
 by (metis less_def less_o.elims(2) option.discI)
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp]
   learn_def[simp]
 
 definition inv1 where
-  "inv1 s \<equiv> \<forall> a b . a |\<in>| acceptors \<and> vote s a b \<noteq> None \<longrightarrow> vote s a b = suggestion s b"
-declare inv1_def[inv_defs]
+  "inv1 s \<equiv> \<forall> a b . a |\<in>| acceptors \<and> vote s a b \<noteq> None 
+    \<longrightarrow> vote s a b = suggestion s b"
+declare inv1_def[inv_proofs_defs]
 
-lemma inv1:"invariant p_ioa inv1"
-apply try_solve_inv
-  apply (match premises in reach[thin]:"reachable ?x ?y" \<Rightarrow> \<open>print_fact reach\<close>)
-  apply (smt fun_upd_apply p_state.ext_inject p_state.surjective p_state.update_convs(3))
+declare the_ioa_def[inv_proofs_defs]
+
+lemma inv1:"invariant the_ioa inv1"
+apply try_solve_inv2
+apply (smt fun_upd_apply p_state.ext_inject p_state.surjective p_state.update_convs(3))
 done
 declare inv1[invs]
 
-declare well_formed_def[inv_defs]
+declare well_formed_def[inv_proofs_defs]
 lemma well_formed_inductive:
-  "invariant p_ioa well_formed"
-apply try_solve_inv
-    apply (smt fun_upd_apply gt_not_none neq_iff option.expand p_state.ext_inject p_state.surjective p_state.update_convs(3))
-  apply (metis order.strict_trans)
+  "invariant the_ioa well_formed"
+apply try_solve_inv2
+apply auto
+apply (smt fun_upd_apply gt_not_none neq_iff option.collapse option.sel p_state.ext_inject p_state.surjective p_state.update_convs(3))
 done
 declare well_formed_inductive[invs]
 
-declare conservative_array_def[inv_defs]
+declare conservative_array_def[inv_proofs_defs]
 lemma conservative_inductive:
-  "invariant p_ioa conservative_array"
-apply (try_solve_inv mydefs:mydefs conservative_def)
-  apply metis
+  "invariant the_ioa conservative_array"
+apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs conservative_def)
+apply metis
 done
 
 lemma 
