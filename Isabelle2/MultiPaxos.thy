@@ -168,7 +168,7 @@ definition update_onebs where
       is = if last_vs = [] then [] else [0..(int (length last_vs - 1))];
       new_i = \<lambda> i .
         let l = case (onebs s a bal) of None \<Rightarrow> [] | Some l' \<Rightarrow> l';
-            old = if (length l \<ge> i) then l!i else [] 
+            old = if (length l > i) then l!i else [] 
         in 
           (a2,(last_vs!i)) # old; (* append the new information to the old list *)
       new = [new_i (nat i) . i \<leftarrow> is]
