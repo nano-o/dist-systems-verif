@@ -861,8 +861,8 @@ def onebs_update[A, B, C,
                           twobs, decided, highest_instance, pending, log, more)
 }
 
-def update_onebs[A, B : HOL.equal, C : HOL.equal, D,
-                  E](s: mp_state_ext[A, B, C, D], a: B, bal: C, a2: E,
+def update_onebs[A, B : HOL.equal, C : HOL.equal,
+                  D](s: mp_state_ext[A, B, C, D], a: B, bal: C, a2: B,
                       last_vs: List[Option[(A, C)]]):
       mp_state_ext[A, B, C, D]
   =
@@ -883,16 +883,18 @@ def update_onebs[A, B : HOL.equal, C : HOL.equal, D,
                Option[(A, C)])]].apply(curr_onebs)))
           (if (Nat.less_eq_nat(i, Lista.size_list[Option[(A,
                    C)]].apply(last_vs)))
-            (a, Lista.nth[Option[(A, C)]](last_vs,
-   Nat.minus_nata(i, Nat.one_nata))) ::
+            (a2, Lista.nth[Option[(A, C)]](last_vs,
+    Nat.minus_nata(i, Nat.one_nata))) ::
               Lista.nth[List[(B, Option[(A,
   C)])]](curr_onebs, Nat.minus_nata(i, Nat.one_nata))
-            else Lista.nth[List[(B, Option[(A,
-     C)])]](curr_onebs, Nat.minus_nata(i, Nat.one_nata)))
-          else List((a, Lista.nth[Option[(A,
-   C)]](last_vs, Nat.minus_nata(i, Nat.one_nata))))))
+            else (a2, None) ::
+                   Lista.nth[List[(B, Option[(A,
+       C)])]](curr_onebs, Nat.minus_nata(i, Nat.one_nata)))
+          else List((a2, Lista.nth[Option[(A,
+    C)]](last_vs, Nat.minus_nata(i, Nat.one_nata))))))
     val newa: List[List[(B, Option[(A, C)])]] =
-      Lista.map[Nat.nat, List[(B, Option[(A, C)])]](at_i, is);
+      (if (Nat.equal_nata(max_is, Nat.zero_nat)) List(List((a2, None)))
+        else Lista.map[Nat.nat, List[(B, Option[(A, C)])]](at_i, is));
     onebs_update[B, C, A,
                   D](((_: B => C => List[List[(B, Option[(A, C)])]]) =>
                        Fun.fun_upd[B, C =>
@@ -903,62 +905,62 @@ List[List[(B, Option[(A, C)])]]](onebs[A, B, C, D](s), a,
                       s)
   }
 
-def receive_1b[A : HOL.equal, B : HOL.equal, C, D : HOL.equal : Orderings.ord,
-                E](a: A, x1: msg[B, C, D], s: mp_state_ext[B, A, D, E]):
-      (mp_state_ext[B, A, D, E], Set.set[packet[B, A, D]])
+def receive_1b[A : HOL.equal, B : HOL.equal, C : HOL.equal : Orderings.ord,
+                D](a: A, x1: msg[B, A, C], s: mp_state_ext[B, A, C, D]):
+      (mp_state_ext[B, A, C, D], Set.set[packet[B, A, C]])
   =
   (a, x1, s) match {
   case (a, Phase1b(last_vs, new_bal, a2), s) =>
-    (if (HOL.eq[D](new_bal, Optiona.the[D]((ballot[B, A, D, E](s)).apply(a))))
+    (if (HOL.eq[C](new_bal, Optiona.the[C]((ballot[B, A, C, D](s)).apply(a))))
       {
-        val new_state: mp_state_ext[B, A, D, E] =
-          update_onebs[B, A, D, E, C](s, a, new_bal, a2, last_vs)
-        val onebsa: List[List[(A, Option[(B, D)])]] =
-          (onebs[B, A, D, E](new_state)).apply(a).apply(new_bal)
+        val new_state: mp_state_ext[B, A, C, D] =
+          update_onebs[B, A, C, D](s, a, new_bal, a2, last_vs)
+        val onebsa: List[List[(A, Option[(B, C)])]] =
+          (onebs[B, A, C, D](new_state)).apply(a).apply(new_bal)
         val quorum_received: Boolean =
-          Nat.less_nat(nr[B, A, D, E](s),
+          Nat.less_nat(nr[B, A, C, D](s),
                         Nat.times_nat(Code_Numeral.nat_of_integer(BigInt(2)),
                                        Lista.size_list[List[(A,
-                      Option[(B, D)])]].apply(onebsa)))
-        val aa: Set.set[packet[B, A, D]] =
+                      Option[(B, C)])]].apply(onebsa)))
+        val aa: Set.set[packet[B, A, C]] =
           (if (quorum_received)
             {
-              val received: List[List[(A, Option[(B, D)])]] =
-                (onebs[B, A, D, E](new_state)).apply(a).apply(new_bal)
+              val received: List[List[(A, Option[(B, C)])]] =
+                (onebs[B, A, C, D](new_state)).apply(a).apply(new_bal)
               val safe: List[(Option[B], Nat.nat)] =
                 add_index[Option[B],
-                           Nat.nat](Lista.map[List[(A, Option[(B, D)])],
-       Option[B]](((aa: List[(A, Option[(B, D)])]) =>
-                    highest_voted[A, B, D](aa)),
+                           Nat.nat](Lista.map[List[(A, Option[(B, C)])],
+       Option[B]](((aa: List[(A, Option[(B, C)])]) =>
+                    highest_voted[A, B, C](aa)),
                    received),
                                      Nat.one_nata)
-              val msg: ((Option[B], Nat.nat)) => Option[msg[B, A, D]] =
+              val msg: ((Option[B], Nat.nat)) => Option[msg[B, A, C]] =
                 ((b: (Option[B], Nat.nat)) =>
                   (b match {
                      case (None, _) => None
                      case (Some(v), i) =>
-                       Some[msg[B, A, D]](Phase2a[D, B, A](i, new_bal, v, a))
+                       Some[msg[B, A, C]](Phase2a[C, B, A](i, new_bal, v, a))
                    }))
-              val aa: List[Set.set[packet[B, A, D]]] =
+              val aa: List[Set.set[packet[B, A, C]]] =
                 Lista.map[(Option[B], Nat.nat),
                            Set.set[packet[B, A,
-   D]]](((x: (Option[B], Nat.nat)) =>
+   C]]](((x: (Option[B], Nat.nat)) =>
           (msg(x) match {
-             case None => Set.bot_set[packet[B, A, D]]
-             case Some(b) => send_all[B, A, D, E, B, D](s, a, b)
+             case None => Set.bot_set[packet[B, A, C]]
+             case Some(b) => send_all[B, A, C, D, B, C](s, a, b)
            })),
          safe);
-              fold_union[packet[B, A, D]](aa)
+              fold_union[packet[B, A, C]](aa)
             }
-            else Set.bot_set[packet[B, A, D]]);
+            else Set.bot_set[packet[B, A, C]]);
         (new_state, aa)
       }
-      else (s, Set.bot_set[packet[B, A, D]]))
-  case (a, Phase1a(v, va), s) => (s, Set.bot_set[packet[B, A, D]])
-  case (a, Phase2a(v, va, vb, vc), s) => (s, Set.bot_set[packet[B, A, D]])
-  case (a, Phase2b(v, va, vb), s) => (s, Set.bot_set[packet[B, A, D]])
-  case (a, Vote(v, va), s) => (s, Set.bot_set[packet[B, A, D]])
-  case (a, Fwd(v), s) => (s, Set.bot_set[packet[B, A, D]])
+      else (s, Set.bot_set[packet[B, A, C]]))
+  case (a, Phase1a(v, va), s) => (s, Set.bot_set[packet[B, A, C]])
+  case (a, Phase2a(v, va, vb, vc), s) => (s, Set.bot_set[packet[B, A, C]])
+  case (a, Phase2b(v, va, vb), s) => (s, Set.bot_set[packet[B, A, C]])
+  case (a, Vote(v, va), s) => (s, Set.bot_set[packet[B, A, C]])
+  case (a, Fwd(v), s) => (s, Set.bot_set[packet[B, A, C]])
 }
 
 def vote_update[A, B, C,

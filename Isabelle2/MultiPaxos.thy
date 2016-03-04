@@ -170,31 +170,27 @@ definition update_onebs where
         ( if (length curr_onebs \<ge> i) 
           then 
             ( if (length last_vs \<ge> i) 
-              then (a,last_vs!(i-1))#curr_onebs!(i-1)
-              else curr_onebs!(i-1) )
-          else [(a,last_vs!(i-1))] ) );
-      new = (if max_is = 0 
-              then [[(a2, None)]]
-              else [at_i i . i \<leftarrow> is])
+              then (a2,last_vs!(i-1))#curr_onebs!(i-1)
+              else (a2,None)#curr_onebs!(i-1) )
+          else [(a2,last_vs!(i-1))] ) );
+      new = (if max_is = 0 then [[(a2,None)]] else [at_i i . i \<leftarrow> is])
     in
       s\<lparr>onebs := (onebs s)(a := (onebs s a)(bal := new))\<rparr>"
 
-
 value "
-  let last_vs = [];
-    curr_onebs = [[(a2, None)]];
+  let last_vs = [Some (1,42)];
+    curr_onebs = [[(b, (None::((nat\<times>int) option))), (c, Some (4,43))],[ (c, Some (4,43))]];
     max_is = Max {length last_vs, length curr_onebs};
     is = [1..<Suc max_is];
     at_i = (\<lambda> i . 
       ( if (length curr_onebs \<ge> i) 
         then 
-          ( if (length last_vs \<ge> i)
-            then (a3,last_vs!(i-1))#curr_onebs!(i-1)
-            else curr_onebs!(i-1) )
-        else [(a3,last_vs!(i-1))] ) )
-  in (if max_is = 0 
-              then [[(a3, None)]]
-              else [at_i i . i \<leftarrow> is])"
+          ( if (length last_vs \<ge> i) 
+            then (a2,last_vs!(i-1))#curr_onebs!(i-1)
+            else (a2,None)#curr_onebs!(i-1) )
+        else [(a2,last_vs!(i-1))] ) )
+  in (if max_is = 0 then [[(a2,None)]] else [at_i i . i \<leftarrow> is])"
+
 
 fun add_index where
   "add_index [] _ = []"
