@@ -22,11 +22,6 @@ datatype ('v,'a,'b)  packet =
   -- {* A message with sender/destination information *}
   Packet (sender: 'a) (dst: 'a) (msg: "('v,'a,'b) msg")
 
-(*
-datatype 'v Safe = NoneSafe | Safe (the_safe: 'v) | All
-  -- {* Describes which values are safe *}
-*)
-
 record ('v, 'a, 'b) mp_state =
   acceptors :: "'a set"
     -- {* The set of all acceptors *}
@@ -44,7 +39,8 @@ record ('v, 'a, 'b) mp_state =
     -- {* For an acceptor a, an instant i, and a ballot b, 
       this is the list describing all the 2b messages receive by a in i in b *}
   decided :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
-    -- {* For an acceptor a, this is Some v if a has decided v in some ballot *}
+    -- {* For an acceptor a, this is Some v if a has decided v in some ballot.
+      TODO: is this needed? Seems superseded by the log field. *}
   highest_instance :: "'a \<Rightarrow> nat"
   pending :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   (*lowest_instance :: "'a \<Rightarrow> nat"
@@ -91,14 +87,6 @@ definition highest_voted where
         max_option = (\<lambda> x y . max_opt x y max_pair);
         init_val = (if filtered = [] then None else (hd filtered))
     in case (fold max_option filtered init_val) of None \<Rightarrow> None | Some (v,b) \<Rightarrow> Some v"
-
-(*
-value "let received = [(3,Some (1::int,5)),(10, Some (3,(40::nat)))];
-        filtered = map snd received;
-        max_pair = (\<lambda> x y . if (snd x > snd y) then x else y);
-        max_pairo = (\<lambda> x y . map_opt x y max_pair)
-    in case (fold max_pairo filtered (hd filtered)) of None \<Rightarrow> None | Some (v,b) \<Rightarrow> Some v"
-*)
 
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
   -- {* The smallest ballot belonging to replica a and greater than ballt b, when there are N replicas *}
@@ -177,7 +165,7 @@ definition update_onebs where
     message from a2 for ballot bal containing last_vs *}
   "update_onebs s a bal a2 last_vs \<equiv>
     let 
-      is = if last_vs = [] then [] else [1..(int (length last_vs))];
+      is = if last_vs = [] then [] else [0..(int (length last_vs - 1))];
       new_i = \<lambda> i .
         let l = case (onebs s a bal) of None \<Rightarrow> [] | Some l' \<Rightarrow> l';
             old = if (length l \<ge> i) then l!i else [] 
@@ -186,6 +174,17 @@ definition update_onebs where
       new = [new_i (nat i) . i \<leftarrow> is]
     in
       s\<lparr>onebs := (onebs s)(a := (onebs s a)(bal := Some new))\<rparr>"
+
+value "
+  let last_vs = [Some (1,42), None, Some (3::nat,42::int)];
+      is = if last_vs = [] then [] else [0..(int (length last_vs - 1))];
+      curr_onebs = Some [[(1::int, (None::((nat\<times>int) option)))]];
+      new_i = \<lambda> i .
+        let l = case curr_onebs of None \<Rightarrow> [] | Some l' \<Rightarrow> l';
+            old = if (length l > i) then l!i else [] 
+        in 
+          (2,(last_vs!i)) # old
+  in [new_i (nat i) . i \<leftarrow> is]"
 
 fun add_index where
   "add_index [] _ = []"
@@ -243,8 +242,9 @@ fun receive_2b where
       else 
         s)
     in (s,{}))"
-| "receive_2b a _ s = (s, ({}::('v,'a,'d)packet set))"
+| "receive_2b a _ s = (s, ({}))"
 
+value "largestprefix [(1,v1), (2,v2), (4,v4)]"
 
 export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b receive_fwd 
   largestprefix in Scala file "simplePaxos.scala"
