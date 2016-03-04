@@ -31,7 +31,7 @@ record ('v, 'a, 'b) mp_state =
     -- {* The last vote cast by an acceptor *}
   last_ballot :: "'a \<Rightarrow> nat \<Rightarrow> 'b option"
     -- {* For an acceptor a, this is the ballot in which "vote a" was cast *}
-  onebs :: "'a \<Rightarrow> 'b \<Rightarrow> ('a \<times> ('v \<times> 'b) option) list list option"
+  onebs :: "'a \<Rightarrow> 'b \<Rightarrow> ('a \<times> ('v \<times> 'b) option) list list"
     -- {* For an acceptor a and a ballot b,
       this is a list list option. Each element in the outer list describes all the 1b messages 
       receive by a in b in the instance corresponding to the position in the list *}
@@ -53,7 +53,7 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
     ballot = (\<lambda> a . None),
     vote = (\<lambda> a . \<lambda> i . None),
     last_ballot = (\<lambda> a . \<lambda> i . None),
-    onebs = (\<lambda> a . \<lambda> b . None),
+    onebs = (\<lambda> a . \<lambda> b . []),
     twobs = (\<lambda> a . \<lambda> i . \<lambda> b . []),
     decided = (\<lambda> a . \<lambda> i . None),
     highest_instance = (\<lambda> a . 0),
@@ -65,9 +65,7 @@ definition nr where
   "nr s \<equiv> card (acceptors s)"
 
 definition one_b_quorum where
-  "one_b_quorum a i b s \<equiv> 
-    case onebs s a b of None \<Rightarrow> False 
-    | Some l \<Rightarrow> 2 * length (l!i) > nr s"
+  "one_b_quorum a i b s \<equiv> 2 * length ((onebs s a b)!i) > nr s"
 
 definition map_opt where
   "map_opt ao bo f \<equiv> ao \<bind> (\<lambda> a . bo \<bind> (\<lambda> b . Some (f a b)))"
@@ -149,9 +147,9 @@ fun receive_1a where
       (if (bal = None \<or> ((the bal) < b))
        then
           (let
-            is = case bal of None \<Rightarrow> [] | Some b \<Rightarrow>  [0..(int b)];
+            is = case bal of None \<Rightarrow> [] | Some b \<Rightarrow>  [0..<(Suc b)];
             get_vote = (\<lambda> i . (vote s i a) \<bind> (\<lambda> v . (last_ballot s a i) \<bind> (\<lambda> b . Some (v, b))));
-            votes = [get_vote (nat i) . i \<leftarrow> is];
+            votes = [get_vote i . i \<leftarrow> is];
             msg_1b = Phase1b votes b a;
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := (ballot s)(a := Some b)\<rparr>
@@ -160,31 +158,38 @@ fun receive_1a where
        else (s,{})))"
 | "receive_1a a _ s = (s,{})"
 
-definition update_onebs where 
+definition update_onebs where
   -- {* Update the list of highest voted values when receiving a 1b
     message from a2 for ballot bal containing last_vs *}
   "update_onebs s a bal a2 last_vs \<equiv>
     let 
-      is = if last_vs = [] then [] else [0..(int (length last_vs - 1))];
-      new_i = \<lambda> i .
-        let l = case (onebs s a bal) of None \<Rightarrow> [] | Some l' \<Rightarrow> l';
-            old = if (length l > i) then l!i else [] 
-        in 
-          (a2,(last_vs!i)) # old; (* append the new information to the old list *)
-      new = [new_i (nat i) . i \<leftarrow> is]
+      max_is = Max {length last_vs, length (onebs s a bal)};
+      is = [1..<Suc max_is];
+      curr_onebs = onebs s a bal;
+      at_i = (\<lambda> i . 
+        ( if (length curr_onebs \<ge> i) 
+          then 
+            ( if (length last_vs \<ge> i) 
+              then (a,last_vs!(i-1))#curr_onebs!(i-1)
+              else curr_onebs!(i-1) )
+          else [(a,last_vs!(i-1))] ) );
+      new = [at_i i . i \<leftarrow> is]
     in
-      s\<lparr>onebs := (onebs s)(a := (onebs s a)(bal := Some new))\<rparr>"
+      s\<lparr>onebs := (onebs s)(a := (onebs s a)(bal := new))\<rparr>"
 
 value "
   let last_vs = [Some (1,42), None, Some (3::nat,42::int)];
-      is = if last_vs = [] then [] else [0..(int (length last_vs - 1))];
-      curr_onebs = Some [[(1::int, (None::((nat\<times>int) option)))]];
-      new_i = \<lambda> i .
-        let l = case curr_onebs of None \<Rightarrow> [] | Some l' \<Rightarrow> l';
-            old = if (length l > i) then l!i else [] 
-        in 
-          (2,(last_vs!i)) # old
-  in [new_i (nat i) . i \<leftarrow> is]"
+    curr_onebs = [[(b, (None::((nat\<times>int) option))), (c, Some (4,43))]];
+    max_is = Max {length last_vs, length curr_onebs};
+    is = [1..<Suc max_is];
+    at_i = (\<lambda> i . 
+      ( if (length curr_onebs \<ge> i) 
+        then 
+          ( if (length last_vs \<ge> i) 
+            then (a,last_vs!(i-1))#curr_onebs!(i-1)
+            else curr_onebs!(i-1) )
+        else [(a,last_vs!(i-1))] ) )
+  in [at_i i . i \<leftarrow> is]"
 
 fun add_index where
   "add_index [] _ = []"
@@ -200,12 +205,12 @@ fun receive_1b where
       (let 
            new_state = update_onebs s a new_bal a2 last_vs;
            onebs' = onebs new_state a new_bal;
-           quorum_received = 2 * length (the onebs') > nr s;
+           quorum_received = 2 * length onebs' > nr s;
            msgs = 
             if (quorum_received)
             then 
               let
-                received = the (onebs new_state a new_bal); (* Is necessarily well defined (not the None) because we use the new state*)
+                received = onebs new_state a new_bal;
                 safe = add_index [highest_voted l . l \<leftarrow> received] 1; (* of the form [(v_1,1),(v_2,2)...] where v_i is safe at i*)
                 msg = (* Here we don't have anything to propose in case opt is None. TODO: propose no-ops? Or mark the instances as available for new proposals? *)
                   (\<lambda> (opt,i) . (case opt of None \<Rightarrow> None | Some v \<Rightarrow> Some (Phase2a i new_bal v a)));
