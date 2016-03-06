@@ -103,7 +103,36 @@ definition conservative where
 
 definition conservative_array where
   "conservative_array r \<equiv> \<forall> b . conservative r b"
-  
+
+fun max_vote_2 where
+  "max_vote_2 votes (0::nat) = votes 0 \<bind> (\<lambda> v . Some (0,v))"
+| "max_vote_2 votes (Suc b) = 
+    ( case (votes (Suc b)) of None \<Rightarrow> max_vote_2 votes b
+      |  Some v \<Rightarrow> Some (Suc b, v) )"
+
+lemma assumes "i \<le> b" and "votes i \<noteq> None"
+  shows "case (max_vote_2 votes b) of None \<Rightarrow> False | Some (m,v) \<Rightarrow> i \<le> m"
+using assms
+proof (induct votes b rule:max_vote_2.induct)
+  case 1 thus ?case by fastforce
+next
+  case 2 thus ?case by auto (metis case_prodI le_Suc_eq option.case_eq_if option.sel option.simps(3))
+qed
+
+declare option.split[split]
+
+lemma
+  "case (max_vote_2 votes b) of None \<Rightarrow> True | Some (m,v) \<Rightarrow> m \<le> b \<and> votes m = Some v"
+proof (induct votes b rule:max_vote_2.induct)
+case (1 votes) thus ?case 
+  apply (auto)
+    apply (metis (no_types, lifting) Pair_inject bind_eq_Some_conv option.inject)
+  apply (smt bind_eq_Some_conv option.sel prod.inject)
+  done
+next
+  case (2 votes b) thus ?case by auto
+qed
+
 text {* Here the max is the one from Lattices_Big *}
 definition max_acc_voted_round where
   "max_acc_voted_round r a bound \<equiv> Max {(vote r) a b | b . b \<le> bound}"
@@ -118,11 +147,36 @@ definition max_vote where
     | Some b \<Rightarrow> 
         let max_voter = (SOME a . a |\<in>| q \<and> max_acc_voted_round r a bound = Some b)
         in (vote r) max_voter b"
+
+lemma "finite { y . \<exists> x . x |\<in>| (X::'a fset) \<and> y = E x}" oops
+
+lemma
+  assumes "q |\<in>| quorums" and "max_voted_round r q bound = Some (b::nat)"
+  obtains a where "a |\<in>| q \<and> max_acc_voted_round r a bound = Some b"
+proof -
+  have 1:"q \<noteq> {||}" using assms(1)
+    by (metis Paxos_axioms Paxos_def finter_fempty_left)
+  from 1 have 2:"{max_acc_voted_round r a bound | a . a |\<in>| q} \<noteq> {}"
+    by (metis (mono_tags, lifting) Collect_empty_eq all_not_fin_conv) 
+  have 3:"finite {max_acc_voted_round r a bound | a . a |\<in>| q}"
+  proof -
+    have "finite q" 
+  with assms(2) obtain x where "x \<in> {max_acc_voted_round r a bound | a . a |\<in>| q}"
+    and "x = Max {max_acc_voted_round r a bound | a . a |\<in>| q}"
+  apply (auto simp add:max_voted_round_def) oops
+
+definition max_vote where
+  "max_vote r q bound \<equiv>
+    case max_voted_round r q bound of
+      None \<Rightarrow> None
+    | Some b \<Rightarrow> 
+        let max_voter = (SOME a . a |\<in>| q \<and> max_acc_voted_round r a bound = Some b)
+        in (vote r) max_voter b"
     
 definition proved_safe_at where
   "proved_safe_at r Q b v \<equiv>
     case b of 0 \<Rightarrow> True
-  | Suc c \<Rightarrow> (case (max_vote r Q c) of
+  | Suc c \<Rightarrow> (case (max_vote r Q c) of (* note that here c is b-1 *)
       None \<Rightarrow> True
     | Some v' \<Rightarrow> v = v')"
 
@@ -235,14 +289,18 @@ qed
 
 lemma proved_safe:
   assumes "safe r" and "q |\<in>| quorums"
-  and "\<And> a . a |\<in>| q \<Longrightarrow> case ballot s a of None \<Rightarrow> False | Some b\<^sub>a \<Rightarrow> b\<^sub>a \<ge> i"
-  and "proved_safe_at s q i v"
+  and "\<And> a . a |\<in>| q \<Longrightarrow> ballot s a \<ge> Some i"
+  and "proved_safe_at s q i v" and "i \<noteq> 0"
   shows "safe_at s v i"
 proof -
-  consider k a 
-    where "a |\<in>| q" and "\<And> a\<^sub>2 . a\<^sub>2 |\<in>| q \<Longrightarrow> case ballot s a\<^sub>2 of None \<Rightarrow> False | Some b \<Rightarrow> b \<le> k"
-    and "vote s a (the (ballot s a)) = Some v"
+  consider k a
+    where "a |\<in>| q" and "vote s a k = Some v" and "\<And> a\<^sub>2 . a\<^sub>2 |\<in>| q \<Longrightarrow> ballot s a\<^sub>2 \<le> Some k"
+    and "k < i"
   | "\<And>a . a |\<in>| q \<Longrightarrow> ballot s a = None"
+  using assms(4,5)
+  apply (auto simp add:proved_safe_at_def)
+  apply (cases i)
+  apply (auto simp add:max_vote_def)
   oops
 (*
   have "v = w" if "choosable s w j" and "j < i" for w j 
