@@ -30,7 +30,7 @@ fun less_o where
 | "less_o (Some x) None = False"
 | "less_o (Some x) (Some y) = (x < y)"
 
-subsection {* Transfer betwee nat option and nat *}
+subsection {* Transfer between nat option and nat *}
 
 interpretation lifting_syntax .
 
@@ -148,12 +148,25 @@ definition max_voted_round_2 where
     then Some (Max {b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None})
     else None"
 
-lemma 
+lemma
   assumes "a |\<in>| q" and "b \<le> bound" 
   and "max_voted_round_2 r q bound = None \<or> b \<ge> the (max_voted_round_2 r q bound)"
   shows "vote r a b = None"
-  using assms
-  apply (auto simp add:max_voted_round_2_def) oops
+  proof (cases "max_voted_round_2 r q bound")
+    case None 
+      thus ?thesis using assms(1,2)
+      by (auto simp add:max_voted_round_2_def split:split_if_asm)
+    next
+      case (Some b)
+      with this obtain a2 b2 v where "a2 |\<in>| q \<and> b2 \<le> bound \<and> vote r a2 b2 = Some v"
+      by (auto simp add:max_voted_round_2_def split:split_if_asm)
+      hence "{b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None} \<noteq> {}" by auto
+      moreover have "finite {b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None}" sorry
+      moreover have "b \<ge> the (max_voted_round_2 r q bound)" using Some assms(3) by fastforce
+      ultimately
+      show ?thesis using assms(1,2)
+      apply (auto simp add:max_voted_round_2_def split:split_if_asm) oops
+      
  
 definition max_vote where
   "max_vote r q bound \<equiv>
@@ -164,8 +177,8 @@ definition max_vote where
         in (vote r) max_voter b"
 
 lemma 
-  assumes "max_voted_round_2 r q bound = Some b\<^sub>m"
-  obtains a2 where "vote r a2 b\<^sub>m = max_vote r q bound"
+  assumes "max_voted_round_2 r q bound = Some b\<^sub>m\<^sub>a\<^sub>x"
+  obtains a2 where "vote r a2 b\<^sub>m\<^sub>a\<^sub>x = max_vote r q bound"
 proof (auto simp add: max_vote_def) oops
 
 lemma 
@@ -183,21 +196,8 @@ proof -
   have 1:"q \<noteq> {||}" using assms(1)
     by (metis Paxos_axioms Paxos_def finter_fempty_left)
   from 1 have 2:"{max_acc_voted_round r a bound | a . a |\<in>| q} \<noteq> {}"
-    by (metis (mono_tags, lifting) Collect_empty_eq all_not_fin_conv) 
-  have 3:"finite {max_acc_voted_round r a bound | a . a |\<in>| q}"
-  proof -
-    have "finite q" 
-  with assms(2) obtain x where "x \<in> {max_acc_voted_round r a bound | a . a |\<in>| q}"
-    and "x = Max {max_acc_voted_round r a bound | a . a |\<in>| q}"
-  apply (auto simp add:max_voted_round_def) oops
-
-definition max_vote where
-  "max_vote r q bound \<equiv>
-    case max_voted_round r q bound of
-      None \<Rightarrow> None
-    | Some b \<Rightarrow> 
-        let max_voter = (SOME a . a |\<in>| q \<and> max_acc_voted_round r a bound = Some b)
-        in (vote r) max_voter b"
+    by (metis (mono_tags, lifting) Collect_empty_eq all_not_fin_conv)
+  have 3:"finite {max_acc_voted_round r a bound | a . a |\<in>| q}" oops
     
 definition proved_safe_at where
   "proved_safe_at r Q b v \<equiv>
@@ -320,13 +320,13 @@ lemma proved_safe:
   shows "safe_at s v i"
 proof -
   consider k a
-    where "a |\<in>| q" and "vote s a k = Some v" and "\<And> a\<^sub>2 . a\<^sub>2 |\<in>| q \<Longrightarrow> ballot s a\<^sub>2 \<le> Some k"
-    and "k < i"
-  | "\<And>a . a |\<in>| q \<Longrightarrow> ballot s a = None"
+    where "a |\<in>| q" and "vote s a k = Some v" and "k < i"  
+    and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 |\<in>| q; k < l; l < i\<rbrakk> \<Longrightarrow> vote s a\<^sub>2 l = None"
+  | "\<And> a k . \<lbrakk>a |\<in>| q; k < i\<rbrakk>  \<Longrightarrow> vote s a k = None"
   using assms(4,5)
   apply (auto simp add:proved_safe_at_def)
   apply (cases i)
-  apply (auto simp add:max_vote_def)
+  apply (auto simp add:max_vote_def max_voted_round_2_def)
   oops
 (*
   have "v = w" if "choosable s w j" and "j < i" for w j 
