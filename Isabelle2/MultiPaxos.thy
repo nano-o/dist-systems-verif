@@ -4,6 +4,8 @@ begin
 
 text {* We assume reliable channels (TCP) *}
 
+datatype 'v cmd = Cmd 'v | NoOp
+
 datatype ('v,'a,'b) msg =
   Phase1a (leader: 'a) (ballot:'b)
 | Phase1b (last_vote:"('v \<times> 'b) option list") (new_ballot: 'b) (acceptor:'a)
@@ -27,25 +29,25 @@ record ('v, 'a, 'b) mp_state =
     -- {* The set of all acceptors *}
   ballot :: "'a \<Rightarrow> 'b option"
     -- {* the highest ballot in which an acceptor participated *}
-  vote :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  vote :: "'a \<Rightarrow> nat \<Rightarrow> 'v cmd option"
     -- {* The last vote cast by an acceptor *}
   last_ballot :: "'a \<Rightarrow> nat \<Rightarrow> 'b option"
     -- {* For an acceptor a, this is the ballot in which "vote a" was cast *}
-  onebs :: "'a \<Rightarrow> 'b \<Rightarrow> ('a \<times> ('v \<times> 'b) option) list list"
+  onebs :: "'a \<Rightarrow> 'b \<Rightarrow> ('a \<times> ('v cmd \<times> 'b) option) list list"
     -- {* For an acceptor a and a ballot b,
       this is a list list option. Each element in the outer list describes all the 1b messages 
       receive by a in b in the instance corresponding to the position in the list *}
   twobs :: "'a \<Rightarrow> nat \<Rightarrow> 'b \<Rightarrow> 'a list"
     -- {* For an acceptor a, an instant i, and a ballot b, 
       this is the list describing all the 2b messages receive by a in i in b *}
-  decided :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  decided :: "'a \<Rightarrow> nat \<Rightarrow> 'v cmd option"
     -- {* For an acceptor a, this is Some v if a has decided v in some ballot.
       TODO: is this needed? Seems superseded by the log field. *}
   highest_instance :: "'a \<Rightarrow> nat"
-  pending :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  pending :: "'a \<Rightarrow> nat \<Rightarrow> 'v cmd option"
   (*lowest_instance :: "'a \<Rightarrow> nat"
     -- {* When a is a leader, the next instance to use. *}*)
-  log :: "'a \<Rightarrow> (nat \<times> 'v) list"
+  log :: "'a \<Rightarrow> (nat \<times> 'v cmd) list"
 
 definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
   "init_state accs \<equiv> \<lparr>
@@ -59,7 +61,7 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
     highest_instance = (\<lambda> a . 0),
     pending = (\<lambda> a . \<lambda> i . None),
     log = ( \<lambda> a . [])
-    \<rparr> "
+    \<rparr>"
 
 definition nr where
   "nr s \<equiv> card (acceptors s)"
@@ -85,6 +87,8 @@ definition highest_voted where
         max_option = (\<lambda> x y . max_opt x y max_pair);
         init_val = (if filtered = [] then None else (hd filtered))
     in case (fold max_option filtered init_val) of None \<Rightarrow> None | Some (v,b) \<Rightarrow> Some v"
+
+value "highest_voted [(1,Some (1,1))]"
 
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
   -- {* The smallest ballot belonging to replica a and greater than ballt b, when there are N replicas *}
@@ -178,27 +182,26 @@ definition update_onebs where
       s\<lparr>onebs := (onebs s)(a := (onebs s a)(bal := new))\<rparr>"
 
 value "
-  let last_vs = [Some (1,42)];
-    curr_onebs = [[(b, (None::((nat\<times>int) option))), (c, Some (4,43))],[ (c, Some (4,43))]];
+  let last_vs = [];
+    curr_onebs = [[(a1,Some (1,1))]];
     max_is = Max {length last_vs, length curr_onebs};
     is = [1..<Suc max_is];
     at_i = (\<lambda> i . 
-      ( if (length curr_onebs \<ge> i) 
+      ( if (length curr_onebs \<ge> i)
         then 
-          ( if (length last_vs \<ge> i) 
+          ( if (length last_vs \<ge> i)
             then (a2,last_vs!(i-1))#curr_onebs!(i-1)
             else (a2,None)#curr_onebs!(i-1) )
         else [(a2,last_vs!(i-1))] ) )
   in (if max_is = 0 then [[(a2,None)]] else [at_i i . i \<leftarrow> is])"
 
-
-fun add_index where
-  "add_index [] _ = []"
-| "add_index (x#xs) n = (x,n)#(add_index xs (n-1))"
-
-
 definition fold_union where "fold_union l \<equiv> (fold (\<lambda> x y . x \<union> y) l {})"
 
+text {* 
+  When a quorum of 1b messages is received, we complete
+  We complete all started instances by sending 2b messages containing a safe value.
+  If an instance has not been started by a higher instance has been started, we complete
+  it by sending a no-op message. *}
 fun receive_1b where
  "receive_1b a (Phase1b last_vs new_bal a2) s = (
     if (new_bal = the (ballot s a))
@@ -206,17 +209,17 @@ fun receive_1b where
       (let 
            new_state = update_onebs s a new_bal a2 last_vs;
            onebs' = onebs new_state a new_bal;
-           quorum_received = 2 * length onebs' > nr s;
+           quorum_received = 2 * length (onebs'!0) > nr s;
            msgs = 
             if (quorum_received)
             then 
               let
                 received = onebs new_state a new_bal;
-                safe = add_index [highest_voted l . l \<leftarrow> received] 1; (* of the form [(v_1,1),(v_2,2)...] where v_i is safe at i*)
-                msg = (* Here we don't have anything to propose in case opt is None. TODO: propose no-ops? Or mark the instances as available for new proposals? *)
-                  (\<lambda> (opt,i) . (case opt of None \<Rightarrow> None | Some v \<Rightarrow> Some (Phase2a i new_bal v a)));
-                msgs = 
-                  [(case (msg x) of None \<Rightarrow> {} | Some m \<Rightarrow> send_all s a m) . x \<leftarrow> safe ]
+                highest = enumerate 1 [highest_voted l . l \<leftarrow> received]; (* of the form [(1,v_1),(2,v_2)...] where v_i is safe at i*)
+                msg =
+                  (\<lambda> (i,opt) . (case opt of None \<Rightarrow> Some (Phase2a i new_bal NoOp a) | Some v \<Rightarrow> Some (Phase2a i new_bal v a)));
+                msgs =
+                  [(case (msg x) of None \<Rightarrow> {} | Some m \<Rightarrow> send_all s a m) . x \<leftarrow> highest ]
               in fold_union msgs
             else {}
        in (new_state, msgs)))
