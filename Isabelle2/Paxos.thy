@@ -17,6 +17,7 @@ record ('v, 'acc, 'b) p_state =
   ballot :: "'acc \<Rightarrow> 'b option"
   vote :: "'acc \<Rightarrow> 'b \<Rightarrow> 'v option"
   suggestion :: "'b \<Rightarrow> 'v option"
+    -- {* The suggestion of the leader of round b *}
 
 fun less_eq_o where 
   "less_eq_o None _ = True"
@@ -134,19 +135,44 @@ next
 qed
 
 text {* Here the max is the one from Lattices_Big *}
+
 definition max_acc_voted_round where
-  "max_acc_voted_round r a bound \<equiv> Max {(vote r) a b | b . b \<le> bound}"
+  "max_acc_voted_round r a bound \<equiv> Max {b . vote r a b \<noteq> None \<and> b \<le> bound}"
   
 definition max_voted_round where
   "max_voted_round r q bound \<equiv> Max {max_acc_voted_round r a bound | a . a |\<in>| q}"
+  
+definition max_voted_round_2 where
+  "max_voted_round_2 r q bound \<equiv> 
+    if \<exists> b a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None
+    then Some (Max {b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None})
+    else None"
+
+lemma 
+  assumes "a |\<in>| q" and "b \<le> bound" 
+  and "max_voted_round_2 r q bound = None \<or> b \<ge> the (max_voted_round_2 r q bound)"
+  shows "vote r a b = None"
+  using assms
+  apply (auto simp add:max_voted_round_2_def) oops
  
 definition max_vote where
   "max_vote r q bound \<equiv>
-    case max_voted_round r q bound of
+    case max_voted_round_2 r q bound of
       None \<Rightarrow> None
     | Some b \<Rightarrow> 
-        let max_voter = (SOME a . a |\<in>| q \<and> max_acc_voted_round r a bound = Some b)
+        let max_voter = (SOME a . a |\<in>| q \<and> vote r a b \<noteq> None)
         in (vote r) max_voter b"
+
+lemma 
+  assumes "max_voted_round_2 r q bound = Some b\<^sub>m"
+  obtains a2 where "vote r a2 b\<^sub>m = max_vote r q bound"
+proof (auto simp add: max_vote_def) oops
+
+lemma 
+  assumes "a |\<in>| q" and "b \<le> bound" and "vote r a b = Some v"
+  and "max_voted_round_2 r q bound = Some b\<^sub>m"
+  obtains a2 where "vote r a2 b\<^sub>m = max_vote r q bound" and "b \<le> b\<^sub>m" oops
+
 
 lemma "finite { y . \<exists> x . x |\<in>| (X::'a fset) \<and> y = E x}" oops
 
