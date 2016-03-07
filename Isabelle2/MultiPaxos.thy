@@ -48,6 +48,7 @@ record ('v, 'a, 'b) mp_state =
   (*lowest_instance :: "'a \<Rightarrow> nat"
     -- {* When a is a leader, the next instance to use. *}*)
   log :: "'a \<Rightarrow> (nat \<times> 'v cmd) list"
+  leadership_acquired :: "'a \<Rightarrow> 'b \<Rightarrow> bool"
 
 definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
   "init_state accs \<equiv> \<lparr>
@@ -60,7 +61,8 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
     decided = (\<lambda> a . \<lambda> i . None),
     highest_instance = (\<lambda> a . 0),
     pending = (\<lambda> a . \<lambda> i . None),
-    log = ( \<lambda> a . [])
+    log = ( \<lambda> a . []),
+    leadership_acquired = (\<lambda> a . \<lambda> b . False)
     \<rparr>"
 
 definition nr where
@@ -207,14 +209,18 @@ fun receive_1b where
     if (new_bal = the (ballot s a))
     then (
       (let 
-           new_state = update_onebs s a new_bal a2 last_vs;
-           onebs' = onebs new_state a new_bal;
+           new_state1 = update_onebs s a new_bal a2 last_vs;
+           onebs' = onebs new_state1 a new_bal;
            quorum_received = 2 * length (onebs'!0) > nr s;
+           new_state2 = if (quorum_received) 
+            then new_state1\<lparr>leadership_acquired := (leadership_acquired new_state1)(a := (
+              leadership_acquired new_state1 a)(new_bal := True))\<rparr>   
+            else new_state1;
            msgs = 
             if (quorum_received)
             then 
               let
-                received = onebs new_state a new_bal;
+                received = onebs new_state2 a new_bal;
                 highest = enumerate 1 [highest_voted l . l \<leftarrow> received]; (* of the form [(1,v_1),(2,v_2)...] where v_i is safe at i*)
                 msg =
                   (\<lambda> (i,opt) . (case opt of None \<Rightarrow> Some (Phase2a i new_bal NoOp a) | Some v \<Rightarrow> Some (Phase2a i new_bal v a)));
@@ -222,7 +228,7 @@ fun receive_1b where
                   [(case (msg x) of None \<Rightarrow> {} | Some m \<Rightarrow> send_all s a m) . x \<leftarrow> highest ]
               in fold_union msgs
             else {}
-       in (new_state, msgs)))
+       in (new_state2, msgs)))
     else (s,{}))"
 | "receive_1b a _ s = (s, {})"
 
