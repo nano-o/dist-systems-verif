@@ -214,7 +214,7 @@ fun receive_1b where
            quorum_received = 2 * length (onebs'!0) > nr s;
            new_state2 = if (quorum_received) 
             then new_state1\<lparr>leadership_acquired := (leadership_acquired new_state1)(a := (
-              leadership_acquired new_state1 a)(new_bal := True))\<rparr>   
+              leadership_acquired new_state1 a)(new_bal := True))\<rparr> 
             else new_state1;
            msgs = 
             if (quorum_received)
@@ -231,6 +231,10 @@ fun receive_1b where
        in (new_state2, msgs)))
     else (s,{}))"
 | "receive_1b a _ s = (s, {})"
+
+definition is_leader where 
+  "is_leader s a \<equiv> 
+    case ballot s a of None \<Rightarrow> False | Some b \<Rightarrow> leadership_acquired s a b"
 
 fun receive_2a where
   "receive_2a a (Phase2a i b v l) s =
@@ -262,6 +266,6 @@ fun receive_2b where
 value "largestprefix [(1,v1), (2,v2), (4,v4)]"
 
 export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b receive_fwd 
-  largestprefix in Scala file "simplePaxos.scala"
+  largestprefix is_leader in Scala file "simplePaxos.scala"
 
 end
