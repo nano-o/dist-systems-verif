@@ -148,25 +148,54 @@ definition max_voted_round_2 where
     then Some (Max {b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None})
     else None"
 
-lemma
-  assumes "a |\<in>| q" and "b \<le> bound" 
-  and "max_voted_round_2 r q bound = None \<or> b \<ge> the (max_voted_round_2 r q bound)"
+lemma assumes "n > Max {j . P j}"
+  and "finite {j . P j}"
+  shows "\<not> P n" using assms
+  by (metis Max_ge mem_Collect_eq not_le)
+
+lemma finite_voted_bals:"finite {b::nat . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None}"
+proof -
+  have "{b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None} \<subseteq> {b . b \<le> bound}"
+    by auto
+  moreover have "finite {b::nat . b \<le> bound}" by simp
+  ultimately show ?thesis
+  by (metis (no_types, lifting) finite_subset) 
+qed
+
+lemma max_voted_round_none:
+  assumes "a |\<in>| q" and "(b::nat) \<le> bound" 
+  and "max_voted_round_2 r q bound = None \<or> b > the (max_voted_round_2 r q bound)"
   shows "vote r a b = None"
-  proof (cases "max_voted_round_2 r q bound")
-    case None 
-      thus ?thesis using assms(1,2)
-      by (auto simp add:max_voted_round_2_def split:split_if_asm)
-    next
-      case (Some b)
-      with this obtain a2 b2 v where "a2 |\<in>| q \<and> b2 \<le> bound \<and> vote r a2 b2 = Some v"
-      by (auto simp add:max_voted_round_2_def split:split_if_asm)
-      hence "{b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None} \<noteq> {}" by auto
-      moreover have "finite {b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None}" sorry
-      moreover have "b \<ge> the (max_voted_round_2 r q bound)" using Some assms(3) by fastforce
-      ultimately
-      show ?thesis using assms(1,2)
-      apply (auto simp add:max_voted_round_2_def split:split_if_asm) oops
-      
+proof (cases "max_voted_round_2 r q bound")
+case None 
+  thus ?thesis using assms(1,2)
+  by (auto simp add:max_voted_round_2_def split:split_if_asm)
+next
+  case (Some b\<^sub>m\<^sub>a\<^sub>x)
+  with this obtain a2 b2 v where "a2 |\<in>| q \<and> b2 \<le> bound \<and> vote r a2 b2 = Some v"
+  by (auto simp add:max_voted_round_2_def split:split_if_asm)
+  hence "{b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None} \<noteq> {}" by auto
+  with this obtain b2 a2 where "a2 |\<in>| q \<and> b2 \<le> bound \<and> vote r a2 b2 \<noteq> None"
+    by auto
+  moreover note finite_voted_bals
+  moreover have "b > Max {b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None}" using Some assms(3)
+    by (auto simp add:max_voted_round_2_def split:split_if_asm)
+  ultimately
+  show ?thesis by (metis (mono_tags, lifting) Max.coboundedI assms(1,2) leD mem_Collect_eq) 
+qed
+
+lemma max_voted_round_some :
+  assumes "max_voted_round_2 r q (bound::nat) = Some (b::nat)"
+  obtains a where "a |\<in>| q" and "vote r a b \<noteq> None" and "b \<le> bound"
+proof -
+  from assms have "b = Max {b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote r a b \<noteq> None}"
+    by (auto simp add:max_voted_round_2_def split:split_if_asm)
+  moreover note finite_voted_bals
+  moreover obtain a2 b2 where "a2 |\<in>| q \<and> b2 \<le> bound \<and> vote r a2 b2 \<noteq> None"
+    using assms by (auto simp add:max_voted_round_2_def) (metis option.distinct(1))
+  ultimately show ?thesis using that
+  by (smt Max_in empty_iff finite_nat_set_iff_bounded_le mem_Collect_eq) 
+qed
  
 definition max_vote where
   "max_vote r q bound \<equiv>
@@ -176,29 +205,36 @@ definition max_vote where
         let max_voter = (SOME a . a |\<in>| q \<and> vote r a b \<noteq> None)
         in (vote r) max_voter b"
 
-lemma 
-  assumes "max_voted_round_2 r q bound = Some b\<^sub>m\<^sub>a\<^sub>x"
-  obtains a2 where "vote r a2 b\<^sub>m\<^sub>a\<^sub>x = max_vote r q bound"
-proof (auto simp add: max_vote_def) oops
-
-lemma 
-  assumes "a |\<in>| q" and "b \<le> bound" and "vote r a b = Some v"
-  and "max_voted_round_2 r q bound = Some b\<^sub>m"
-  obtains a2 where "vote r a2 b\<^sub>m = max_vote r q bound" and "b \<le> b\<^sub>m" oops
-
-
-lemma "finite { y . \<exists> x . x |\<in>| (X::'a fset) \<and> y = E x}" oops
-
-lemma
-  assumes "q |\<in>| quorums" and "max_voted_round r q bound = Some (b::nat)"
-  obtains a where "a |\<in>| q \<and> max_acc_voted_round r a bound = Some b"
+lemma max_vote_some_prop:
+  assumes "max_vote r q (bound::nat) = Some v"
+  obtains a b\<^sub>m\<^sub>a\<^sub>x where "vote r a b\<^sub>m\<^sub>a\<^sub>x = max_vote r q bound" and "a |\<in>| q"
+  and "\<And> a2 b2 . \<lbrakk>a2 |\<in>| q; b2 > b\<^sub>m\<^sub>a\<^sub>x; b2 \<le> bound\<rbrakk> \<Longrightarrow> vote r a2 b2 = None"
+  and "b\<^sub>m\<^sub>a\<^sub>x \<le> bound"
 proof -
-  have 1:"q \<noteq> {||}" using assms(1)
-    by (metis Paxos_axioms Paxos_def finter_fempty_left)
-  from 1 have 2:"{max_acc_voted_round r a bound | a . a |\<in>| q} \<noteq> {}"
-    by (metis (mono_tags, lifting) Collect_empty_eq all_not_fin_conv)
-  have 3:"finite {max_acc_voted_round r a bound | a . a |\<in>| q}" oops
-    
+  from assms obtain b\<^sub>m\<^sub>a\<^sub>x where 0:"max_voted_round_2 r q bound = Some (b\<^sub>m\<^sub>a\<^sub>x::nat)"
+    by (auto simp add:max_vote_def) (metis (lifting) not_None_eq option.simps(4)) 
+  with max_voted_round_some obtain a where
+    "a |\<in>| q" and "vote r a b\<^sub>m\<^sub>a\<^sub>x \<noteq> None" and 1:"b\<^sub>m\<^sub>a\<^sub>x \<le> bound" by metis
+  hence 
+    "let a2 = SOME a . a |\<in>| q \<and> vote r a b\<^sub>m\<^sub>a\<^sub>x \<noteq> None in a2 |\<in>| q \<and> vote r a2 b\<^sub>m\<^sub>a\<^sub>x \<noteq> None"
+      by (metis (mono_tags, lifting) someI_ex)
+  moreover have "\<And> a2 b2 . \<lbrakk>a2 |\<in>| q; b2 \<le> bound; b2 > b\<^sub>m\<^sub>a\<^sub>x\<rbrakk> \<Longrightarrow> vote r a2 b2 = None" 
+    using max_voted_round_none by (metis "0" option.sel)  
+  moreover have "max_vote r q bound = (vote r) (SOME a . a |\<in>| q \<and> vote r a b\<^sub>m\<^sub>a\<^sub>x \<noteq> None) b\<^sub>m\<^sub>a\<^sub>x"
+    using 0 by (auto simp add:max_vote_def)
+  ultimately show ?thesis using that 1
+    by (metis (no_types, lifting))
+qed
+
+lemma max_vote_none_prop:
+  assumes "max_vote r q (bound::nat) = None"
+  shows "\<And> a b . \<lbrakk>a |\<in>| q; b \<le> bound\<rbrakk> \<Longrightarrow> vote r a b = None"
+using assms
+apply (simp add:max_vote_def split add:option.split_asm)
+    apply (smt max_voted_round_none)
+  apply (smt Paxos.max_voted_round_some Paxos_axioms not_None_eq option.simps(3) someI_ex)
+done
+  
 definition proved_safe_at where
   "proved_safe_at r Q b v \<equiv>
     case b of 0 \<Rightarrow> True
@@ -271,7 +307,7 @@ lemma chosen_at_same:
   shows "v1 = v2" using quorum_vote assms
   by (auto simp add:chosen_at_def) fast
 
-lemma
+lemma all_choosable_no_safe:
   assumes "\<And> (v::'v) . choosable r v b"
   and "safe_at r v (Suc b)" and "(v1::'v) \<noteq> v2"
   shows False using assms 
@@ -314,34 +350,97 @@ proof -
 qed
 
 lemma proved_safe:
-  assumes "safe r" and "q |\<in>| quorums"
+  assumes "safe s" and "q |\<in>| quorums"
   and "\<And> a . a |\<in>| q \<Longrightarrow> ballot s a \<ge> Some i"
-  and "proved_safe_at s q i v" and "i \<noteq> 0"
-  shows "safe_at s v i"
-proof -
-  consider k a
-    where "a |\<in>| q" and "vote s a k = Some v" and "k < i"  
+  and "proved_safe_at s q i v"
+  shows "safe_at s v (i::nat)"
+proof (cases "i = 0")
+  case True thus ?thesis
+    by (metis not_less0 safe_at_def) 
+next
+  case False
+  consider (a) k a
+    where "a |\<in>| q" and "vote s a k = Some v" and "k < i"
     and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 |\<in>| q; k < l; l < i\<rbrakk> \<Longrightarrow> vote s a\<^sub>2 l = None"
-  | "\<And> a k . \<lbrakk>a |\<in>| q; k < i\<rbrakk>  \<Longrightarrow> vote s a k = None"
-  using assms(4,5)
-  apply (auto simp add:proved_safe_at_def)
-  apply (cases i)
-  apply (auto simp add:max_vote_def max_voted_round_2_def)
-  oops
-(*
-  have "v = w" if "choosable s w j" and "j < i" for w j 
-  proof -
-    from that(1)
-    obtain q\<^sub>w where "q\<^sub>w \<in> quorums"
-      and "\<And> a . \<lbrakk>a \<in> q\<^sub>w; case ballot s a of None \<Rightarrow> False | Some b \<Rightarrow> b > j\<rbrakk> \<Longrightarrow> vote s a j = Some w"
-      by (auto simp add:choosable_def)  (smt option.case_eq_if)
+  | (b) "\<And> a k . \<lbrakk>a |\<in>| q; k < i\<rbrakk>  \<Longrightarrow> vote s a k = None"
+  proof (cases "max_vote s q (i-1)")
+    case None 
+    hence "\<And> a k . \<lbrakk>a |\<in>| q; k < i\<rbrakk>  \<Longrightarrow> vote s a k = None" 
+      using False by (metis Suc_diff_eq_diff_pred Suc_leI diff_is_0_eq gr0I max_vote_none_prop)
+    thus ?thesis using that by auto
+  next
+    case (Some v') 
+    with this obtain k a where "a |\<in>| q" and "vote s a k = Some v" and "k < i"  
+      and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 |\<in>| q; k < l; l < i\<rbrakk> \<Longrightarrow> vote s a\<^sub>2 l = None"
+      using False assms(4)
+      by (simp add:proved_safe_at_def)
+      (smt False Nitpick.case_nat_unfold Some Suc_pred less_Suc_eq_le max_vote_some_prop option.case_eq_if option.sel option.simps(3)) 
+    thus ?thesis using that by auto
   qed
-  thus ?thesis by (auto simp add:safe_at_def)
-qed *)
-
-lemma 
-  assumes "proved_safe_at r Q b v"
-  shows "safe_at r b v" oops
+  thus ?thesis
+  proof (cases)
+    case b 
+    { fix j v
+      assume 1:"j < i"  and 2:"choosable s v j"
+      from 2 obtain q2 where 3:"q2 |\<in>| quorums" and 4:"\<And> a . a |\<in>| q2 \<Longrightarrow>
+        (ballot s a) > Some j \<Longrightarrow> (vote s) a j = Some v"
+        by (auto simp add:choosable_def)
+      from 3 assms(2) obtain a where 5:"a |\<in>| q" and 6:"a |\<in>| q2"
+        using quorum_inter_witness by metis
+      have 8:"ballot s a \<ge> Some j" using assms(3)
+        by (metis "1" "5" less_eq_def less_eq_o.simps(3) less_imp_le order_trans) 
+      have 9:"vote s a j = Some v" using assms(3)
+        by (metis "1" "4" "5" "6" "8" leD le_neq_trans less_eq_def less_eq_o.simps(3))
+      from b have False by (metis "1" "5" "9" option.distinct(1)) }
+    thus ?thesis by (auto simp add:safe_at_def)
+  next
+    case a
+    have "v' = v" if "choosable s v' j" and "j < i" for j v'
+    proof -
+      consider (aa) "j < k" | (bb) "j = k" | (cc) "k < j" by fastforce
+      hence ?thesis
+      proof cases
+      case aa
+      have "a |\<in>| acceptors"
+        by (metis Paxos_axioms Paxos_def a(1) assms(2) fset_mp) 
+      hence "safe_at s v k" using  assms(1)
+        by (metis a(2) option.discI option.sel safe_def)
+      with aa show ?thesis using that by (metis safe_at_def) 
+    next
+      case cc
+      from that obtain q2 where 3:"q2 |\<in>| quorums" and 4:"\<And> a . a |\<in>| q2 \<Longrightarrow>
+        (ballot s a) > Some j \<Longrightarrow> (vote s) a j = Some v'"
+        by (auto simp add:choosable_def)
+      from 3 assms(2) obtain a2 where 5:"a2 |\<in>| q" and 6:"a2 |\<in>| q2" 
+        using quorum_inter_witness by metis
+      from 5 assms(3) that(2) have 7:"ballot s a2 \<ge> Some j"
+        by (metis less_eq_def less_eq_o.simps(3) less_imp_le order_trans) 
+      from 7 6 4 have 8:"vote s a2 j = Some v'"
+        by (metis "5" antisym_conv2 assms(3) leD less_eq_def less_eq_o.simps(3) that(2)) 
+      show ?thesis using a(4) 5 that(2) 8 cc by (metis option.distinct(1))
+    next
+      case bb (* Here we probably need the fact that the array is conservative: *)
+      have 1:"\<And> a . a |\<in>| acceptors \<Longrightarrow> vote s a k = Some v" sorry
+      from that obtain q2 where 3:"q2 |\<in>| quorums" and 4:"\<And> a . a |\<in>| q2 \<Longrightarrow>
+        (ballot s a) > Some j \<Longrightarrow> (vote s) a j = Some v'"
+        by (auto simp add:choosable_def)
+      from 3 assms(2) obtain a2 where 5:"a2 |\<in>| q" and 6:"a2 |\<in>| q2" 
+        using quorum_inter_witness by metis
+      have 7:"ballot s a2 \<ge> Some k"
+        by (metis "5" a(3) assms(3) less_eq_def less_eq_o.simps(3) less_imp_le order_trans)
+      have 8:"a2 |\<in>| acceptors"
+        by (metis "5" Paxos_axioms Paxos_def assms(2) order.not_eq_order_implies_strict pfsubsetD) 
+      have 9:"vote s a2 k = Some v"
+        by (metis "1" "8")
+      show ?thesis
+        by (metis "4" "5" "6" "7" "9" antisym_conv2 assms(3) bb leD less_eq_def less_eq_o.simps(3) option.sel that(2)) 
+    qed
+    thus ?thesis by (auto simp add:safe_at_def)
+  qed
+  thus ?thesis
+  by (metis Paxos.safe_at_def Paxos_axioms) 
+  qed 
+qed
   
 section {* Paxos IOA *}
 
