@@ -14,7 +14,7 @@ datatype ('v,'a,'b) msg =
     The intended meaning is also that the acceptor 
     did not participate in any instance numbered greater than the length of the list. *}
 | Phase2a (inst: nat) (for_ballot:'b) (suggestion:'v) (leader: 'a)
-| Phase2b (inst: nat) (ballot:'b) (acceptor: 'a)
+| Phase2b (inst: nat) (ballot:'b) (acceptor: 'a) (val: 'v)
 | Vote (inst: nat) (val: 'v)
   -- {* Instructs a learner that a value has been decided. Not used for now... *}
 | Fwd (val: 'v)
@@ -44,7 +44,7 @@ record ('v, 'a, 'b) mp_state =
     -- {* For an acceptor a, this is Some v if a has decided v in some ballot.
       TODO: is this needed? Seems superseded by the log field. *}
   highest_instance :: "'a \<Rightarrow> nat"
-  pending :: "'a \<Rightarrow> nat \<Rightarrow> 'v cmd option"
+  pending :: "'a \<Rightarrow> nat \<Rightarrow> 'v cmd option" (* Useless now because we added the command to the 2b messages *)
   (*lowest_instance :: "'a \<Rightarrow> nat"
     -- {* When a is a leader, the next instance to use. *}*)
   log :: "'a \<Rightarrow> (nat \<times> 'v cmd) list"
@@ -223,7 +223,8 @@ fun receive_1b where
                 received = onebs new_state2 a new_bal;
                 highest = enumerate 1 [highest_voted l . l \<leftarrow> received]; (* of the form [(1,v_1),(2,v_2)...] where v_i is safe at i*)
                 msg =
-                  (\<lambda> (i,opt) . (case opt of None \<Rightarrow> Some (Phase2a i new_bal NoOp a) | Some v \<Rightarrow> Some (Phase2a i new_bal v a)));
+                  (\<lambda> (i,opt) . (case opt of None \<Rightarrow> Some (Phase2a i new_bal NoOp a) 
+                    | Some v \<Rightarrow> Some (Phase2a i new_bal v a)));
                 msgs =
                   [(case (msg x) of None \<Rightarrow> {} | Some m \<Rightarrow> send_all s a m) . x \<leftarrow> highest ]
               in fold_union msgs
@@ -240,28 +241,57 @@ fun receive_2a where
   "receive_2a a (Phase2a i b v l) s =
     (let bal = (ballot s a) in
       (if (bal = Some b)
-      then (s\<lparr>vote := (vote s)(a := (vote s a)(i := Some v))\<rparr>, {Packet a l (Phase2b i b a)})
+      then (s\<lparr>vote := (vote s)(a := (vote s a)(i := Some v))\<rparr>, {send_all s a (Phase2b i b a v)})
       else (s, {})))"
 | "receive_2a a _ s = (s, {})"
 
 fun receive_2b where
-  "receive_2b (a::'a) (Phase2b i b a2) s =
-    (let s = 
+  "receive_2b a (Phase2b i b a2 v) s =
+    (let s =
       (if (decided s a i = None)
       then
         (let new_twobs = a2 # (twobs s a i b)
         in
-          (if (2 * length new_twobs > card (acceptors s)) 
+          (if (2 * length new_twobs > card (acceptors s))
           then
             s\<lparr>twobs := (twobs s)(a := (twobs s a)(i := (twobs s a i)(b := new_twobs))),
-              decided := (decided s)(a := (decided s a)(i := pending s a i)),
-              log := (log s)(a := distinct_Sorted_Insert (i, the (pending s a i)) (log s a)) \<rparr>
+              decided := (decided s)(a := (decided s a)(i := Some v)),
+              log := (log s)(a := distinct_Sorted_Insert (i, v) (log s a)) \<rparr>
           else
             s\<lparr>twobs := (twobs s)(a := (twobs s a)(i := (twobs s a i)(b := new_twobs)))\<rparr>))
-      else 
+      else
         s)
     in (s,{}))"
 | "receive_2b a _ s = (s, ({}))"
+
+definition test_state_1 where 
+  "test_state_1 \<equiv> \<lparr>
+    mp_state.acceptors = {1,2,3::int},
+    ballot = (\<lambda> a . None),
+    vote = (\<lambda> a . \<lambda> i . None),
+    last_ballot = (\<lambda> a . \<lambda> i . None),
+    onebs = (\<lambda> a . \<lambda> b . []),
+    twobs = (\<lambda> a . \<lambda> i . \<lambda> b . []),
+    decided = (\<lambda> a . \<lambda> i . None),
+    highest_instance = (\<lambda> a . 0),
+    pending = (\<lambda> a . \<lambda> i . None),
+    log = ( \<lambda> a . []),
+    leadership_acquired = (\<lambda> a . \<lambda> b . False)
+    \<rparr>"
+
+(* A test of receive_2b *)
+value "let 
+  val = (42::int);
+  instance = (1::nat);
+  ballot = (2::nat);
+  receiver = (1::int);
+  from1 = (2::int);
+  (s1,msgs1) = receive_2b receiver (Phase2b instance ballot from1 (Cmd val)) test_state_1;
+  from2 = (3::int);
+  (s2,msgs2) = receive_2b receiver (Phase2b instance ballot from2 (Cmd val)) s1;
+  twobs = twobs s2 receiver instance ballot;
+  n = card (acceptors s)
+in (twobs, msgs2, pending s2 receiver instance, decided s2 receiver instance)"
 
 value "largestprefix [(1,v1), (2,v2), (4,v4)]"
 
