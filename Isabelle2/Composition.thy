@@ -2,6 +2,7 @@ section {* Definitions for the composition theorem *}
 
 theory Composition
 imports ComposableGC "/home/nano/Documents/IO-Automata/Simulations" "~~/src/HOL/Eisbach/Eisbach_Tools"
+  "/home/nano/Documents/IO-Automata/IOA_Automation"
 begin
 
 datatype ('a,'c,'l) comp_action = 
@@ -56,53 +57,51 @@ definition spec where
 
 section {* The invariants *}
 
-named_theorems inv_defs 
-
 definition inv1 where
   "inv1 r \<equiv> let r1 = fst r; r2 = snd r in
     (\<forall> s \<in> cgc_state.fromPrev r2 . \<forall> l \<in> learners . \<forall> s' \<in> learned r1 l . s' \<preceq> s)"
-declare inv1_def[inv_defs]
+declare inv1_def[inv_proofs_defs]
 
 definition inv2 where
   "inv2 r \<equiv> let r1 = fst r; r2 = snd r in 
     cgc_state.fromPrev r2 = cgc_state.toNext r1"
-declare inv2_def[inv_defs]
+declare inv2_def[inv_proofs_defs]
 
 definition inv3 where
   "inv3 r \<equiv> let r1 = fst r; r2 = snd r in
     cgc_state.fromPrev r1 = {\<bottom>}"
-declare inv3_def[inv_defs]
+declare inv3_def[inv_proofs_defs]
 
 definition inv4 where
   "inv4 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> l \<in> learners . \<forall> s \<in> learned r2 l . 
       \<exists> S cs . S \<noteq> {} \<and> S \<subseteq> cgc_state.fromPrev r2
         \<and> s = \<Sqinter>S \<star> cs \<and> set cs \<subseteq> propCmd r2"
-declare inv4_def[inv_defs]
+declare inv4_def[inv_proofs_defs]
 
 definition inv5 where
   "inv5 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> s \<in> cgc_state.toNext r2 . 
       \<exists> S cs . S \<noteq> {} \<and> S \<subseteq> cgc_state.fromPrev r2 
         \<and> s = \<Sqinter>S \<star> cs \<and> set cs \<subseteq> propCmd r2"
-declare inv5_def[inv_defs]
+declare inv5_def[inv_proofs_defs]
 
 definition inv8 where
   "inv8 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> s \<in> cgc_state.toNext r1 . 
       \<exists> cs . s = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd r1"
-declare inv8_def[inv_defs]
+declare inv8_def[inv_proofs_defs]
 
 definition inv9 where
   "inv9 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> S . S \<noteq> {} \<and> S \<subseteq> cgc_state.toNext r1 \<longrightarrow>
       (\<exists> cs . \<Sqinter>S = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd r1)"
-declare inv9_def[inv_defs]
+declare inv9_def[inv_proofs_defs]
 
 definition inv7 where
   "inv7 r \<equiv> let r1 = fst r; r2 = snd r in
     finite (cgc_state.toNext r1) \<and> finite (cgc_state.toNext r2)"
-declare inv7_def[inv_defs]
+declare inv7_def[inv_proofs_defs]
 
 text {* Below are the invariants used in the refinement proof (with @{term inv3}). 
   The other invariants are auxiliary invariants that are only used to prove the invariants below. *} 
@@ -110,71 +109,37 @@ text {* Below are the invariants used in the refinement proof (with @{term inv3}
 definition inv10 where
   "inv10 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> l\<^sub>1 \<in> learners. \<forall> l\<^sub>2 \<in> learners . \<forall> s\<^sub>1 \<in> learned r1 l\<^sub>1 . \<forall> s\<^sub>2 \<in> learned r2 l\<^sub>2 . s\<^sub>1 \<preceq> s\<^sub>2"
-declare inv10_def[inv_defs]
+declare inv10_def[inv_proofs_defs]
 
 definition inv11 where
   "inv11 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> l\<^sub>1 \<in> learners. \<forall> s\<^sub>1 \<in> learned r1 l\<^sub>1 . \<forall> s\<^sub>2 \<in> cgc_state.toNext r2 . s\<^sub>1 \<preceq> s\<^sub>2"
-declare inv11_def[inv_defs]
+declare inv11_def[inv_proofs_defs]
 
 definition inv12 where
   "inv12 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> l \<in> learners. \<forall> s \<in> learned r2 l . \<exists> cs .  s = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd r1 \<union> propCmd r2"
-declare inv12_def[inv_defs]
+declare inv12_def[inv_proofs_defs]
 
 definition inv13 where
   "inv13 r \<equiv> let r1 = fst r; r2 = snd r in
     \<forall> s \<in> cgc_state.toNext r2 . \<exists> cs .  s = \<bottom> \<star> cs \<and> set cs \<subseteq> propCmd r1 \<union> propCmd r2"
-declare inv13_def[inv_defs]
+declare inv13_def[inv_proofs_defs]
 
 (*<*)
 subsection {* Automation setup *}
 
-lemmas cgc_ioa_defs = composition_def par2_def asig_comp2_def cgc_ioa_def rename_def
+lemmas cgc_ioa_defs[inv_proofs_defs] = composition_def par2_def asig_comp2_def cgc_ioa_def rename_def
     rename_set_def cgc_asig_def is_trans_def actions_def cgc_trans_def initial_def hide_def 
-    propose_def 
-lemmas actions_defs = learn_def fromPrev_def toNext_def
-    hide_asig_def externals_def cgc_start_def spec_def
-lemmas ref_defs = refines_def actions_def trace_def schedule_def filter_act_def
+    propose_def actions_def cgc_start_def  externals_def learn_def fromPrev_def toNext_def
+    hide_asig_def externals_def spec_def
 
-named_theorems invs
-  -- "named theorem for use by the tactics below"
+lemmas ref_defs = refines_def trace_def schedule_def filter_act_def
+
 named_theorems aux_invs
   -- "auxiliary invariants used to prove the invariants needed for the refinement proof"
 named_theorems ref_invs
   -- "the invariants needed for the refinement proof"
-named_theorems mydefs
-  -- "definitions to unfold"
-declare cgc_ioa_defs[mydefs]
-declare actions_defs[mydefs]
-
-method bring_invs declares invs =
-  -- "bring all the invariants in the premises"
-  ( (insert invs) -- "insert invariant theorems in the premises; 
-      this will allow us to use [thin] to get rid of them after use",
-    ( (match premises in I[thin]:"invariant composition ?inv"
-        and R:"reachable composition ?s" \<Rightarrow> 
-            \<open>insert I[simplified invariant_def, rule_format, OF R]\<close>)+
-        -- "for each invariant theorem, use the reachability assumption to obtain the invariant",
-    (match premises in R[thin]:"reachable composition ?s" 
-      and T:"?s \<midarrow>?a\<midarrow>composition\<longrightarrow> ?t" \<Rightarrow> 
-        \<open>insert reachable_n[OF R T]\<close>),
-    (insert invs),(match premises in I[thin]:"invariant composition ?inv"
-        and R:"reachable composition ?s" \<Rightarrow> 
-            \<open>insert I[simplified invariant_def, rule_format, OF R]\<close>)+,
-    (match premises in R[thin]:"reachable composition ?s" \<Rightarrow> succeed)
-        -- "finally get rid of the reachability assumption"
-        )? -- "don't fail if there are no invariants to bring"
-    )
-
-method try_solve_inv declares mydefs invs =
-  ( rule invariantI, 
-    force simp add:mydefs inv_defs -- "solve the base case",
-    bring_invs invs:invs,
-    match premises in T:"?s \<midarrow>a\<midarrow>composition\<longrightarrow> ?t" for a \<Rightarrow> \<open>case_tac a\<close> 
-      -- "do case analysis on the action";
-    simp add:mydefs inv_defs )
-
 (*>*)
 
 subsection {* Usefull lemmas *}
@@ -206,33 +171,33 @@ by (metis singleton subset_singletonD)
 subsection {* The proofs *}
 
 lemma inv2:"invariant composition inv2"
-  by try_solve_inv
+by try_solve_inv2
 declare inv2[aux_invs]
 
 lemma inv1:"invariant composition inv1"
-  by (try_solve_inv invs:aux_invs)
+  by (try_solve_inv2 invs:aux_invs)
 declare inv1[aux_invs]
 
 lemma inv3:"invariant composition inv3"
-  by try_solve_inv
+  by try_solve_inv2
 declare inv3[aux_invs]
 declare inv3[ref_invs]
 
 lemma inv4:"invariant composition inv4"
-  apply (try_solve_inv invs:aux_invs  mydefs:non_trivial_def less_eq_def)
+  apply (try_solve_inv2 invs:aux_invs  inv_proofs_defs:non_trivial_def less_eq_def)
   subgoal by (meson subset_insertI2) 
-  subgoal by (metis subset_insertI2)
+  subgoal by metis
   subgoal by (metis subset_insertI2)
   subgoal by metis
   done
 declare inv4[aux_invs]
 
 lemma inv7:"invariant composition inv7"
-  by (try_solve_inv invs:aux_invs)
+  by (try_solve_inv2 invs:aux_invs)
 declare inv7[aux_invs]
 
 lemma inv5:"invariant composition inv5"
-  apply (try_solve_inv invs:aux_invs mydefs:non_trivial_def less_eq_def)
+  apply (try_solve_inv2 invs:aux_invs inv_proofs_defs:non_trivial_def less_eq_def)
   subgoal by (metis subset_insertI2)
   subgoal by metis
   subgoal by (metis subset_insertI2)
@@ -241,7 +206,7 @@ lemma inv5:"invariant composition inv5"
 declare inv5[aux_invs]
 
 lemma inv8:"invariant composition inv8"
-  apply (try_solve_inv invs:aux_invs mydefs:non_trivial_def less_eq_def)
+  apply (try_solve_inv2 invs:aux_invs inv_proofs_defs:non_trivial_def less_eq_def)
   subgoal by (metis subset_insertI2)
   subgoal by metis
   subgoal by (metis singleton subset_singletonD)
@@ -249,7 +214,7 @@ lemma inv8:"invariant composition inv8"
 declare inv8[aux_invs]
 
 lemma inv9:"invariant composition inv9"
-  apply (try_solve_inv invs:aux_invs mydefs:non_trivial_def less_eq_def)
+  apply (try_solve_inv2 invs:aux_invs inv_proofs_defs:non_trivial_def less_eq_def)
   subgoal by (metis subset_insertI2)
   subgoal by metis
   subgoal premises prems for s t a x5
@@ -272,21 +237,21 @@ done
 declare inv9[aux_invs]
 
 lemma inv10:"invariant composition inv10"
-  apply (try_solve_inv invs: aux_invs)
+  apply (try_solve_inv2 invs: aux_invs)
   subgoal by (smt l4 singletonD singletonI)
   subgoal by (smt insert_iff l4)
   done
 declare inv10[ref_invs]
 
 lemma inv11:"invariant composition inv11"
-  apply (try_solve_inv invs: aux_invs)
+  apply (try_solve_inv2 invs: aux_invs)
   subgoal by (smt l4 singletonD singletonI)
   subgoal by (smt insert_iff l4)
   done
 declare inv11[ref_invs]
 
 lemma inv12:"invariant composition inv12"
-  apply (try_solve_inv invs: aux_invs)
+  apply (try_solve_inv2 invs: aux_invs)
   subgoal by (metis subset_insertI2)
   subgoal by (metis subset_insertI2)
   defer
@@ -298,7 +263,7 @@ done
 declare inv12[ref_invs]
 
 lemma inv13:"invariant composition inv13"
-  apply (try_solve_inv invs: aux_invs)
+  apply (try_solve_inv2 invs: aux_invs)
   subgoal by (metis subset_insertI2)
   subgoal by (metis subset_insertI2)
   subgoal by metis
@@ -321,22 +286,22 @@ method split_conjs =
 
 lemma refok:"is_ref_map refmap composition spec"
 apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
-  subgoal by (force simp add:mydefs)
+  subgoal by (force simp add:inv_proofs_defs)
 
-  apply(bring_invs invs:ref_invs)
+  apply(instantiate_invs_2 invs:ref_invs)
   apply(case_tac ab, auto)
 
     apply(rule_tac x="refmap (a,b)" in exI)
     apply(rule_tac x="[(Propose1 x1,refmap (aa,ba))]" in exI)
-    subgoal by (force simp add:mydefs ref_defs refmap_def)
+    subgoal by (force simp add:inv_proofs_defs ref_defs refmap_def)
 
     apply(rule_tac x="refmap (a,b)" in exI)
     apply(rule_tac x="[(Propose2 x2,refmap (aa,ba))]" in exI)
-    subgoal by (force simp add:mydefs ref_defs refmap_def)
+    subgoal by (force simp add:inv_proofs_defs ref_defs refmap_def)
     
     apply(rule_tac x="refmap (a,b)" in exI)
     apply(rule_tac x="[(Learn1 x31 x32,refmap (aa,ba))]" in exI)
-    apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs actions_defs inv_defs refmap_def non_trivial_def)
+    apply (simp add:ref_defs  inv_proofs_defs refmap_def non_trivial_def)
     apply (split_conjs?)
     subgoal by (metis Un_upper1 subset_trans)
     subgoal by (metis Un_iff compat2_def insertI1 local.refl)
@@ -345,7 +310,7 @@ apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
 
     apply(rule_tac x="refmap (a,b)" in exI)
     apply(rule_tac x="[(Learn2 x41 x42,refmap (aa,ba))]" in exI)
-    apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs actions_defs inv_defs refmap_def non_trivial_def)
+    apply (simp add:ref_defs inv_proofs_defs refmap_def non_trivial_def)
     apply clarsimp
     apply (split_conjs?)
     subgoal by (metis (mono_tags, lifting) insertI1 insert_absorb2 insert_not_empty singleton singleton_insert_inj_eq)
@@ -354,11 +319,11 @@ apply(simp add:is_ref_map_def refmap_def, rule conjI; clarify)
 
     apply(rule_tac x="refmap (a,b)" in exI)
     apply(rule_tac x="[]" in exI)
-    subgoal by (force simp add:mydefs ref_defs refmap_def)
+    subgoal by (force simp add:inv_proofs_defs ref_defs refmap_def)
 
     apply (rule_tac x="refmap (a,b)" in exI)
     apply (rule_tac x="[(ToNext x6,refmap (aa,ba))]" in exI)
-    apply (simp add:ref_defs spec_def actions_defs cgc_ioa_defs inv_defs refmap_def non_trivial_def)
+    apply (simp add:ref_defs inv_proofs_defs refmap_def non_trivial_def)
     apply clarsimp
     apply (split_conjs?)
     subgoal by (metis insert_absorb2 insert_not_empty singleton singleton_insert_inj_eq)
@@ -368,14 +333,14 @@ done
 lemma trace_incl:"traces composition \<subseteq> traces spec"
 apply(rule ref_map_soundness[of refmap])
   subgoal by (insert refok, force)
-  subgoal by (simp add:mydefs, intro set_eqI; case_tac x; force)
+  subgoal by (simp add:inv_proofs_defs, intro set_eqI; case_tac x; force)
 done
 
 theorem composition: "composition =<| spec"
 apply(simp add:ioa_implements_def)
 apply(intro conjI)
-  subgoal by (simp add:mydefs, intro set_eqI; case_tac x; force)
-  subgoal by (simp add:mydefs, intro set_eqI; case_tac x; force)
+  subgoal by (simp add:inv_proofs_defs, intro set_eqI; case_tac x; force)
+  subgoal by (simp add:inv_proofs_defs, intro set_eqI; case_tac x; force)
   subgoal by (insert trace_incl, auto)
 done
 
