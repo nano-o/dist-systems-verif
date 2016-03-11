@@ -2,40 +2,8 @@ theory Paxos
 imports "/home/nano/Documents/IO-Automata/IOA_Automation"  "~~/src/HOL/Eisbach/Eisbach_Tools"
   "/home/nano/Documents/IO-Automata/Simulations" "~~/src/HOL/Library/Monad_Syntax"
   "~~/src/HOL/Library/FSet"
-  Transfer
+  LinorderOption
 begin
-
-section {* nat option as a linear order *}
-
-fun less_eq_o where 
-  "less_eq_o None _ = True"
-| "less_eq_o (Some x) None = False"
-| "less_eq_o (Some x) (Some y) = (x \<le> y)"
-
-fun less_o where
-  "less_o None None = False" 
-| "less_o None _ = True"
-| "less_o (Some x) None = False"
-| "less_o (Some x) (Some y) = (x < y)"
-
-instantiation option :: (linorder) linorder
-begin
-
-definition less_eq_def:"o1 \<le> o2 = less_eq_o o1 o2"
-definition less_def:"o1 < o2 = less_o o1 o2"
-
-instance 
-apply(intro_classes)
-apply (auto simp add:less_eq_def less_def)
-apply (metis le_cases less_eq_o.elims(3) less_o.elims(2) less_o.simps(1) less_o.simps(2) not_le option.inject)
-apply (metis less_eq_o.elims(2) less_o.elims(2) less_o.simps(1) less_o.simps(2) not_le option.inject)
-apply (metis less_eq_o.elims(3) less_o.simps(2) less_o.simps(4) not_le)
-apply (metis less_eq_o.elims(3) less_eq_o.simps(1) option.sel order_refl)
-apply (smt less_eq_o.elims(2) less_eq_o.elims(3) less_o.simps(1) less_o.simps(2) option.inject order_trans)
-apply (metis dual_order.antisym less_eq_o.elims(2) less_eq_o.simps(2) option.inject)
-by (metis le_cases less_eq_o.elims(3) option.discI option.inject)
-
-end
 
 section {* State and actions of the Paxos algorithm *}
 
@@ -493,14 +461,12 @@ apply (cases a)
   apply (simp add:inv_proofs_defs safe_at_def choosable_def)
   apply (smt fun_upd_apply neq_iff option.sel p_state.select_convs(2) p_state.select_convs(3) p_state.surjective p_state.update_convs(3))
   (* That was amazing, Sledgehammer found it before I had time to think about why it would be true... *)
-  (* Something may be wrong, I would have expected this to be much harder... *)
 apply (simp add:inv_proofs_defs safe_at_def choosable_def) (* start_ballot *)
 apply (metis p_state.ext_inject p_state.surjective p_state.update_convs(4))
 done
 
 definition inv2 where
   "inv2 s \<equiv> safe s \<and> (\<forall> b . case suggestion s b of None \<Rightarrow> True | Some v \<Rightarrow> safe_at s v b)"
-
 declare inv2_def[inv_proofs_defs]
 
 lemma inv2:
@@ -602,7 +568,7 @@ declare safe_inv[invs]
 
 definition agreement where 
   "agreement s \<equiv> \<forall> v w . chosen s v \<and> chosen s w \<longrightarrow> v = w"
-lemma "invariant the_ioa agreement"
+lemma agreement:"invariant the_ioa agreement"
 apply(rule invariantI)
     apply(auto simp add: inv_proofs_defs agreement_def chosen_def chosen_at_def)[1]
     apply (metis fempty_iff quorum_inter_witness)
@@ -612,36 +578,5 @@ apply(rule invariantI)
 done
 
 end
-
-subsection {* A mislead attempt at defining the max vote *}
-
-fun max_vote_2 where
-  "max_vote_2 votes (0::nat) = votes 0 \<bind> (\<lambda> v . Some (0,v))"
-| "max_vote_2 votes (Suc b) = 
-    ( case (votes (Suc b)) of None \<Rightarrow> max_vote_2 votes b
-      |  Some v \<Rightarrow> Some (Suc b, v) )"
-
-lemma assumes "i \<le> b" and "votes i \<noteq> None"
-  shows "case (max_vote_2 votes b) of None \<Rightarrow> False | Some (m,v) \<Rightarrow> i \<le> m"
-using assms
-proof (induct votes b rule:max_vote_2.induct)
-  case 1 thus ?case by fastforce
-next
-  case 2 thus ?case by auto (metis case_prodI le_Suc_eq option.case_eq_if option.sel option.simps(3))
-qed
-
-declare option.split[split]
-
-lemma
-  "case (max_vote_2 votes b) of None \<Rightarrow> True | Some (m,v) \<Rightarrow> m \<le> b \<and> votes m = Some v"
-proof (induct votes b rule:max_vote_2.induct)
-case (1 votes) thus ?case 
-  apply (auto)
-    apply (metis (no_types, lifting) Pair_inject bind_eq_Some_conv option.inject)
-  apply (smt bind_eq_Some_conv option.sel prod.inject)
-  done
-next
-  case (2 votes b) thus ?case by auto
-qed
 
 end
