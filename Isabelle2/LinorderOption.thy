@@ -33,4 +33,8 @@ by (metis le_cases less_eq_o.elims(3) option.discI option.inject)
 
 end
 
+lemma gt_not_none:
+  "b\<^sub>1 < (b\<^sub>2::'e::linorder option) \<Longrightarrow> b\<^sub>2 \<noteq> None"
+by (metis less_def less_o.elims(2) option.discI)
+
 end

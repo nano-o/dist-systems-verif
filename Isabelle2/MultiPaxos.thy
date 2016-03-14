@@ -45,8 +45,6 @@ record ('v, 'a, 'b) mp_state =
       TODO: is this needed? Seems superseded by the log field. *}
   highest_instance :: "'a \<Rightarrow> nat"
   pending :: "'a \<Rightarrow> nat \<Rightarrow> 'v cmd option" (* Useless now because we added the command to the 2b messages *)
-  (*lowest_instance :: "'a \<Rightarrow> nat"
-    -- {* When a is a leader, the next instance to use. *}*)
   log :: "'a \<Rightarrow> (nat \<times> 'v cmd) list"
   leadership_acquired :: "'a \<Rightarrow> 'b \<Rightarrow> bool"
 
