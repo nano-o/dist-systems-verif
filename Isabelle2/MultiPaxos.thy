@@ -24,6 +24,12 @@ datatype ('v,'a,'b)  packet =
   -- {* A message with sender/destination information *}
   Packet (sender: 'a) (dst: 'a) (msg: "('v,'a,'b) msg")
 
+text {* The state. Grows with time and is copied a lot, which means the generated code is slow. 
+  Ideas to improve that: 
+  1) Use a diff array where arrays are needed (see JinjaThreads/Diff_Array.html, which relies on an unverified implementation).
+  2) Use SepRef. 
+  On might be a good quick hack to start with. *}
+
 record ('v, 'a, 'b) mp_state =
   acceptors :: "'a set"
     -- {* The set of all acceptors *}
@@ -42,7 +48,7 @@ record ('v, 'a, 'b) mp_state =
       this is the list describing all the 2b messages receive by a in i in b *}
   decided :: "'a \<Rightarrow> nat \<Rightarrow> 'v cmd option"
     -- {* For an acceptor a, this is Some v if a has decided v in some ballot.
-      TODO: is this needed? Seems superseded by the log field. *}
+      TODO: is this needed? Seems superseded by the log field. Yes it's still used. *}
   highest_instance :: "'a \<Rightarrow> nat"
   pending :: "'a \<Rightarrow> nat \<Rightarrow> 'v cmd option" (* Useless now because we added the command to the 2b messages *)
   log :: "'a \<Rightarrow> (nat \<times> 'v cmd) list"
