@@ -143,7 +143,7 @@ apply (cases a)
     apply (simp add:inv_proofs_defs ballot_array.safe_at_def ballot_array.choosable_def)[1]
     apply (metis less_def order.strict_trans) 
   defer (* vote *)
-  apply (simp add:inv_proofs_defs ballot_array.safe_at_def ballot_array.choosable_def, case_tac "ballot s x3", simp_all)
+  apply (simp add:inv_proofs_defs ballot_array.safe_at_def ballot_array.choosable_def split add:option.split_asm)
   apply (metis neq_iff)
 apply (simp add:inv_proofs_defs ballot_array.safe_at_def ballot_array.choosable_def) (* start_ballot *)
 apply (metis p_state.ext_inject p_state.surjective p_state.update_convs(4))
@@ -180,7 +180,7 @@ apply(rule invariantI)
         hence 2:"\<And> b . suggestion s b = suggestion t b" 
           by (auto simp add:inv_proofs_defs)
             (smt option.case_eq_if p_state.select_convs(4) p_state.surjective p_state.update_convs(3)) 
-        have 3:"safe t" using prems(1) 1 apply(auto simp add:inv2_def ballot_array.safe_def, case_tac "vote t aa b", simp_all)
+        have 3:"safe t" using prems(1) 1 apply(auto simp add:inv2_def ballot_array.safe_def split add:option.split)
           by (smt case_optionE fun_upd_def option.simps(5) p_state.ext_inject p_state.surjective p_state.update_convs(3) prems(2) safe_mono)
         from 1 2 3 safe_mono prems(1,2) show ?thesis
           by (metis inv2_def option.case_eq_if)
@@ -200,7 +200,7 @@ apply(rule invariantI)
   proof -
     from prems(2,7) have 1:"start_ballot b s t"
       by(auto simp add:inv_proofs_defs)
-    have 3:"safe t" using prems(1) 1 by (auto simp add:inv2_def ballot_array.safe_def, case_tac "vote s a ba", auto, metis option.simps(5))
+    have 3:"safe t" using prems(1) 1 by (auto simp add:inv2_def ballot_array.safe_def split add:option.split, auto, metis option.simps(5))
     from 1 obtain q v where 2:"q |\<in>| quorums" and 4:"(ballot_array.proved_safe_at (vote s)) q b v" 
       and 5:"t = s\<lparr>suggestion := suggestion s(b \<mapsto> v)\<rparr>" and 6:"\<And> a . a |\<in>| q \<Longrightarrow> ballot s a \<ge> Some b"
       by auto
