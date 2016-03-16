@@ -197,8 +197,6 @@ text {* State obtained after acceptor 1 receives a ballot-2 1b message from acce
 abbreviation s3 where  "s3 \<equiv> update_onebs s1 1 2 3 ((K$ None)(1 $:= Some (Cmd 1,1)))"
 value "onebs s3 $ 1 $ 2 $ 1"
 
-
-
 definition highest_voted :: "(nat \<Rightarrow>f ('a \<times> ('v cmd \<times> nat) option) list) \<Rightarrow> (nat \<Rightarrow>f ('v cmd) option)" where
   -- {* Makes sense only if no list in the map is empty. *}
   "highest_voted m \<equiv>
@@ -207,15 +205,40 @@ definition highest_voted :: "(nat \<Rightarrow>f ('a \<times> ('v cmd \<times> n
         highest = (\<lambda> l . (fold max l (l!0)) \<bind> (\<lambda> vb . Some (fst vb)))
     in highest o$ votes"
 
+text {* The highest n which has been updated (excluding updates to the default). 
+  The tentative below does not work.
+  Basically we would need to sort the domain and carry a sorted list in the result,
+  so that when we encounter a duplicate update then we can revise the max. *}
+
+abbreviation test :: "nat \<Rightarrow>f bool \<Rightarrow> (bool \<times> nat)"
+  where "test \<equiv> finfun_rec (\<lambda> (d::bool) . (d, 0)) 
+    (\<lambda> k v r . if (v \<noteq> fst r) 
+      then (fst r, max k (snd r)) else r)"
+
+interpretation finfun_rec_wf "(\<lambda> (d::bool) . (d, 0::nat))"
+  "(\<lambda> k v r . if (v \<noteq> fst r) then (fst r, max k (snd r)) else r)"
+apply(unfold_locales)
+apply auto[2]
+defer
+apply(simp split:split_if_asm)
+apply auto
+oops
+
+text {* Instead of trying to define the max as a recursive function, let's use finfun_to_list. *}
+
+value "finfun_to_list (((K$ False)(5 $:= True)(4 $:= False)(2 $:= True))::(nat \<Rightarrow>f bool))"
+
 text {* 
   When a quorum of 1b messages is received, we complete all started instances by sending 2b messages containing a safe value.
   If an instance has not been started but a higher instance has been started, we complete
-  it by sending a no-op message. 
+  it by sending a no-op message.
   TODO: why do we need the no-ops? we could also reuse instances where everything is safe...
+  It's because holes block the execution of higher commands while we have no new client commands to propose.
+  But that's unlikely under high load...
 *}
 fun receive_1b :: "'a \<Rightarrow> ('v,'a)msg \<Rightarrow> ('v,'a)mp_state \<Rightarrow> (('v,'a)msg set \<times> ('v,'a)mp_state)" where
  "receive_1b a (Phase1b last_vs new_bal a2) s = (
-    if (new_bal = the (ballot s a))
+    if (Some new_bal = ballot s $ a)
     then (
       (let 
            new_state1 = update_onebs s a new_bal a2 last_vs;
