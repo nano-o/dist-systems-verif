@@ -25,10 +25,17 @@ datatype ('v,'a,'b)  packet =
   Packet (sender: 'a) (dst: 'a) (msg: "('v,'a,'b) msg")
 
 text {* The state. Grows with time and is copied a lot, which means the generated code is slow. 
-  Ideas to improve that: 
+  Ideas to improve access and modification time to large structures: 
   1) Use a diff array where arrays are needed (see JinjaThreads/Diff_Array.html, which relies on an unverified implementation).
-  2) Use SepRef. 
-  On might be a good quick hack to start with. *}
+  2) Use SepRef.
+  On might be a good quick hack to start with. 
+
+  We have two types of growing data-structure: lists and functions (whose domain grow).
+  We would like to access and modify those structures in constant time, or bound their size to a small value.
+  First thing: convert the "nat => x" functions to lists (since we mostly access the front, that should make it faster).
+  Then we need fast log maintenance (Ian's code).
+  
+*}
 
 record ('v, 'a, 'b) mp_state =
   acceptors :: "'a set"

@@ -75,6 +75,8 @@ definition amp_ioa where
 
 end
 
+section {* Agreement proof *}
+
 locale amp_proof = IOA + abs_multi_paxos acceptors quorums learners for acceptors :: "'a fset" 
   and quorums and learners :: "'l fset" +
   fixes the_ioa :: "(('v,'a)amp_state, ('v,'a,'l)amp_action) ioa"
@@ -184,12 +186,12 @@ apply(rule invariantI)
       qed
       show "safe_at t j v\<^sub>2 b"
       proof (cases "i = j \<and> a\<^sub>2 = a")
-      case False
+        case False
         have "vote s j a\<^sub>2 b = vote t j a\<^sub>2 b" using False prems(2,5) vote_one_inst_only
           by (auto simp add:is_trans_def the_ioa_def amp_ioa_def amp_trans_def split add:option.split_asm)
         with l show ?thesis by auto
       next
-      case True
+        case True
         have 6:"do_vote a\<^sub>2 j q v s t" using prems(2,5) 1 True by (auto simp add:inv_proofs_defs)
         with this obtain b\<^sub>2 where 3:"ballot s a\<^sub>2 = Some b\<^sub>2" and 4:"proved_safe_at s j q b\<^sub>2 v"
         and 5:"t = s\<lparr>vote := (vote s)(j := (vote s j)(a\<^sub>2 := (vote s j a\<^sub>2)(b\<^sub>2 := Some v)))\<rparr>"
