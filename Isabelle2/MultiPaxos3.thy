@@ -264,39 +264,35 @@ fun receive_1b :: "'a \<Rightarrow> ('v,'a)msg \<Rightarrow> ('v,'a)mp_state \<R
 
 definition is_leader where 
   "is_leader s a \<equiv> 
-    case ballot s a of None \<Rightarrow> False | Some b \<Rightarrow> at b (leader s a)"
+    case ballot s $ a of None \<Rightarrow> False | Some b \<Rightarrow> leader s $ a $ b"
 
 fun receive_2a where
   "receive_2a a (Phase2a i b v l) s =
-    (let bal = (ballot s a) in
+    (let bal = (ballot s $ a) in
       (if (bal = Some b)
-      then (s\<lparr>vote := (vote s)(a := updated_at i (Some v) (vote s a) None)\<rparr>, {send_all s a (Phase2b i b a v)})
-      else (s, {})))"
+        then (s\<lparr>vote := (vote s)(a $:= (vote s $ a)(i $:= Some v))\<rparr>, {send_all s a (Phase2b i b a v)})
+        else (s, {})))"
 | "receive_2a a _ s = (s, {})"
 
 fun receive_2b where
   "receive_2b a (Phase2b i b a2 v) s =
-    (let s =
-      (if (at i (decided s a) = None)
+    (if (decided s $ a $ i = None)
       then
-        (let new_twobs = a2 # (at b (at i (twobs s a)))
+        (let 
+            new_twobs = a2 # (twobs s $ a $ i $ b);
+            s2 = s\<lparr>twobs := (twobs s)(a $:= (twobs s $ a)(i $:= (twobs s $ a $ i)(b $:= new_twobs)))\<rparr>
         in
           (if (2 * length new_twobs > card (acceptors s))
-          then
-            s\<lparr>twobs := (twobs s)(a := updated_at i (updated_at b new_twobs (at i (twobs s a)) []) (twobs s a) []) \<rparr>
-          else
-            s\<lparr>twobs := (twobs s)(a := updated_at i (updated_at b new_twobs (at i (twobs s a)) []) (twobs s a) [] )\<rparr>))
+            then let
+                s3 = s2\<lparr>decided := (decided s2)(a $:= (decided s2 $ a)(i $:= Some v))\<rparr>;
+                s4 = s3\<lparr>log := (log s2)(a $:= distinct_Sorted_Insert (i, v) (log s $ a))\<rparr>
+              in
+                (s4, {})
+            else
+              (s2,{}) ) )
       else
-        s)
-    in (s,{}))"
+        (s,{}) )"
 | "receive_2b a _ s = (s, ({}))"
-
-(*,
-              decided := (decided s)(a := updated_at i (Some v) (decided s a) None),
-              log := (log s)(a := distinct_Sorted_Insert (i, v) (log s a))
-*)
-
-(* TODO: does not work... *)
 
 definition test_state_3 where 
   "test_state_3 \<equiv> \<lparr>
