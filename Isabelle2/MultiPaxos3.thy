@@ -31,13 +31,13 @@ subsection {* Actions, messages, and state. *}
 datatype 'v cmd = Cmd 'v | NoOp
 
 datatype ('v,'a) msg =
-  Phase1a (leader: 'a) (ballot:nat)
+  Phase1a (from_leader: 'a) (ballot:nat)
 | Phase1b (last_votes:"nat \<Rightarrow>f ('v cmd \<times> nat) option") (new_ballot: nat) (acceptor:'a)
-| Phase2a (inst: nat) (for_ballot:nat) (suggestion:'v) (leader: 'a)
-| Phase2b (inst: nat) (ballot:nat) (acceptor: 'a) (val: 'v)
-| Vote (inst: nat) (val: 'v)
+| Phase2a (inst: nat) (for_ballot:nat) (suggestion:"'v cmd") (leader: 'a)
+| Phase2b (inst: nat) (ballot:nat) (acceptor: 'a) (val: "'v cmd")
+| Vote (inst: nat) (val: "'v cmd")
   -- {* Instructs a learner that a value has been decided. Not used for now... *}
-| Fwd (val: 'v)
+| Fwd (val: "'v cmd")
   -- {* Forwards a proposal to another proposer (the leader) *}
 
 datatype ('v,'a)  packet =
@@ -61,10 +61,10 @@ record ('v, 'a) mp_state =
   twobs :: "'a \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f 'a list"
     -- {* For an acceptor a: lists describing the 2b messages, indexed by instance then ballot. *}
   decided :: "'a \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
-  highest_instance :: "'a \<Rightarrow>f nat"
+  max_inst :: "'a \<Rightarrow>f nat"
   pending :: "'a \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
   log :: "'a \<Rightarrow>f (nat \<times> 'v cmd) list"
-  leadership_acquired :: "'a \<Rightarrow>f bal \<Rightarrow>f bool"
+  leader :: "'a \<Rightarrow>f bal \<Rightarrow>f bool"
 
 definition init_state :: "'a set \<Rightarrow> ('v,'a) mp_state" where
   "init_state accs \<equiv> \<lparr>
@@ -75,10 +75,10 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a) mp_state" where
     onebs = K$ K$ K$ [],
     twobs = K$ K$ K$ [],
     decided = K$ K$ None,
-    highest_instance = K$ 0,
+    max_inst = K$ 0,
     pending = K$ K$ None,
     log = K$ [],
-    leadership_acquired = K$ K$ False \<rparr>"
+    leader = K$ K$ False \<rparr>"
 
 definition nr where
   -- {* The number of replicas *}
@@ -87,10 +87,12 @@ definition nr where
 
 subsection {* Event handlers *}
 
+text {* If we had finfun_Ex we could do this better.
+  Here we use instance 0 by default, but that's arbitrary. *}
 definition one_b_quorum_received where
-  "one_b_quorum_received a i b s \<equiv> 
+  "one_b_quorum_received a b s \<equiv> 
     let at_b = onebs s $ a $ b;
-        at_b_i = at_b $ i
+        at_b_i = at_b $ 0
     in 2 * length at_b_i > nr s"
 
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
@@ -109,8 +111,8 @@ definition one_a_msgs where
       msg_1a = Phase1a a next_bal
     in {Packet a b msg_1a | b . b \<in> (acceptors s)}"
 
-definition leader where
-  "leader s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
+definition leader_of_bal where
+  "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
     (b mod (nr s))"
 
 definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 . a2 \<in> acceptors s}"
@@ -118,9 +120,9 @@ definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 .
 definition do_2a where
   "do_2a s a v \<equiv>
     let
-      inst = highest_instance s $ a + 1;
+      inst = max_inst s $ a + 1;
       msg = Phase2a inst (the (ballot s $ a)) v a;
-      new_state = s\<lparr>highest_instance := (highest_instance s)(a $:= inst),
+      new_state = s\<lparr>max_inst := (max_inst s)(a $:= inst),
         pending := (pending s)(a $:= (pending s $ a)(inst $:= (Some v)))\<rparr>
     in
       (new_state, send_all s a msg)"
@@ -128,13 +130,13 @@ definition do_2a where
 definition propose where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "propose (a::nat) v s \<equiv>
-    (if (leader s (ballot s $ a) = a)
+    (if (leader_of_bal s (ballot s $ a) = a)
       then do_2a s a v
-      else (s, {Packet a (leader s (ballot s $ a)) (Fwd v)}))"
+      else (s, {Packet a (leader_of_bal s (ballot s $ a)) (Fwd v)}))"
  
 fun receive_fwd where
   "receive_fwd a (Fwd v) s = 
-    (if (leader s (ballot s $ a) = a) then do_2a s a v else (s, ({})))"
+    (if (leader_of_bal s (ballot s $ a) = a) then do_2a s a v else (s, ({})))"
 | "receive_fwd a _ s = (s, ({}))"
 
 fun send_1a where
@@ -162,7 +164,7 @@ fun receive_1a :: "'a \<Rightarrow> ('v,'a)msg \<Rightarrow> ('v, 'a)mp_state \<
 | "receive_1a a _ s = (s,{})"
 
 definition update_onebs :: 
-  "('v, 'a)mp_state \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'a \<Rightarrow> (nat \<Rightarrow>f ('v cmd \<times> nat) option) \<Rightarrow> ('v, 'a)mp_state" where
+  "('v, 'a)mp_state \<Rightarrow> 'a \<Rightarrow> bal \<Rightarrow> 'a \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> ('v, 'a)mp_state" where
   -- {* Update the list of highest voted values when receiving a 1b
     message from a2 for ballot bal containing last_vs *}
   "update_onebs s a bal a2 last_vs \<equiv>
@@ -182,15 +184,16 @@ abbreviation s1 where
     onebs = (K$ K$ K$ [])(1 $:= (K$ K$ [])(2 $:= (K$ [(2, None)])(1 $:= [(2, Some (Cmd 1,1))]))),
     twobs = K$ K$ K$ [],
     decided = K$ K$ None,
-    highest_instance = K$ 1,
+    max_inst = K$ 1,
     pending = K$ K$ None,
     log = K$ [],
-    leadership_acquired = K$ K$ False \<rparr>"
+    leader = K$ K$ False \<rparr>"
 
 value "onebs test_state_1 $ 1 $ 2 $ 1"
 
 text {* State obtained after acceptor 1 receives a ballot-2 1b message from acceptor 3 saying that acceptor 3 never voted *}
 abbreviation s2 where "s2 \<equiv> update_onebs s1 1 2 3 (K$ None)"
+value "s2"
 value "onebs s2 $ 1 $ 2 $ 1"
 
 text {* State obtained after acceptor 1 receives a ballot-2 1b message from acceptor 3 saying that acceptor 3 last voted in instance 1 and ballot 1 for value 1 *}
@@ -235,39 +238,33 @@ text {*
   TODO: why do we need the no-ops? we could also reuse instances where everything is safe...
   It's because holes block the execution of higher commands while we have no new client commands to propose.
   But that's unlikely under high load...
+
+  For now we propose values to all the instances ever started.
 *}
-fun receive_1b :: "'a \<Rightarrow> ('v,'a)msg \<Rightarrow> ('v,'a)mp_state \<Rightarrow> (('v,'a)msg set \<times> ('v,'a)mp_state)" where
- "receive_1b a (Phase1b last_vs new_bal a2) s = (
-    if (Some new_bal = ballot s $ a)
-    then (
-      (let 
-           new_state1 = update_onebs s a new_bal a2 last_vs;
-           onebs' = at new_bal (onebs new_state1 a);
-           quorum_received = 2 * length (at 1 onebs') > nr s;
-           new_state2 = if (quorum_received)
-            then new_state1\<lparr>leadership_acquired := (leadership_acquired new_state1)(a := 
-              updated_at new_bal True (leadership_acquired new_state1 a))\<rparr>
-            else new_state1;
-           msgs =
-            if (quorum_received)
-            then
-              let
-                received = at new_bal (onebs new_state2 a);
-                highest = rev (enumerate 1 (rev [highest_voted l . l \<leftarrow> received])); (* of the form [(n,v_1),(n-1,v_2)...] where v_i is safe at i *)
-                msg =
-                  (\<lambda> (i,opt) . (case opt of None \<Rightarrow> Some (Phase2a i new_bal NoOp a)
-                    | Some v \<Rightarrow> Some (Phase2a i new_bal v a)));
-                msgs =
-                  [(case (msg x) of None \<Rightarrow> {} | Some m \<Rightarrow> send_all s a m) . x \<leftarrow> highest]
-              in fold (op \<union>) msgs {}
-            else {}
-       in (new_state2, msgs)))
-    else (s,{}))"
+fun receive_1b :: "'a \<Rightarrow> ('v,'a)msg \<Rightarrow> ('v,'a)mp_state \<Rightarrow> (('v,'a)mp_state \<times> ('v,'a)packet set)" where
+ "receive_1b a (Phase1b last_vs bal a2) s = (
+    if (Some bal = ballot s $ a)
+    then
+      (let s1 = update_onebs s a bal a2 last_vs
+       in (if one_b_quorum_received a bal s1 
+          then (let
+              h = highest_voted (onebs s1 $ a $ bal);
+              max_i = hd (rev (finfun_to_list (onebs s1 $ a $ bal)));
+              s2 = s1\<lparr>leader := (leader s1)(a $:= (leader s1 $ a)(bal $:= True))\<rparr>;
+              s3 = s2\<lparr>max_inst := (max_inst s2)(a $:= max_i+1)\<rparr>;
+              twoa_is = [1..<max_i+1];
+              msgs = map (\<lambda> i . case h $ i of 
+                  None \<Rightarrow> Phase2a i bal NoOp a
+                | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
+              pckts = map (\<lambda> m . send_all s a m) msgs
+            in (s3, fold (op \<union>) pckts {}) )
+          else (s1, {}) ) )
+    else (s, {}))"
 | "receive_1b a _ s = (s, {})"
 
 definition is_leader where 
   "is_leader s a \<equiv> 
-    case ballot s a of None \<Rightarrow> False | Some b \<Rightarrow> at b (leadership_acquired s a)"
+    case ballot s a of None \<Rightarrow> False | Some b \<Rightarrow> at b (leader s a)"
 
 fun receive_2a where
   "receive_2a a (Phase2a i b v l) s =
@@ -310,10 +307,10 @@ definition test_state_3 where
     onebs = (\<lambda> a . if a = 1 then [[[(2, Some (Cmd 1, 1))]], [[]]] else []),
     twobs = (\<lambda> a . []),
     decided = (\<lambda> a .[]),
-    highest_instance = (\<lambda> a . 1),
+    max_inst = (\<lambda> a . 1),
     pending = (\<lambda> a . [Some (Cmd (43::int))]),
     log = ( \<lambda> a . []),
-    leadership_acquired = (\<lambda> a . [])
+    leader = (\<lambda> a . [])
     \<rparr>"
 
 value "at 1 (pending test_state_3 1)"
