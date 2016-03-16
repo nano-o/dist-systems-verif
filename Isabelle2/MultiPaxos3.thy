@@ -30,43 +30,44 @@ subsection {* Actions, messages, and state. *}
 
 datatype 'v cmd = Cmd 'v | NoOp
 
-datatype ('v,'a) msg =
-  Phase1a (from_leader: 'a) (ballot:nat)
-| Phase1b (last_votes:"nat \<Rightarrow>f ('v cmd \<times> nat) option") (new_ballot: nat) (acceptor:'a)
-| Phase2a (inst: nat) (for_ballot:nat) (suggestion:"'v cmd") (leader: 'a)
-| Phase2b (inst: nat) (ballot:nat) (acceptor: 'a) (val: "'v cmd")
-| Vote (inst: nat) (val: "'v cmd")
+type_synonym bal = nat
+type_synonym inst = nat
+type_synonym acc = nat
+
+datatype ('v) msg =
+  Phase1a (from_leader: acc) (ballot:bal)
+| Phase1b (last_votes:"nat \<Rightarrow>f ('v cmd \<times> bal) option") (new_ballot: bal) (acceptor:acc)
+| Phase2a (inst: inst) (for_ballot:bal) (suggestion:"'v cmd") (leader: acc)
+| Phase2b (inst: inst) (ballot:bal) (acceptor: acc) (val: "'v cmd")
+| Vote (inst: inst) (val: "'v cmd")
   -- {* Instructs a learner that a value has been decided. Not used for now... *}
 | Fwd (val: "'v cmd")
   -- {* Forwards a proposal to another proposer (the leader) *}
 
-datatype ('v,'a)  packet =
+datatype ('v)  packet =
   -- {* A message with sender/destination information *}
-  Packet (sender: 'a) (dst: 'a) (msg: "('v,'a) msg")
+  Packet (sender: acc) (dst: acc) (msg: "('v) msg")
 
-type_synonym bal = nat
-type_synonym inst = nat
-
-record ('v, 'a) mp_state =
-  acceptors :: "'a set"
+record ('v) mp_state =
+  acceptors :: "acc set"
     -- {* The set of all acceptors *}
-  ballot :: "'a \<Rightarrow>f bal option"
+  ballot :: "acc \<Rightarrow>f bal option"
     -- {* the highest ballot in which an acceptor participated *}
-  vote :: "'a \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
+  vote :: "acc \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
     -- {* The last vote cast by an acceptor, for each instance *}
-  last_ballot :: "'a \<Rightarrow>f nat \<Rightarrow>f bal option"
+  last_ballot :: "acc \<Rightarrow>f nat \<Rightarrow>f bal option"
     -- {* For an acceptor a, this is the ballot in which "vote a" was cast, for each instance *}
-  onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f inst \<Rightarrow>f ('a \<times> ('v cmd \<times> bal) option) list"
+  onebs :: "acc \<Rightarrow>f bal \<Rightarrow>f inst \<Rightarrow>f (acc \<times> ('v cmd \<times> bal) option) list"
     -- {* For an acceptor a and a ballot b, lists of 1b-message descriptions, indexed by ballot then instance. *}
-  twobs :: "'a \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f 'a list"
+  twobs :: "acc \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f acc list"
     -- {* For an acceptor a: lists describing the 2b messages, indexed by instance then ballot. *}
-  decided :: "'a \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
-  max_inst :: "'a \<Rightarrow>f nat"
-  pending :: "'a \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
-  log :: "'a \<Rightarrow>f (nat \<times> 'v cmd) list"
-  leader :: "'a \<Rightarrow>f bal \<Rightarrow>f bool"
+  decided :: "acc \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
+  max_inst :: "acc \<Rightarrow>f nat"
+  pending :: "acc \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
+  log :: "acc \<Rightarrow>f (nat \<times> 'v cmd) list"
+  leader :: "acc \<Rightarrow>f bal \<Rightarrow>f bool"
 
-definition init_state :: "'a set \<Rightarrow> ('v,'a) mp_state" where
+definition init_state :: "acc set \<Rightarrow> ('v) mp_state" where
   "init_state accs \<equiv> \<lparr>
     mp_state.acceptors = accs,
     ballot = K$ None,
@@ -127,12 +128,12 @@ definition do_2a where
     in
       (new_state, send_all s a msg)"
 
-definition propose where
+definition propose :: "acc \<Rightarrow> 'v \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
-  "propose (a::nat) v s \<equiv>
+  "propose a v s \<equiv>
     (if (leader_of_bal s (ballot s $ a) = a)
-      then do_2a s a v
-      else (s, {Packet a (leader_of_bal s (ballot s $ a)) (Fwd v)}))"
+      then do_2a s a (Cmd v)
+      else (s, {Packet a (leader_of_bal s (ballot s $ a)) (Fwd (Cmd v))}))"
  
 fun receive_fwd where
   "receive_fwd a (Fwd v) s = 
@@ -147,7 +148,7 @@ fun send_1a where
         msg_1a = Phase1a a b in
       (s, {Packet a a2 msg_1a | a2 . a2 \<in> (acceptors s)}))"
 
-fun receive_1a :: "'a \<Rightarrow> ('v,'a)msg \<Rightarrow> ('v, 'a)mp_state \<Rightarrow> (('v, 'a)mp_state \<times> ('v,'a)packet set)" where
+fun receive_1a :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
   "receive_1a a (Phase1a l b) s =
     (let bal = ballot s $ a in
       (if (bal = None \<or> ((the bal) < b))
@@ -164,7 +165,7 @@ fun receive_1a :: "'a \<Rightarrow> ('v,'a)msg \<Rightarrow> ('v, 'a)mp_state \<
 | "receive_1a a _ s = (s,{})"
 
 definition update_onebs :: 
-  "('v, 'a)mp_state \<Rightarrow> 'a \<Rightarrow> bal \<Rightarrow> 'a \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> ('v, 'a)mp_state" where
+  "('v)mp_state \<Rightarrow> acc \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> ('v)mp_state" where
   -- {* Update the list of highest voted values when receiving a 1b
     message from a2 for ballot bal containing last_vs *}
   "update_onebs s a bal a2 last_vs \<equiv>
@@ -177,7 +178,7 @@ abbreviation s1 where
   -- {* This is a state in which acceptor 1 is in ballot 2 and has received a ballot-2 1b message from
   acceptor 2 saying that acceptor 2 last voted in ballot 1 in instance 1 for value 1. *}
   "s1 \<equiv> \<lparr>
-    mp_state.acceptors = {1,2,3::int},
+    mp_state.acceptors = {1,2,3},
     ballot = K$ Some 2,
     vote = K$ K$ None,
     last_ballot = K$ K$ None,
@@ -200,7 +201,7 @@ text {* State obtained after acceptor 1 receives a ballot-2 1b message from acce
 abbreviation s3 where  "s3 \<equiv> update_onebs s1 1 2 3 ((K$ None)(1 $:= Some (Cmd 1,1)))"
 value "onebs s3 $ 1 $ 2 $ 1"
 
-definition highest_voted :: "(nat \<Rightarrow>f ('a \<times> ('v cmd \<times> nat) option) list) \<Rightarrow> (nat \<Rightarrow>f ('v cmd) option)" where
+definition highest_voted :: "(nat \<Rightarrow>f (acc \<times> ('v cmd \<times> nat) option) list) \<Rightarrow> (nat \<Rightarrow>f ('v cmd) option)" where
   -- {* Makes sense only if no list in the map is empty. *}
   "highest_voted m \<equiv>
     let
@@ -241,7 +242,7 @@ text {*
 
   For now we propose values to all the instances ever started.
 *}
-fun receive_1b :: "'a \<Rightarrow> ('v,'a)msg \<Rightarrow> ('v,'a)mp_state \<Rightarrow> (('v,'a)mp_state \<times> ('v,'a)packet set)" where
+fun receive_1b :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
  "receive_1b a (Phase1b last_vs bal a2) s = (
     if (Some bal = ballot s $ a)
     then
@@ -266,15 +267,15 @@ definition is_leader where
   "is_leader s a \<equiv> 
     case ballot s $ a of None \<Rightarrow> False | Some b \<Rightarrow> leader s $ a $ b"
 
-fun receive_2a where
+fun receive_2a :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
   "receive_2a a (Phase2a i b v l) s =
     (let bal = (ballot s $ a) in
       (if (bal = Some b)
-        then (s\<lparr>vote := (vote s)(a $:= (vote s $ a)(i $:= Some v))\<rparr>, {send_all s a (Phase2b i b a v)})
+        then (s\<lparr>vote := (vote s)(a $:= (vote s $ a)(i $:= Some v))\<rparr>, send_all s a (Phase2b i b a v))
         else (s, {})))"
 | "receive_2a a _ s = (s, {})"
 
-fun receive_2b where
+fun receive_2b :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
   "receive_2b a (Phase2b i b a2 v) s =
     (if (decided s $ a $ i = None)
       then
@@ -294,54 +295,32 @@ fun receive_2b where
         (s,{}) )"
 | "receive_2b a _ s = (s, ({}))"
 
-definition test_state_3 where 
-  "test_state_3 \<equiv> \<lparr>
-    mp_state.acceptors = {1,2,3::int},
-    ballot = (\<lambda> a . Some 2),
-    vote = (\<lambda> a . []),
-    last_ballot = (\<lambda> a . []),
-    onebs = (\<lambda> a . if a = 1 then [[[(2, Some (Cmd 1, 1))]], [[]]] else []),
-    twobs = (\<lambda> a . []),
-    decided = (\<lambda> a .[]),
-    max_inst = (\<lambda> a . 1),
-    pending = (\<lambda> a . [Some (Cmd (43::int))]),
-    log = ( \<lambda> a . []),
-    leader = (\<lambda> a . [])
-    \<rparr>"
+abbreviation s4 where 
+  -- {* This is a state in which acceptor 1 is in ballot 2 and has received a ballot-2 2b message from
+  acceptor 2 in instance 1. *}
+  "s4 \<equiv> \<lparr>
+    mp_state.acceptors = {1,2,3},
+    ballot = K$ Some 2,
+    vote = K$ K$ None,
+    last_ballot = K$ K$ None,
+    onebs = K$ K$ K$ [],
+    twobs = (K$ K$ K$ [])(1 $:= (K$ K$ [])(1 $:= (K$ [])(2 $:= [2]))),
+    decided = K$ K$ None,
+    max_inst = K$ 1,
+    pending = K$ K$ None,
+    log = K$ [],
+    leader = K$ K$ False \<rparr>"
 
-value "at 1 (pending test_state_3 1)"
-
-value "let 
-  val = (42::int);
-  instance = (1::nat);
-  ballot = (2::nat);
-  receiver = (1::int);
-  from1 = (2::int);
-  (s1,msgs1) = receive_2b receiver (Phase2b instance 1 from1 (Cmd val)) test_state_3
-in at 1 (pending s1 1)"
-
-value "let 
-  val = (42::int);
-  instance = (1::nat);
-  ballot = (2::nat);
-  receiver = (1::int);
-  from1 = (2::int);
-  (s1,msgs1) = receive_2b receiver (Phase2b instance ballot from1 (Cmd val)) test_state_3
-in at 1 (twobs s1 1)"
-
-(* A test of receive_2b 
-value "let 
-  val = (42::int);
-  instance = (1::nat);
-  ballot = (2::nat);
-  receiver = (1::int);
-  from1 = (2::int);
-  (s1,msgs1) = receive_2b receiver (Phase2b instance ballot from1 (Cmd val)) test_state_1;
-  from2 = (3::int);
-  (s2,msgs2) = receive_2b receiver (Phase2b instance ballot from2 (Cmd val)) s1;
-  twobs = at instance (at ballot (twobs s2 receiver));
-  n = card (acceptors s)
-in (twobs, msgs2, at instance (pending s2 receiver), at instance (decided s2 receiver))" *)
+text {* Acceptor 1 receives a round-2 2b message from acceptor 3 in instance 1. *}
+abbreviation step5 where "step5 \<equiv> receive_2b 1 (Phase2b 1 2 3 (Cmd (42::int))) s4"
+abbreviation s5 where "s5 \<equiv> fst step5"
+value "twobs s5 $ 1 $ 1 $ 2"
+value "decided s5 $ 1 $ 1"
+text {* Acceptor 1 receives a round-2 2b message from acceptor 1 in instance 1. *}
+abbreviation step6 where "step6 \<equiv> receive_2b 1 (Phase2b 1 2 1 (Cmd (42::int))) s5"
+abbreviation s6 where "s6 \<equiv> fst step6"
+text {* Since decided is already true, nothing is updated. *}
+value "twobs s6 $ 1 $ 1 $ 2"
 
 value "largestprefix [(1,v1), (2,v2), (4,v4)]"
 
