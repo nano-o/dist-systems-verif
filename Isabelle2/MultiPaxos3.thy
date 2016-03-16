@@ -131,91 +131,81 @@ definition propose where
     (if (leader s (ballot s $ a) = a)
       then do_2a s a v
       else (s, {Packet a (leader s (ballot s $ a)) (Fwd v)}))"
-
-export_code propose in Scala
  
 fun receive_fwd where
   "receive_fwd a (Fwd v) s = 
-    (if (leader s (ballot s a) = a) then do_2a s a v else (s, ({})))"
+    (if (leader s (ballot s $ a) = a) then do_2a s a v else (s, ({})))"
 | "receive_fwd a _ s = (s, ({}))"
 
 fun send_1a where
   -- {* a tries to become the leader *}
   "send_1a a s =
     (let
-        b = nx_bal a (ballot s a) (card (acceptors s));
+        b = nx_bal a (ballot s $ a) (card (acceptors s));
         msg_1a = Phase1a a b in
       (s, {Packet a a2 msg_1a | a2 . a2 \<in> (acceptors s)}))"
 
-fun receive_1a where
-  -- {* Upon receiving a 1a message for a higher ballot than the current one, join this ballot and
-    send a list containing the highest vote cast in every instance the acceptor participated in. *}
+fun receive_1a :: "'a \<Rightarrow> ('v,'a)msg \<Rightarrow> ('v, 'a)mp_state \<Rightarrow> (('v, 'a)mp_state \<times> ('v,'a)packet set)" where
   "receive_1a a (Phase1a l b) s =
-    (let bal = ballot s a in
+    (let bal = ballot s $ a in
       (if (bal = None \<or> ((the bal) < b))
        then
           (let
-            is = case bal of None \<Rightarrow> [] | Some b \<Rightarrow>  [0..<(Suc b)];
-            get_vote = (\<lambda> i . (at i (vote s a)) \<bind> (\<lambda> v . (at i (last_ballot s a)) \<bind> (\<lambda> b . Some (v, b))));
-            votes = list_to_nm [get_vote i . i \<leftarrow> is] None;
-            msg_1b = Phase1b votes b a;
+            combiner = (\<lambda> (vo,bo) . vo \<bind> (\<lambda> v . bo \<bind> (\<lambda> b . Some (v,b))));
+            last_votes = combiner o$ ($ vote s $ a, last_ballot s $ a $);
+            msg_1b = Phase1b last_votes b a;
             packet = Packet a l msg_1b;
-            state = s\<lparr>ballot := (ballot s)(a := Some b)\<rparr>
+            state = s\<lparr>ballot := (ballot s)(a $:= Some b)\<rparr>
           in
           (state, {packet}))
        else (s,{})))"
 | "receive_1a a _ s = (s,{})"
 
-definition update_onebs :: "('v, 'a)mp_state \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'a \<Rightarrow> ('v cmd \<times> nat) option nat_map \<Rightarrow> ('v, 'a)mp_state" where
+definition update_onebs :: 
+  "('v, 'a)mp_state \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'a \<Rightarrow> (nat \<Rightarrow>f ('v cmd \<times> nat) option) \<Rightarrow> ('v, 'a)mp_state" where
   -- {* Update the list of highest voted values when receiving a 1b
     message from a2 for ballot bal containing last_vs *}
   "update_onebs s a bal a2 last_vs \<equiv>
     let
-      combiner = \<lambda> xs y . (case y of None \<Rightarrow> (a2, None)#xs | Some z \<Rightarrow> (a2, Some z)#xs);
-      at_bal = combine (at bal (onebs s a)) last_vs combiner
-    in
-      s\<lparr>onebs := (onebs s)(a := updated_at bal at_bal (onebs s a))\<rparr>"
+      combiner = \<lambda> (xs, y) . (case y of None \<Rightarrow> (a2, None)#xs | Some z \<Rightarrow> (a2, Some z)#xs);
+      at_bal = combiner o$ ($ (onebs s $ a $ bal), last_vs $)
+    in s\<lparr>onebs := (onebs s)(a $:= (onebs s $ a)(bal $:= at_bal))\<rparr>"
 
-definition test_state_1 where 
+abbreviation s1 where 
   -- {* This is a state in which acceptor 1 is in ballot 2 and has received a ballot-2 1b message from
   acceptor 2 saying that acceptor 2 last voted in ballot 1 in instance 1 for value 1. *}
-  "test_state_1 \<equiv> \<lparr>
+  "s1 \<equiv> \<lparr>
     mp_state.acceptors = {1,2,3::int},
-    ballot = (\<lambda> a . Some 2),
-    vote = (\<lambda> a . default_nm None),
-    last_ballot = (\<lambda> a . default_nm None),
-    onebs = (\<lambda> a . if a = 1 then list_to_nm [list_to_nm [[],[(2, Some (Cmd 1, 1))]] [], default_nm []] (default_nm []) else default_nm (default_nm [])),
-    twobs = (\<lambda> a . default_nm (default_nm [])),
-    decided = (\<lambda> a .default_nm None),
-    highest_instance = (\<lambda> a . 1),
-    pending = (\<lambda> a . default_nm None),
-    log = ( \<lambda> a . []),
-    leadership_acquired = (\<lambda> a . default_nm False)
-    \<rparr>"
+    ballot = K$ Some 2,
+    vote = K$ K$ None,
+    last_ballot = K$ K$ None,
+    onebs = (K$ K$ K$ [])(1 $:= (K$ K$ [])(2 $:= (K$ [(2, None)])(1 $:= [(2, Some (Cmd 1,1))]))),
+    twobs = K$ K$ K$ [],
+    decided = K$ K$ None,
+    highest_instance = K$ 1,
+    pending = K$ K$ None,
+    log = K$ [],
+    leadership_acquired = K$ K$ False \<rparr>"
 
-value "onebs test_state_1 1"
-
-value "at 1 (at 2 (onebs test_state_1 1))"
+value "onebs test_state_1 $ 1 $ 2 $ 1"
 
 text {* State obtained after acceptor 1 receives a ballot-2 1b message from acceptor 3 saying that acceptor 3 never voted *}
-value "update_onebs test_state_1 1 2 3 (default_nm None)"
-value "at 1 (at 2 (onebs (update_onebs test_state_1 1 2 3 (default_nm None)) 1))"
-text {* State obtained after acceptor 1 receives a ballot-2 1b message from acceptor 3 saying that acceptor 3 last voted in ballot 1 for value 1 *}
-value "update_onebs test_state_1 1 2 3 (list_to_nm [Some (Cmd 1,1)] None)"
-value "at 1 (at 2 (onebs (update_onebs test_state_1 1 2 3 (list_to_nm [Some (Cmd 1,1)] None)) 1))"
-abbreviation test_state_2 where  "test_state_2 \<equiv> update_onebs test_state_1 1 2 3 (list_to_nm [Some (Cmd 1,1)] None)"
+abbreviation s2 where "s2 \<equiv> update_onebs s1 1 2 3 (K$ None)"
+value "onebs s2 $ 1 $ 2 $ 1"
 
-definition highest_voted :: "('a \<times> ('v cmd \<times> nat) option) list nat_map \<Rightarrow> 'v cmd" where
-  -- {* Given a list describing the ballot-n 1b messages received by an acceptor, is the highest voted value. 
-        Problem: highest needs to be a map_nm too, but here we need to access the internal representation
-        because we don't have recursion or fold (finfun has). 
-        TODO: since this is only for leadership acquisition, which is rare, we could just use finfun and 
-        accept the performance drawback. *}
-  "highest_voted m \<equiv> 
+text {* State obtained after acceptor 1 receives a ballot-2 1b message from acceptor 3 saying that acceptor 3 last voted in instance 1 and ballot 1 for value 1 *}
+abbreviation s3 where  "s3 \<equiv> update_onebs s1 1 2 3 ((K$ None)(1 $:= Some (Cmd 1,1)))"
+value "onebs s3 $ 1 $ 2 $ 1"
+
+
+
+definition highest_voted :: "(nat \<Rightarrow>f ('a \<times> ('v cmd \<times> nat) option) list) \<Rightarrow> (nat \<Rightarrow>f ('v cmd) option)" where
+  -- {* Makes sense only if no list in the map is empty. *}
+  "highest_voted m \<equiv>
     let
-        votes = map_nm (map snd) m;
-        highest = (\<lambda> i . fold max (at i votes) ((at i votes)!0))
-    in NoOp"
+        votes = (map snd) o$ m;
+        highest = (\<lambda> l . (fold max l (l!0)) \<bind> (\<lambda> vb . Some (fst vb)))
+    in highest o$ votes"
 
 text {* 
   When a quorum of 1b messages is received, we complete all started instances by sending 2b messages containing a safe value.
