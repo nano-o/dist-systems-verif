@@ -34,7 +34,7 @@ type_synonym bal = nat
 type_synonym inst = nat
 type_synonym acc = nat
 
-datatype ('v) msg =
+datatype 'v msg =
   Phase1a (from_leader: acc) (ballot:bal)
 | Phase1b (last_votes:"nat \<Rightarrow>f ('v cmd \<times> bal) option") (new_ballot: bal) (acceptor:acc)
 | Phase2a (inst: inst) (for_ballot:bal) (suggestion:"'v cmd") (leader: acc)
@@ -44,11 +44,11 @@ datatype ('v) msg =
 | Fwd (val: "'v cmd")
   -- {* Forwards a proposal to another proposer (the leader) *}
 
-datatype ('v)  packet =
+datatype 'v  packet =
   -- {* A message with sender/destination information *}
-  Packet (sender: acc) (dst: acc) (msg: "('v) msg")
+  Packet (sender: acc) (dst: acc) (msg: "'v msg")
 
-record ('v) mp_state =
+record 'v mp_state =
   acceptors :: "acc set"
     -- {* The set of all acceptors *}
   ballot :: "acc \<Rightarrow>f bal option"
@@ -67,7 +67,7 @@ record ('v) mp_state =
   log :: "acc \<Rightarrow>f (nat \<times> 'v cmd) list"
   leader :: "acc \<Rightarrow>f bal \<Rightarrow>f bool"
 
-definition init_state :: "acc set \<Rightarrow> ('v) mp_state" where
+definition init_state :: "acc set \<Rightarrow> 'v mp_state" where
   "init_state accs \<equiv> \<lparr>
     mp_state.acceptors = accs,
     ballot = K$ None,
@@ -128,7 +128,7 @@ definition do_2a where
     in
       (new_state, send_all s a msg)"
 
-definition propose :: "acc \<Rightarrow> 'v \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
+definition propose :: "acc \<Rightarrow> 'v \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "propose a v s \<equiv>
     (if (leader_of_bal s (ballot s $ a) = a)
@@ -148,7 +148,7 @@ fun send_1a where
         msg_1a = Phase1a a b in
       (s, {Packet a a2 msg_1a | a2 . a2 \<in> (acceptors s)}))"
 
-fun receive_1a :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
+fun receive_1a :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
   "receive_1a a (Phase1a l b) s =
     (let bal = ballot s $ a in
       (if (bal = None \<or> ((the bal) < b))
@@ -165,7 +165,7 @@ fun receive_1a :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Righta
 | "receive_1a a _ s = (s,{})"
 
 definition update_onebs :: 
-  "('v)mp_state \<Rightarrow> acc \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> ('v)mp_state" where
+  "'v mp_state \<Rightarrow> acc \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> 'v mp_state" where
   -- {* Update the list of highest voted values when receiving a 1b
     message from a2 for ballot bal containing last_vs *}
   "update_onebs s a bal a2 last_vs \<equiv>
@@ -242,7 +242,7 @@ text {*
 
   For now we propose values to all the instances ever started.
 *}
-fun receive_1b :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
+fun receive_1b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
  "receive_1b a (Phase1b last_vs bal a2) s = (
     if (Some bal = ballot s $ a)
     then
@@ -267,7 +267,7 @@ definition is_leader where
   "is_leader s a \<equiv> 
     case ballot s $ a of None \<Rightarrow> False | Some b \<Rightarrow> leader s $ a $ b"
 
-fun receive_2a :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
+fun receive_2a :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
   "receive_2a a (Phase2a i b v l) s =
     (let bal = (ballot s $ a) in
       (if (bal = Some b)
@@ -275,7 +275,7 @@ fun receive_2a :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Righta
         else (s, {})))"
 | "receive_2a a _ s = (s, {})"
 
-fun receive_2b :: "acc \<Rightarrow> ('v)msg \<Rightarrow> ('v)mp_state \<Rightarrow> (('v)mp_state \<times> ('v)packet set)" where
+fun receive_2b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
   "receive_2b a (Phase2b i b a2 v) s =
     (if (decided s $ a $ i = None)
       then
