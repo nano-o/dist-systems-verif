@@ -1,12 +1,14 @@
 theory MultiPaxos
-imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat" Log
+imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat" Log     
+  "../../IO-Automata/IOA_Automation" "../../IO-Automata/Simulations"
+  "~~/src/HOL/Library/FSet"
 begin
 
 text {* We assume reliable channels (TCP) *}
 
 datatype 'v cmd = Cmd 'v | NoOp
 
-datatype ('v,'a,'b) msg =
+datatype ('v, 'a, 'b) msg =
   Phase1a (leader: 'a) (ballot:'b)
 | Phase1b (last_vote:"('v \<times> 'b) option list") (new_ballot: 'b) (acceptor:'a)
   -- {* last_vote contains the list of all instances in which the sender has participated, 
@@ -15,17 +17,29 @@ datatype ('v,'a,'b) msg =
     did not participate in any instance numbered greater than the length of the list. *}
 | Phase2a (inst: nat) (for_ballot:'b) (suggestion:'v) (leader: 'a)
 | Phase2b (inst: nat) (ballot:'b) (acceptor: 'a) (val: 'v)
-| Vote (inst: nat) (val: 'v)
-  -- {* Instructs a learner that a value has been decided. Not used for now... *}
+(* | Vote (inst: nat) (val: 'v)
+  -- {* Instructs a learner that a value has been decided. Not used for now... *} *)
 | Fwd (val: 'v)
   -- {* Forwards a proposal to another proposer (the leader) *}
 
-datatype ('v,'a,'b)  packet =
+datatype ('v, 'a, 'b)  packet =
   -- {* A message with sender/destination information *}
   Packet (sender: 'a) (dst: 'a) (msg: "('v,'a,'b) msg")
 
+datatype ('v, 'acc, 'b) p_action =
+  FwdA 'acc "'v cmd"
+| Propose 'acc "'v cmd"
+(* | Learn 'acc "'v cmd" *)
+| Send_1a 'acc
+| Respond_1a 'acc "('v cmd, 'acc, 'b)packet "
+| Respond_1b 'acc "('v cmd \<times> 'b) option list" 'acc 'b
+| Send_2a 'acc nat 'b "'v cmd" 'acc
+| Respond_2b 'acc nat 'b 'acc "'v cmd"
+(* | Vote nat 'v *)  
+
+
 record ('v, 'a, 'b) mp_state =
-  acceptors :: "'a set"
+  acceptors :: "'a fset"
     -- {* The set of all acceptors *}
   ballot :: "'a \<Rightarrow> 'b option"
     -- {* the highest ballot in which an acceptor participated *}
@@ -50,7 +64,7 @@ record ('v, 'a, 'b) mp_state =
   log :: "'a \<Rightarrow> (nat \<times> 'v cmd) list"
   leadership_acquired :: "'a \<Rightarrow> 'b \<Rightarrow> bool"
 
-definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
+definition init_state :: "'a fset \<Rightarrow> ('v,'a,'b) mp_state" where
   "init_state accs \<equiv> \<lparr>
     mp_state.acceptors = accs,
     ballot = (\<lambda> a . None),
@@ -66,7 +80,7 @@ definition init_state :: "'a set \<Rightarrow> ('v,'a,'b) mp_state" where
     \<rparr>"
 
 definition nr where
-  "nr s \<equiv> card (acceptors s)"
+  "nr s \<equiv> fcard (acceptors s)"
 
 definition one_b_quorum where
   "one_b_quorum a i b s \<equiv> 2 * length ((onebs s a b)!i) > nr s"
@@ -93,7 +107,7 @@ definition highest_voted where
 value "highest_voted [(1,Some (1,1))]"
 
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
-  -- {* The smallest ballot belonging to replica a and greater than ballt b, when there are N replicas *}
+  -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
   where "suc_bal a b N \<equiv> (b div N + 1) * N + a"
 
 fun nx_bal where
@@ -104,15 +118,15 @@ definition one_a_msgs where
   -- {* The set of 1a messages to send to try to become the leader *}
   "one_a_msgs a s \<equiv> 
     let
-      next_bal = nx_bal a (ballot s a) (card (acceptors s));
+      next_bal = nx_bal a (ballot s a) (fcard (acceptors s));
       msg_1a = Phase1a a next_bal
-    in {Packet a b msg_1a | b . b \<in> (acceptors s)}"
+    in {Packet a b msg_1a | b . b |\<in>| (acceptors s)}"
 
 definition leader where
   "leader s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
     (b mod (nr s))"
 
-definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 . a2 \<in> acceptors s}"
+definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 . a2 |\<in>| acceptors s}"
 
 definition do_2a where
   "do_2a s a v\<equiv> 
@@ -140,9 +154,9 @@ fun send_1a where
   -- {* a tries to become the leader *}
   "send_1a a s =
     (let
-        b = nx_bal a (ballot s a) (card (acceptors s));
-        msg_1a = Phase1a a b in
-      (s, {Packet a a2 msg_1a | a2 . a2 \<in> (acceptors s)}))"
+        b = nx_bal a (ballot s a) (fcard (acceptors s));
+        msg_1a = Phase1a a b in                                 
+      (s, {Packet a a2 msg_1a | a2 . a2 |\<in>| (acceptors s)}))"
 
 fun receive_1a where
   -- {* Upon receiving a 1a message for a higher ballot than the current one, join this ballot and
@@ -153,7 +167,7 @@ fun receive_1a where
       (if (bal = None \<or> ((the bal) < b))
        then
           (let
-            is = case bal of None \<Rightarrow> [] | Some b \<Rightarrow>  [0..<(Suc b)];
+            is = case bal of None \<Rightarrow> [] | Some b \<Rightarrow> [0..<(Suc b)];
             get_vote = (\<lambda> i . (vote s i a) \<bind> (\<lambda> v . (last_ballot s a i) \<bind> (\<lambda> b . Some (v, b))));
             votes = [get_vote i . i \<leftarrow> is];
             msg_1b = Phase1b votes b a;
@@ -241,7 +255,7 @@ fun receive_2a where
   "receive_2a a (Phase2a i b v l) s =
     (let bal = (ballot s a) in
       (if (bal = Some b)
-      then (s\<lparr>vote := (vote s)(a := (vote s a)(i := Some v))\<rparr>, {send_all s a (Phase2b i b a v)})
+      then (s\<lparr>vote := (vote s)(a := (vote s a)(i := Some v))\<rparr>, (send_all s a (Phase2b i b a v)))
       else (s, {})))"
 | "receive_2a a _ s = (s, {})"
 
@@ -252,7 +266,7 @@ fun receive_2b where
       then
         (let new_twobs = a2 # (twobs s a i b)
         in
-          (if (2 * length new_twobs > card (acceptors s))
+          (if (2 * length new_twobs > fcard (acceptors s))
           then
             s\<lparr>twobs := (twobs s)(a := (twobs s a)(i := (twobs s a i)(b := new_twobs))),
               decided := (decided s)(a := (decided s a)(i := Some v)),
@@ -266,7 +280,7 @@ fun receive_2b where
 
 definition test_state_1 where 
   "test_state_1 \<equiv> \<lparr>
-    mp_state.acceptors = {1,2,3::int},
+    mp_state.acceptors = {|1,2,3::int|},
     ballot = (\<lambda> a . None),
     vote = (\<lambda> a . \<lambda> i . None),
     last_ballot = (\<lambda> a . \<lambda> i . None),
@@ -290,12 +304,109 @@ value "let
   from2 = (3::int);
   (s2,msgs2) = receive_2b receiver (Phase2b instance ballot from2 (Cmd val)) s1;
   twobs = twobs s2 receiver instance ballot;
-  n = card (acceptors s)
+  n = fcard (acceptors s)
 in (twobs, msgs2, pending s2 receiver instance, decided s2 receiver instance)"
 
 value "largestprefix [(1,v1), (2,v2), (4,v4)]"
 
-export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b receive_fwd 
-  largestprefix is_leader in Scala file "simplePaxos.scala"
+section {* MultiPaxos IOA *}
+
+record ('v, 'a, 'b) mp_state_global = 
+  node_states :: "('v, 'a, 'b) mp_state"
+  network :: "('v cmd, 'a, 'b) packet set"
+
+locale Paxos = IOA +
+  fixes acceptors::"nat fset" and learners::"'l fset" and quorums::"nat fset fset"
+  assumes "acceptors \<noteq> {||}"
+    and "learners \<noteq> {||}"
+    and "\<And> q1 q2 . \<lbrakk>q1 |\<in>| quorums; q2 |\<in>| quorums\<rbrakk> \<Longrightarrow> q1 |\<inter>| q2 \<noteq> {||}"
+    and "\<And> q . q |\<in>| quorums \<Longrightarrow> q |\<subseteq>| acceptors"
+    and "quorums \<noteq> {||}"
+begin    
+
+definition p_asig where                                           
+  "p_asig \<equiv>
+    \<lparr> inputs = {a . \<exists>acc. \<exists> c . a = Propose acc c},
+      outputs = {},
+      internals = {a . \<exists> acc . acc |\<in>| acceptors \<and> a = Send_1a acc}
+        \<union> {a . \<exists> p. \<exists> acc . acc |\<in>| acceptors \<and> a = Respond_1a acc p}
+        \<union> {a . \<exists>vote_log. \<exists> b . \<exists> l. \<exists> acc . acc |\<in>| acceptors \<and> a = Respond_1b l vote_log acc b}
+        \<union> {a . \<exists>l. \<exists>inst. \<exists> b . \<exists> acc . \<exists> v. acc |\<in>| acceptors \<and> a = Send_2a acc inst b v l}
+        \<union> {a . \<exists> l. \<exists>inst. \<exists> b . \<exists> acc . \<exists> v. acc |\<in>| acceptors \<and> a = Respond_2b l inst b acc v}
+        \<union> {a . \<exists>acc. \<exists> v . acc |\<in>| acceptors \<and> a = FwdA acc v}\<rparr>"
+
+definition p_start where
+  "p_start \<equiv> {\<lparr>node_states = (init_state acceptors), network = {}\<rparr>}"
+
+definition Send1a where
+  "Send1a l s s' \<equiv> (
+    let (new_state, packets) = send_1a l (node_states s) in
+      s' = s\<lparr>network := (network s) \<union> packets\<rparr>)"
+
+definition Receive1a where
+  "Receive1a a p s s' \<equiv> 
+    dst p = a \<and> p \<in> network s \<and>
+    (let (new_state, packets) = receive_1a a (msg p) (node_states s) in
+      s' = s\<lparr>network := (network s) \<union> packets\<rparr>)"
+
+definition Receive1b where
+  "Receive1b l last_vs new_bal acc s s' \<equiv>(
+    let new_state = receive_1b l (Phase1b last_vs new_bal acc) (node_states s) in
+      s' = s\<lparr>node_states := fst(new_state), network := (network s) \<union> snd(new_state)\<rparr>)"
+
+definition Send2a where
+  "Send2a acc i b v l s s' \<equiv> (
+    let new_state = receive_2a acc (Phase2a i b v l) (node_states s) in
+      s' = s\<lparr>node_states := fst(new_state), network := (network s) \<union> snd(new_state)\<rparr>)"
+
+definition Receive2b where
+  "Receive2b l i b acc v s s' \<equiv> (
+    let new_state = receive_2b l (Phase2b i b acc v) (node_states s) in
+      s' = s\<lparr>node_states := fst(new_state), network := (network s) \<union> snd(new_state)\<rparr>)"
+
+definition ReceiveFwd where
+  "ReceiveFwd acc v s s' \<equiv> (if (leader (node_states s) (ballot (node_states s) acc) = acc) 
+    then let
+      stateS = (node_states s);
+      inst = highest_instance stateS acc + 1;
+      msg = Phase2a inst (the (ballot stateS acc)) v acc;
+      new_state = stateS\<lparr>highest_instance := (highest_instance stateS)(acc := inst),
+        pending := (pending stateS)(acc := (pending stateS acc)(inst := Some v))\<rparr>
+    in
+      s' = s\<lparr>node_states := new_state, network := (network s) \<union> (send_all stateS acc msg)\<rparr>
+    else s' = s)"
+
+definition ProposeV where
+  "ProposeV acc v s s' \<equiv> (
+    let stateS = (node_states s) in
+      (if (leader stateS (ballot stateS acc) = acc)
+        then (let
+          inst = highest_instance stateS acc + 1;
+          msg = Phase2a inst (the (ballot stateS acc)) v acc;
+          new_state = stateS\<lparr>highest_instance := (highest_instance stateS)(acc := inst),
+            pending := (pending stateS)(acc := (pending stateS acc)(inst := Some v))\<rparr>
+        in
+          s' = s\<lparr>node_states := new_state, network := (network s) \<union> (send_all stateS acc msg)\<rparr>)
+      else
+        s' = s\<lparr>network := (network s) \<union> {Packet acc (leader stateS (ballot stateS acc)) (Fwd v)}\<rparr>))"
+
+fun p_trans_fun::"('v, nat, nat) mp_state_global \<Rightarrow> ('v, nat, nat) p_action \<Rightarrow> ('v, nat, nat) mp_state_global \<Rightarrow> bool"  where
+  "p_trans_fun s (Send_1a acc) s' = (Send1a acc s s')"|
+  "p_trans_fun s (Respond_1a acc p) s' = (Receive1a acc p s s')" (*|
+  "p_trans_fun s (Respond_1b l last_vs acc b) s' = (Receive1b l last_vs b acc s s')"|
+  "p_trans_fun s (Send_2a acc i b v l) s' = (Send2a acc i b v l s s')"|
+  "p_trans_fun s (Respond_2b l i b acc v) s' = (Receive2b l i b acc v s s')"|
+  "p_trans_fun s (FwdA acc v) s' = (ReceiveFwd acc v s s')"|
+  "p_trans_fun s (Propose acc v) s' = (ProposeV acc v s s')" *)
+
+definition p_trans where
+  "p_trans \<equiv> { (r,a,r') . p_trans_fun r a r'}"
+
+definition p_ioa where
+  "p_ioa \<equiv> \<lparr>ioa.asig = p_asig, start = p_start, trans = p_trans\<rparr>"
+
+end
+(*export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b receive_fwd 
+  largestprefix is_leader in Scala file "simplePaxos.scala"*)
 
 end
