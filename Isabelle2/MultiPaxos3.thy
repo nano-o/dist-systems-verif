@@ -120,9 +120,9 @@ definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 .
 definition do_2a where
   "do_2a s a v \<equiv>
     let
-      inst = (next_inst s $ a) + (1::nat);
+      inst = (next_inst s $ a);
       msg = Phase2a inst (the (ballot s $ a)) v a;
-      new_state = s\<lparr>next_inst := (next_inst s)(a $:= inst),
+      new_state = s\<lparr>next_inst := (next_inst s)(a $:= inst+1),
         pending := (pending s)(a $:= (pending s $ a)(inst $:= (Some v)))\<rparr>
     in
       (new_state, send_all s a msg)"
@@ -353,15 +353,30 @@ value "one_b_quorum_received 1 4 (fst r5)"
 value "onebs (fst r5) $ 1 $ 4"
 value "fst r5"
 value "n5"
+text {* Now process 1 is the leader and proposes Cmd 1 *}
 abbreviation r6 where "r6 \<equiv> propose 1 (Cmd 1) (fst r5)"
-abbreviation n6 where "n6 \<equiv> snd r6" (* let's get rid of the privious messages to make things clearer *)
+abbreviation n6 where "n6 \<equiv> snd r6" (* let's get rid of the previous messages to make things clearer *)
 value "fst r6"
 value "n6"
-
-
-abbreviation r1 where "r1 \<equiv> propose 1 (Cmd 1) (init_state {1,2,3})"
-value "snd r1"
-abbreviation r2 where "r2 \<equiv> (fst r1, snd r1)"
+abbreviation r7 where "r7 \<equiv> receive_2a 2 (Phase2a 1 4 (Cmd (Cmd 1)) 1) (fst r6)"
+abbreviation n7 where "n7 \<equiv> snd r7" (* let's get rid of the previous messages to make things clearer *)
+value "fst r7"
+value "n7"
+abbreviation r8 where "r8 \<equiv> receive_2a 3 (Phase2a 1 4 (Cmd (Cmd 1)) 1) (fst r7)"
+abbreviation n8 where "n8 \<equiv> snd r8 \<union> n7" (* let's get rid of the previous messages to make things clearer *)
+value "fst r8"
+value "n8"
+abbreviation r9 where "r9 \<equiv> receive_2b 1 (Phase2b 1 4 3 (Cmd (Cmd 1))) (fst r8)"
+abbreviation n9 where "n9 \<equiv> snd r9 \<union> n8" (* let's get rid of the previous messages to make things clearer *)
+value "fst r9"
+value "n9"
+text {* Upon receiving the second 2b message, process 1 decides Cmd 1 at position 1 *}
+abbreviation r10 where "r10 \<equiv> receive_2b 1 (Phase2b 1 4 2 (Cmd (Cmd 1))) (fst r9)"
+abbreviation n10 where "n10 \<equiv> snd r10 \<union> n9" (* let's get rid of the previous messages to make things clearer *)
+value "fst r10"
+value "n10"
+value "decided (fst r10) $ 1 $ 1"
+value "log (fst r10) $ 1"
 
 
 end
