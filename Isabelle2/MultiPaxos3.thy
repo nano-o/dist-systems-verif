@@ -62,10 +62,10 @@ record 'v mp_state =
   twobs :: "acc \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f acc list"
     -- {* For an acceptor a: lists describing the 2b messages, indexed by instance then ballot. *}
   decided :: "acc \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
-  max_inst :: "acc \<Rightarrow>f nat"
+  next_inst :: "acc \<Rightarrow>f nat"
   pending :: "acc \<Rightarrow>f inst \<Rightarrow>f 'v cmd option"
   log :: "acc \<Rightarrow>f (nat \<times> 'v cmd) list"
-  leader :: "acc \<Rightarrow>f bal \<Rightarrow>f bool"
+  leader :: "acc \<Rightarrow>f bool" (* TODO: we don't need the ballot here, because it's only used for the current ballot. *)
 
 definition init_state :: "acc set \<Rightarrow> 'v mp_state" where
   "init_state accs \<equiv> \<lparr>
@@ -76,10 +76,10 @@ definition init_state :: "acc set \<Rightarrow> 'v mp_state" where
     onebs = K$ K$ K$ [],
     twobs = K$ K$ K$ [],
     decided = K$ K$ None,
-    max_inst = K$ 0,
+    next_inst = K$ 1, (* instances start at 1 *)
     pending = K$ K$ None,
     log = K$ [],
-    leader = K$ K$ False \<rparr>"
+    leader = K$ False \<rparr>"
 
 definition nr where
   -- {* The number of replicas *}
@@ -97,7 +97,7 @@ definition one_b_quorum_received where
     in 2 * length at_b_i > nr s"
 
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
-  -- {* The smallest ballot belonging to replica a and greater than ballt b, when there are N replicas *}
+  -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
   where "suc_bal a b N \<equiv> (b div N + 1) * N + a"
 
 fun nx_bal where
@@ -121,9 +121,9 @@ definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 .
 definition do_2a where
   "do_2a s a v \<equiv>
     let
-      inst = max_inst s $ a + 1;
+      inst = (next_inst s $ a) + (1::nat);
       msg = Phase2a inst (the (ballot s $ a)) v a;
-      new_state = s\<lparr>max_inst := (max_inst s)(a $:= inst),
+      new_state = s\<lparr>next_inst := (next_inst s)(a $:= inst),
         pending := (pending s)(a $:= (pending s $ a)(inst $:= (Some v)))\<rparr>
     in
       (new_state, send_all s a msg)"
@@ -131,22 +131,24 @@ definition do_2a where
 definition propose :: "acc \<Rightarrow> 'v \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "propose a v s \<equiv>
-    (if (leader_of_bal s (ballot s $ a) = a)
+    (if (leader_of_bal s (ballot s $ a) = a \<and> leader s $ a)
       then do_2a s a (Cmd v)
-      else (s, {Packet a (leader_of_bal s (ballot s $ a)) (Fwd (Cmd v))}))"
+      else ( if (leader_of_bal s (ballot s $ a) = a)
+        then (s,{}) (* TODO: here we loose the proposal... *)
+        else (s, {Packet a (leader_of_bal s (ballot s $ a)) (Fwd (Cmd v))})) )"
  
 fun receive_fwd where
   "receive_fwd a (Fwd v) s = 
     (if (leader_of_bal s (ballot s $ a) = a) then do_2a s a v else (s, ({})))"
 | "receive_fwd a _ s = (s, ({}))"
 
-fun send_1a where
+fun send_1a :: "acc \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
   -- {* a tries to become the leader *}
   "send_1a a s =
     (let
         b = nx_bal a (ballot s $ a) (card (acceptors s));
         msg_1a = Phase1a a b in
-      (s, {Packet a a2 msg_1a | a2 . a2 \<in> (acceptors s)}))"
+      (s\<lparr>ballot := (ballot s)(a $:= Some b)\<rparr>, {Packet a a2 msg_1a | a2 . a2 \<in> (acceptors s)}))"
 
 fun receive_1a :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
   "receive_1a a (Phase1a l b) s =
@@ -185,10 +187,10 @@ abbreviation s1 where
     onebs = (K$ K$ K$ [])(1 $:= (K$ K$ [])(2 $:= (K$ [(2, None)])(1 $:= [(2, Some (Cmd 1,1))]))),
     twobs = K$ K$ K$ [],
     decided = K$ K$ None,
-    max_inst = K$ 1,
+    next_inst = K$ 1,
     pending = K$ K$ None,
     log = K$ [],
-    leader = K$ K$ False \<rparr>"
+    leader = K$ False \<rparr>"
 
 value "onebs test_state_1 $ 1 $ 2 $ 1"
 
@@ -206,7 +208,7 @@ definition highest_voted :: "(nat \<Rightarrow>f (acc \<times> ('v cmd \<times> 
   "highest_voted m \<equiv>
     let
         votes = (map snd) o$ m;
-        highest = (\<lambda> l . (fold max l (l!0)) \<bind> (\<lambda> vb . Some (fst vb)))
+        highest = (\<lambda> l . if (l = []) then None else (fold max l (l!0)) \<bind> (\<lambda> vb . Some (fst vb)))
     in highest o$ votes"
 
 text {* The highest n which has been updated (excluding updates to the default). 
@@ -250,9 +252,9 @@ fun receive_1b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarr
        in (if one_b_quorum_received a bal s1 
           then (let
               h = highest_voted (onebs s1 $ a $ bal);
-              max_i = hd (rev (finfun_to_list (onebs s1 $ a $ bal)));
-              s2 = s1\<lparr>leader := (leader s1)(a $:= (leader s1 $ a)(bal $:= True))\<rparr>;
-              s3 = s2\<lparr>max_inst := (max_inst s2)(a $:= max_i+1)\<rparr>;
+              max_i = let l = (finfun_to_list (onebs s1 $ a $ bal)) in (if l = [] then 0 else hd (rev l));
+              s2 = s1\<lparr>leader := (leader s1)(a $:= True)\<rparr>;
+              s3 = s2\<lparr>next_inst := (next_inst s2)(a $:= max_i+1)\<rparr>;
               twoa_is = [1..<max_i+1];
               msgs = map (\<lambda> i . case h $ i of 
                   None \<Rightarrow> Phase2a i bal NoOp a
@@ -262,10 +264,6 @@ fun receive_1b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarr
           else (s1, {}) ) )
     else (s, {}))"
 | "receive_1b a _ s = (s, {})"
-
-definition is_leader where 
-  "is_leader s a \<equiv> 
-    case ballot s $ a of None \<Rightarrow> False | Some b \<Rightarrow> leader s $ a $ b"
 
 fun receive_2a :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
   "receive_2a a (Phase2a i b v l) s =
@@ -306,10 +304,10 @@ abbreviation s4 where
     onebs = K$ K$ K$ [],
     twobs = (K$ K$ K$ [])(1 $:= (K$ K$ [])(1 $:= (K$ [])(2 $:= [2]))),
     decided = K$ K$ None,
-    max_inst = K$ 1,
+    next_inst = K$ 1,
     pending = K$ K$ None,
     log = K$ [],
-    leader = K$ K$ False \<rparr>"
+    leader = K$ False \<rparr>"
 
 text {* Acceptor 1 receives a round-2 2b message from acceptor 3 in instance 1. *}
 abbreviation step5 where "step5 \<equiv> receive_2b 1 (Phase2b 1 2 3 (Cmd (42::int))) s4"
@@ -325,6 +323,45 @@ value "twobs s6 $ 1 $ 1 $ 2"
 value "largestprefix [(1,v1), (2,v2), (4,v4)]"
 
 export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b receive_fwd 
-  largestprefix is_leader in Scala file "simplePaxos.scala"
+  largestprefix in Scala file "simplePaxos.scala"
+
+subsection {* A test scenario*}
+
+text {* Process 1 acquires the leadership*}
+value "init_state {1,2,3}"
+abbreviation r1 where "r1 \<equiv> send_1a 1 (init_state {1,2,3})"
+abbreviation n1 where "n1 \<equiv> snd r1"
+value "fst r1"
+value "n1"
+abbreviation r2 where "r2 \<equiv> receive_1a 2 (Phase1a 1 4) (fst r1)"
+abbreviation n2 where "n2 \<equiv> n1 \<union> snd r2"
+value "fst r2"
+value "n2"
+abbreviation r3 where "r3 \<equiv> receive_1a 3 (Phase1a 1 4) (fst r2)"
+abbreviation n3 where "n3 \<equiv> n2 \<union> snd r3"
+value "fst r3"
+value "n3"
+abbreviation r4 where "r4 \<equiv> receive_1b 1 (Phase1b (K$ None) 4 2) (fst r3)"
+abbreviation n4 where "n4 \<equiv> n3 \<union> snd r4"
+value "fst r4"
+value "n4"
+abbreviation r5 where "r5 \<equiv> receive_1b 1 (Phase1b (K$ None) 4 3) (fst r4)"
+abbreviation n5 where "n5 \<equiv> n4 \<union> snd r5"
+value "highest_voted (onebs s1 $ 1 $ 4)"
+value "finfun_to_list (onebs s1 $ 1 $ 4)"
+value "one_b_quorum_received 1 4 (fst r5)"
+value "onebs (fst r5) $ 1 $ 4"
+value "fst r5"
+value "n5"
+abbreviation r6 where "r6 \<equiv> propose 1 (Cmd 1) (fst r5)"
+abbreviation n6 where "n6 \<equiv> snd r6" (* let's get rid of the privious messages to make things clearer *)
+value "fst r6"
+value "n6"
+
+
+abbreviation r1 where "r1 \<equiv> propose 1 (Cmd 1) (init_state {1,2,3})"
+value "snd r1"
+abbreviation r2 where "r2 \<equiv> (fst r1, snd r1)"
+
 
 end
