@@ -85,7 +85,6 @@ definition nr where
   -- {* The number of replicas *}
   "nr s \<equiv> card (acceptors s)"
 
-
 subsection {* Event handlers *}
 
 text {* If we had finfun_Ex we could do this better.
@@ -171,7 +170,8 @@ definition update_onebs ::
   "update_onebs s a bal a2 last_vs \<equiv>
     let
       combiner = \<lambda> (xs, y) . (case y of None \<Rightarrow> (a2, None)#xs | Some z \<Rightarrow> (a2, Some z)#xs);
-      at_bal = combiner o$ ($ (onebs s $ a $ bal), last_vs $)
+      pair_map = ($ (onebs s $ a $ bal), last_vs $);
+      at_bal = combiner o$ pair_map
     in s\<lparr>onebs := (onebs s)(a $:= (onebs s $ a)(bal $:= at_bal))\<rparr>"
 
 abbreviation s1 where 
@@ -229,7 +229,7 @@ apply auto
 oops
 
 text {* Instead of trying to define the max as a recursive function, let's use finfun_to_list. *}
-
+value "((K$ False)(5 $:= True)(4 $:= False)(2 $:= True)) $ (2::int)"
 value "finfun_to_list (((K$ False)(5 $:= True)(4 $:= False)(2 $:= True))::(nat \<Rightarrow>f bool))"
 
 text {* 
