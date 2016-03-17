@@ -1,4 +1,4 @@
-(* Author: Andreas Lochbihler, Uni Karlsruhe *)
+(* Author: Ian Roessle, derived from Andreas Lochbihler, Uni Karlsruhe *)
 
 section \<open>Almost everywhere constant functions\<close>
 
