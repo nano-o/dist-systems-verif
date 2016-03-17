@@ -1,6 +1,7 @@
 theory MultiPaxos3
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat"
   Log LinorderOption "~~/src/HOL/Library/FinFun_Syntax"
+  "../../IO-Automata/IOA_Automation" "../../IO-Automata/Simulations"
 begin
 
 text {* A version of MultiPaxos using FinFuns *}
@@ -44,9 +45,18 @@ datatype 'v msg =
 | Fwd (val: "'v cmd")
   -- {* Forwards a proposal to another proposer (the leader) *}
 
-datatype 'v  packet =
+datatype 'v packet =
   -- {* A message with sender/destination information *}
   Packet (sender: acc) (dst: acc) (msg: "'v msg")
+
+datatype 'v p_action =
+  FwdA acc "'v packet"
+| Propose acc 'v
+| Send_1a acc
+| Respond_1a acc "'v packet"
+| Respond_1b acc "'v packet"
+| Send_2a acc "'v packet"
+| Respond_2b acc "'v packet"
 
 record 'v mp_state =
   acceptors :: "acc set"
@@ -323,6 +333,90 @@ text {* Since decided is already true, nothing is updated. *}
 value "twobs s6 $ 1 $ 1 $ 2"
 
 value "largestprefix [(1,v1), (2,v2), (4,v4)]"
+
+record 'v mp_state_global = 
+  node_states :: "'v mp_state"
+  network :: "'v packet set"
+
+locale Paxos = IOA +
+  fixes acceptors::"nat set" and learners::"'l set" and quorums::"nat set set"
+  assumes "acceptors \<noteq> {}"
+    and "learners \<noteq> {}"
+    and "\<And> q1 q2 . \<lbrakk>q1 \<in> quorums; q2 \<in> quorums\<rbrakk> \<Longrightarrow> q1 \<inter> q2 \<noteq> {}"
+    and "\<And> q . q \<in> quorums \<Longrightarrow> q \<subseteq> acceptors"
+    and "quorums \<noteq> {}"
+begin    
+
+definition p_asig where                                           
+  "p_asig \<equiv>
+    \<lparr> inputs = {a . \<exists>acc. \<exists>v . a = Propose acc v},
+      outputs = {},
+      internals = {a . \<exists> acc . acc \<in> acceptors \<and> a = Send_1a acc}
+        \<union> {a . \<exists> p. \<exists> acc . acc \<in> acceptors \<and> a = Respond_1a acc p}
+        \<union> {a . \<exists>p. \<exists> acc . acc \<in> acceptors \<and> a = Respond_1b acc p}
+        \<union> {a . \<exists>p. \<exists> acc . acc \<in> acceptors \<and> a = Send_2a acc p}
+        \<union> {a . \<exists> acc . \<exists>p. acc \<in> acceptors \<and> a = Respond_2b acc p}
+        \<union> {a . \<exists>acc. \<exists>p . acc \<in> acceptors \<and> a = FwdA acc p}\<rparr>"
+
+definition p_start where
+  "p_start \<equiv> {\<lparr>node_states = (init_state acceptors), network = {}\<rparr>}"
+
+definition Send1a::"nat \<Rightarrow> 'v mp_state_global \<Rightarrow>'v mp_state_global \<Rightarrow> bool" where
+  "Send1a l s s' \<equiv> (
+    let (new_state, packets) = send_1a l (node_states s) in
+      s' = s\<lparr>network := (network s) \<union> packets\<rparr>)"
+
+definition Receive1a::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state_global \<Rightarrow>'v mp_state_global \<Rightarrow> bool" where
+  "Receive1a acc p s s' \<equiv> 
+    dst p = acc \<and> p \<in> network s \<and>
+    (let (new_state, packets) = receive_1a acc (msg p) (node_states s) in
+      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
+
+definition Receive1b::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state_global \<Rightarrow>'v mp_state_global \<Rightarrow> bool" where
+  "Receive1b l p s s' \<equiv>
+    dst p = l \<and> p \<in> network s \<and>    
+    (let (new_state, packets) = receive_1b l (msg p) (node_states s) in
+      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
+
+definition Send2a::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state_global \<Rightarrow>'v mp_state_global \<Rightarrow> bool" where
+  "Send2a acc p s s' \<equiv> 
+    dst p = acc \<and> p \<in> network s \<and>
+    (let (new_state, packets) = receive_2a acc (msg p) (node_states s) in
+      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
+
+definition Receive2b::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state_global \<Rightarrow>'v mp_state_global \<Rightarrow> bool" where
+  "Receive2b l p s s' \<equiv>
+    dst p = l \<and> p \<in> network s \<and>    
+    (let (new_state, packets) = receive_2b l (msg p) (node_states s) in
+      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
+
+definition ReceiveFwd::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state_global \<Rightarrow>'v mp_state_global \<Rightarrow> bool" where
+  "ReceiveFwd acc p s s' \<equiv> 
+    dst p = acc \<and> p \<in> network s \<and>    
+    (let (new_state, packets) = receive_fwd acc (msg p) (node_states s) in
+      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
+
+definition ProposeV::"nat \<Rightarrow> 'v \<Rightarrow> 'v mp_state_global \<Rightarrow>'v mp_state_global \<Rightarrow> bool" where
+  "ProposeV acc v s s' \<equiv>
+    (let (new_state, packets) = propose acc v (node_states s) in
+      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
+
+fun p_trans_fun::"'v mp_state_global \<Rightarrow> 'v p_action \<Rightarrow> 'v mp_state_global \<Rightarrow> bool"  where
+  "p_trans_fun s (Send_1a l) s' = (Send1a l s s')"|
+  "p_trans_fun s (Respond_1a acc p) s' = (Receive1a acc p s s')"|
+  "p_trans_fun s (Respond_1b l p) s' = (Receive1b l p s s')"|
+  "p_trans_fun s (Send_2a acc p) s' = (Send2a acc p s s')"|
+  "p_trans_fun s (Respond_2b l p) s' = (Receive2b l p s s')"|
+  "p_trans_fun s (FwdA acc p) s' = (ReceiveFwd acc p s s')"|
+  "p_trans_fun s (Propose acc v) s' = (ProposeV acc v s s')"
+
+definition p_trans where
+  "p_trans \<equiv> { (r,a,r') . p_trans_fun r a r'}"
+
+definition p_ioa where
+  "p_ioa \<equiv> \<lparr>ioa.asig = p_asig, start = p_start, trans = p_trans\<rparr>"
+
+end
 
 export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b receive_fwd 
   largestprefix is_leader in Scala file "simplePaxos.scala"
