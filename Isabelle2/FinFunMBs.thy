@@ -71,13 +71,34 @@ definition ff_test_dsc :: "nat \<Rightarrow> (nat list)" where
   "ff_test_dsc a \<equiv>
           finfun_to_list (bl_dsc a )"
 
+(* Micro benchmark #2
+ Builds an assending finfun of input size. 
+Accesses either the front 10 or end 10 elements, of inputted repeat count.
+
+*)
+definition mb2_frontaccess :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
+  "mb2_frontaccess sz repeat \<equiv>
+        (let
+            array = bl_asc sz;
+            array=access_range_x array 10 9 repeat
+          in 
+          array)"           
+
+definition mb2_endaccess :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
+  "mb2_endaccess sz repeat \<equiv>
+        (let
+            array = bl_asc sz;
+            array=access_range_x array sz 9 repeat
+          in 
+          array)"           
+
 
 value "bl_asc 3"
 value "bl_dsc 3"
 value "finfun_to_list (bl_asc 3)"
 value "finfun_to_list (bl_dsc 3)"
 
-export_code access_x access_range_x ff_test_dsc ff_test_asc in Scala file ""
+export_code access_x access_range_x mb2_endaccess mb2_frontaccess ff_test_dsc ff_test_asc in Scala file ""
 
 
 end
