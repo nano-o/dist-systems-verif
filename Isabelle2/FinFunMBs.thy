@@ -14,6 +14,8 @@ primrec bl_asc :: "nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
 "bl_asc 0  = (K$ 0) " |
 "bl_asc (Suc n) = (let z = (bl_asc n)((Suc n) $:= Suc n::nat) in z)"
 
+definition bl_asc_2 :: "nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
+  "bl_asc_2 n \<equiv> fold (\<lambda> i ff . ff(i $:= i)) [1..<(n+1)] (K$ 0)"
 
 (* Builds a finfun in descending order 
   inputs:
@@ -27,6 +29,8 @@ primrec bl_dsc_sub :: "nat \<Rightarrow> (nat \<Rightarrow>f nat) \<Rightarrow> 
 definition bl_dsc :: "nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
     "bl_dsc n \<equiv>  bl_dsc_sub n (K$ 0)"
 
+definition bl_dsc_2 :: "nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
+  "bl_dsc_2 n \<equiv> foldr (\<lambda> i ff . ff(i $:= i)) [1..<(n+1)] (K$ 0)"
 
 (*Access a key in a finfun repeatedly
   inputs:
