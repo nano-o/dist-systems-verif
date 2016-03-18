@@ -1,6 +1,6 @@
 theory MultiPaxos3
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat"
-  Log LinorderOption "~~/src/HOL/Library/FinFun_Syntax"
+  Log LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
 begin
 
 text {* A version of MultiPaxos using FinFuns *}
@@ -49,7 +49,7 @@ datatype 'v  packet =
   Packet (sender: acc) (dst: acc) (msg: "'v msg")
 
 record 'v mp_state =
-  acceptors :: "acc set"
+  acceptors :: "acc fset"
     -- {* The set of all acceptors *}
   ballot :: "acc \<Rightarrow>f bal option"
     -- {* the highest ballot in which an acceptor participated *}
@@ -67,7 +67,7 @@ record 'v mp_state =
   log :: "acc \<Rightarrow>f (nat \<times> 'v cmd) list"
   leader :: "acc \<Rightarrow>f bool" (* TODO: we don't need the ballot here, because it's only used for the current ballot. *)
 
-definition init_state :: "acc set \<Rightarrow> 'v mp_state" where
+definition init_state :: "acc fset \<Rightarrow> 'v mp_state" where
   "init_state accs \<equiv> \<lparr>
     mp_state.acceptors = accs,
     ballot = K$ None,
@@ -83,7 +83,7 @@ definition init_state :: "acc set \<Rightarrow> 'v mp_state" where
 
 definition nr where
   -- {* The number of replicas *}
-  "nr s \<equiv> card (acceptors s)"
+  "nr s \<equiv> fcard (acceptors s)"
 
 subsection {* Event handlers *}
 
@@ -107,15 +107,15 @@ definition one_a_msgs where
   -- {* The set of 1a messages to send to try to become the leader *}
   "one_a_msgs a s \<equiv> 
     let
-      next_bal = nx_bal a (ballot s $ a) (card (acceptors s));
+      next_bal = nx_bal a (ballot s $ a) (nr s);
       msg_1a = Phase1a a next_bal
-    in {Packet a b msg_1a | b . b \<in> (acceptors s)}"
+    in {Packet a b msg_1a | b . b |\<in>| (acceptors s)}"
 
 definition leader_of_bal where
   "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
     (b mod (nr s))"
 
-definition send_all where "send_all s sendr m \<equiv> {Packet sendr a2 m | a2 . a2 \<in> acceptors s}"
+definition send_all where "send_all s sendr m \<equiv> fimage (\<lambda> a2 . Packet sendr a2 m)  (acceptors s)"
 
 definition do_2a where
   "do_2a s a v \<equiv>
@@ -127,29 +127,31 @@ definition do_2a where
     in
       (new_state, send_all s a msg)"
 
-definition propose :: "acc \<Rightarrow> 'v \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
+definition propose :: "acc \<Rightarrow> 'v \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet fset)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "propose a v s \<equiv>
     (if (leader_of_bal s (ballot s $ a) = a \<and> leader s $ a)
       then do_2a s a (Cmd v)
       else ( if (leader_of_bal s (ballot s $ a) = a)
-        then (s,{}) (* TODO: here we loose the proposal... *)
-        else (s, {Packet a (leader_of_bal s (ballot s $ a)) (Fwd (Cmd v))})) )"
+        then (s,{||}) (* TODO: here we loose the proposal... *)
+        else (s, {|Packet a (leader_of_bal s (ballot s $ a)) (Fwd (Cmd v))|})) )"
  
 fun receive_fwd where
   "receive_fwd a (Fwd v) s = 
-    (if (leader_of_bal s (ballot s $ a) = a) then do_2a s a v else (s, ({})))"
-| "receive_fwd a _ s = (s, ({}))"
+    (if (leader_of_bal s (ballot s $ a) = a) then do_2a s a v else (s, ({||})))"
+| "receive_fwd a _ s = (s, ({||}))"
 
-fun send_1a :: "acc \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
+fun send_1a :: "acc \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet fset)" where
   -- {* a tries to become the leader *}
   "send_1a a s =
     (let
-        b = nx_bal a (ballot s $ a) (card (acceptors s));
+        b = nx_bal a (ballot s $ a) (nr s);
         msg_1a = Phase1a a b in
-      (s\<lparr>ballot := (ballot s)(a $:= Some b)\<rparr>, {Packet a a2 msg_1a | a2 . a2 \<in> (acceptors s)}))"
+      (s\<lparr>ballot := (ballot s)(a $:= Some b)\<rparr>, fimage (\<lambda> a2 . Packet a a2 msg_1a) (acceptors s)))"
 
-fun receive_1a :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
+export_code send_1a in Scala
+
+fun receive_1a :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet fset)" where
   "receive_1a a (Phase1a l b) s =
     (let bal = ballot s $ a in
       (if (bal = None \<or> ((the bal) < b))
@@ -161,9 +163,9 @@ fun receive_1a :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarr
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := (ballot s)(a $:= Some b)\<rparr>
           in
-          (state, {packet}))
-       else (s,{})))"
-| "receive_1a a _ s = (s,{})"
+          (state, {|packet|}))
+       else (s, {||})))"
+| "receive_1a a _ s = (s, {||})"
 
 definition update_onebs :: 
   "'v mp_state \<Rightarrow> acc \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> 'v mp_state" where
@@ -180,7 +182,7 @@ abbreviation s1 where
   -- {* This is a state in which acceptor 1 is in ballot 2 and has received a ballot-2 1b message from
   acceptor 2 saying that acceptor 2 last voted in ballot 1 in instance 1 for value 1. *}
   "s1 \<equiv> \<lparr>
-    mp_state.acceptors = {1,2,3},
+    mp_state.acceptors = {|1,2,3|},
     ballot = K$ Some 2,
     vote = K$ K$ None,
     last_ballot = K$ K$ None,
@@ -244,7 +246,7 @@ text {*
 
   For now we propose values to all the instances ever started.
 *}
-fun receive_1b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
+fun receive_1b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet fset)" where
  "receive_1b a (Phase1b last_vs bal a2) s = (
     if (Some bal = ballot s $ a)
     then
@@ -260,20 +262,20 @@ fun receive_1b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarr
                   None \<Rightarrow> Phase2a i bal NoOp a
                 | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
               pckts = map (\<lambda> m . send_all s a m) msgs
-            in (s3, fold (op \<union>) pckts {}) )
-          else (s1, {}) ) )
-    else (s, {}))"
-| "receive_1b a _ s = (s, {})"
+            in (s3, fold (op |\<union>|) pckts {||}) )
+          else (s1, {||}) ) )
+    else (s, {||}))"
+| "receive_1b a _ s = (s, {||})"
 
-fun receive_2a :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
+fun receive_2a :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet fset)" where
   "receive_2a a (Phase2a i b v l) s =
     (let bal = (ballot s $ a) in
       (if (bal = Some b)
         then (s\<lparr>vote := (vote s)(a $:= (vote s $ a)(i $:= Some v))\<rparr>, send_all s a (Phase2b i b a v))
-        else (s, {})))"
-| "receive_2a a _ s = (s, {})"
+        else (s, {||})))"
+| "receive_2a a _ s = (s, {||})"
 
-fun receive_2b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)" where
+fun receive_2b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet fset)" where
   "receive_2b a (Phase2b i b a2 v) s =
     (if (decided s $ a $ i = None)
       then
@@ -281,23 +283,23 @@ fun receive_2b :: "acc \<Rightarrow> 'v msg \<Rightarrow> 'v mp_state \<Rightarr
             new_twobs = a2 # (twobs s $ a $ i $ b);
             s2 = s\<lparr>twobs := (twobs s)(a $:= (twobs s $ a)(i $:= (twobs s $ a $ i)(b $:= new_twobs)))\<rparr>
         in
-          (if (2 * length new_twobs > card (acceptors s))
+          (if (2 * length new_twobs > nr s)
             then let
                 s3 = s2\<lparr>decided := (decided s2)(a $:= (decided s2 $ a)(i $:= Some v))\<rparr>;
                 s4 = s3\<lparr>log := (log s2)(a $:= distinct_Sorted_Insert (i, v) (log s $ a))\<rparr>
               in
-                (s4, {})
+                (s4, {||})
             else
-              (s2,{}) ) )
+              (s2, {||}) ) )
       else
-        (s,{}) )"
-| "receive_2b a _ s = (s, ({}))"
+        (s, {||}) )"
+| "receive_2b a _ s = (s, {||})"
 
 abbreviation s4 where 
   -- {* This is a state in which acceptor 1 is in ballot 2 and has received a ballot-2 2b message from
   acceptor 2 in instance 1. *}
   "s4 \<equiv> \<lparr>
-    mp_state.acceptors = {1,2,3},
+    mp_state.acceptors = {|1,2,3|},
     ballot = K$ Some 2,
     vote = K$ K$ None,
     last_ballot = K$ K$ None,
@@ -328,25 +330,25 @@ export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_
 subsection {* A test scenario*}
 
 text {* Process 1 acquires the leadership*}
-value "init_state {1,2,3}"
-abbreviation r1 where "r1 \<equiv> send_1a 1 (init_state {1,2,3})"
+value "init_state {|1,2,3|}"
+abbreviation r1 where "r1 \<equiv> send_1a 1 (init_state {|1,2,3|})"
 abbreviation n1 where "n1 \<equiv> snd r1"
 value "fst r1"
 value "n1"
 abbreviation r2 where "r2 \<equiv> receive_1a 2 (Phase1a 1 4) (fst r1)"
-abbreviation n2 where "n2 \<equiv> n1 \<union> snd r2"
+abbreviation n2 where "n2 \<equiv> n1 |\<union>| snd r2"
 value "fst r2"
 value "n2"
 abbreviation r3 where "r3 \<equiv> receive_1a 3 (Phase1a 1 4) (fst r2)"
-abbreviation n3 where "n3 \<equiv> n2 \<union> snd r3"
+abbreviation n3 where "n3 \<equiv> n2 |\<union>| snd r3"
 value "fst r3"
 value "n3"
 abbreviation r4 where "r4 \<equiv> receive_1b 1 (Phase1b (K$ None) 4 2) (fst r3)"
-abbreviation n4 where "n4 \<equiv> n3 \<union> snd r4"
+abbreviation n4 where "n4 \<equiv> n3 |\<union>| snd r4"
 value "fst r4"
 value "n4"
 abbreviation r5 where "r5 \<equiv> receive_1b 1 (Phase1b (K$ None) 4 3) (fst r4)"
-abbreviation n5 where "n5 \<equiv> n4 \<union> snd r5"
+abbreviation n5 where "n5 \<equiv> n4 |\<union>| snd r5"
 value "highest_voted (onebs s1 $ 1 $ 4)"
 value "finfun_to_list (onebs s1 $ 1 $ 4)"
 value "one_b_quorum_received 1 4 (fst r5)"
@@ -363,20 +365,19 @@ abbreviation n7 where "n7 \<equiv> snd r7" (* let's get rid of the previous mess
 value "fst r7"
 value "n7"
 abbreviation r8 where "r8 \<equiv> receive_2a 3 (Phase2a 1 4 (Cmd (Cmd 1)) 1) (fst r7)"
-abbreviation n8 where "n8 \<equiv> snd r8 \<union> n7" (* let's get rid of the previous messages to make things clearer *)
+abbreviation n8 where "n8 \<equiv> snd r8 |\<union>| n7" (* let's get rid of the previous messages to make things clearer *)
 value "fst r8"
 value "n8"
 abbreviation r9 where "r9 \<equiv> receive_2b 1 (Phase2b 1 4 3 (Cmd (Cmd 1))) (fst r8)"
-abbreviation n9 where "n9 \<equiv> snd r9 \<union> n8" (* let's get rid of the previous messages to make things clearer *)
+abbreviation n9 where "n9 \<equiv> snd r9 |\<union>| n8" (* let's get rid of the previous messages to make things clearer *)
 value "fst r9"
 value "n9"
 text {* Upon receiving the second 2b message, process 1 decides Cmd 1 at position 1 *}
 abbreviation r10 where "r10 \<equiv> receive_2b 1 (Phase2b 1 4 2 (Cmd (Cmd 1))) (fst r9)"
-abbreviation n10 where "n10 \<equiv> snd r10 \<union> n9" (* let's get rid of the previous messages to make things clearer *)
+abbreviation n10 where "n10 \<equiv> snd r10 |\<union>| n9" (* let's get rid of the previous messages to make things clearer *)
 value "fst r10"
 value "n10"
 value "decided (fst r10) $ 1 $ 1"
 value "log (fst r10) $ 1"
-
 
 end
