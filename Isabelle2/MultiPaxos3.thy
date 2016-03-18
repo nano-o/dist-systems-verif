@@ -365,16 +365,16 @@ abbreviation n7 where "n7 \<equiv> snd r7" (* let's get rid of the previous mess
 value "fst r7"
 value "n7"
 abbreviation r8 where "r8 \<equiv> receive_2a 3 (Phase2a 1 4 (Cmd (Cmd 1)) 1) (fst r7)"
-abbreviation n8 where "n8 \<equiv> snd r8 |\<union>| n7" (* let's get rid of the previous messages to make things clearer *)
+abbreviation n8 where "n8 \<equiv> snd r8 |\<union>| n7" 
 value "fst r8"
 value "n8"
 abbreviation r9 where "r9 \<equiv> receive_2b 1 (Phase2b 1 4 3 (Cmd (Cmd 1))) (fst r8)"
-abbreviation n9 where "n9 \<equiv> snd r9 |\<union>| n8" (* let's get rid of the previous messages to make things clearer *)
+abbreviation n9 where "n9 \<equiv> snd r9 |\<union>| n8" 
 value "fst r9"
 value "n9"
 text {* Upon receiving the second 2b message, process 1 decides Cmd 1 at position 1 *}
 abbreviation r10 where "r10 \<equiv> receive_2b 1 (Phase2b 1 4 2 (Cmd (Cmd 1))) (fst r9)"
-abbreviation n10 where "n10 \<equiv> snd r10 |\<union>| n9" (* let's get rid of the previous messages to make things clearer *)
+abbreviation n10 where "n10 \<equiv> snd r10 |\<union>| n9" 
 value "fst r10"
 value "n10"
 value "decided (fst r10) $ 1 $ 1"
