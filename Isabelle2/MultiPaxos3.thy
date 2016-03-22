@@ -1,6 +1,6 @@
 theory MultiPaxos3
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat"
-  Log LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
+  LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
   "../../IO-Automata/IOA"
 begin
 
@@ -39,10 +39,10 @@ datatype 'v msg =
   Phase1a (from_leader: acc) (ballot:bal)
 | Phase1b (last_votes:"inst \<Rightarrow>f ('v cmd \<times> bal) option") (new_ballot: bal) (acceptor:acc)
 | Phase2a (inst: inst) (for_ballot:bal) (suggestion:"'v cmd") (leader: acc)
-| Phase2b (inst: inst) (ballot:bal) (acceptor: acc) (val: "'v cmd")
-| Vote (inst: inst) (val: "'v cmd")
+| Phase2b (inst: inst) (ballot:bal) (acceptor: acc) (cmd: "'v cmd")
+| Vote (inst: inst) (cmd: "'v cmd")
   -- {* Instructs a learner that a value has been decided. Not used for now... *}
-| Fwd (val: "'v cmd")
+| Fwd (val: 'v)
   -- {* Forwards a proposal to another proposer (the leader) *}
 
 datatype 'v  packet =
@@ -141,7 +141,7 @@ definition propose :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state
       then do_2a s (Cmd v)
       else ( if (leader_of_bal s (ballot s) = a)
         then (s,{||}) (* TODO: here we loose the proposal... *)
-        else (s, {|Packet a (leader_of_bal s (ballot s)) (Fwd (Cmd v))|})) )"
+        else (s, {|Packet a (leader_of_bal s (ballot s)) (Fwd v)|})) )"
  
 definition receive_fwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_fwd v s \<equiv> let a = id s in 
@@ -252,11 +252,18 @@ text {* output transition could return an option *}
 definition learn :: "inst \<Rightarrow> 'v  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset) option" where 
   "learn i v s \<equiv> 
     case (decided s $ i) of None \<Rightarrow> None |
-      Some cmd \<Rightarrow> (case cmd of NoOp \<Rightarrow> None 
+      Some cm \<Rightarrow> (case cm of NoOp \<Rightarrow> None 
         | Cmd c \<Rightarrow> (if v = c then Some (s, {||}) else None))"
 
-export_code send_1a receive_1a receive_1b init_acc_state propose receive_2a receive_2b receive_fwd 
-  largestprefix learn in Scala file "simplePaxos.scala"
+fun process_msg where
+  "process_msg (Phase1a l b) s = receive_1a l b s"
+| "process_msg (Phase1b lvs b a) s = receive_1b lvs b a s"
+| "process_msg (Phase2a i b cm l) s = receive_2a i b cm l s"
+| "process_msg (Phase2b i b a cm) s = receive_2b i b a cm s"
+| "process_msg (Vote i cm) s = undefined"
+| "process_msg (Fwd v) s = receive_fwd v s"
+
+export_code learn process_msg in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
 
@@ -278,6 +285,12 @@ locale mp_ioa = IOA +
   fixes nas :: nat
     -- {* The number of acceptors *}
 begin    
+
+text {* TODO: get rid of this! *}
+no_notation Append  (infixl "#" 65)
+notation Cons (infixr "#" 65)
+no_notation Concat  (infixl "@" 65)
+notation append (infixr "@" 65)
 
 definition mp_asig where
   "mp_asig \<equiv>
@@ -303,9 +316,24 @@ by (induct a n arbitrary:n rule:init_nodes_state.induct, auto)
 definition mp_start where
   "mp_start \<equiv> {\<lparr>node_states = (init_nodes_state nas nas), network = {||}\<rparr>}"
 
-definition do_step :: "('v mp_state \<Rightarrow> ('v mp_state \<times> 'v packet set)) \<Rightarrow> 
-  (nat \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool)" where 
-  "do_step step \<equiv> \<lambda> a s1 s2 . let (new_state, packets) =  (node_states gs1) in
+fun mp_trans_fun::"'v mp_state \<Rightarrow> 'v mp_action \<Rightarrow> 'v mp_state \<Rightarrow> bool"  where
+  "mp_trans_fun s (Propose a v) s' = (
+    let (new_s, ps) = propose v (node_states s $ a) in
+    s' = s\<lparr>node_states := (node_states s)(a $:= new_s), 
+      network := (network s |\<union>| ps)\<rparr> )"
+(* Alternative: *)
+inductive mp_trans where
+  "mp_trans (s, Propose a v, 
+    let (new_s, ps) = propose v (node_states s $ a) in
+      s\<lparr>node_states := (node_states s)(a $:= new_s), 
+        network := (network s |\<union>| ps)\<rparr>)"
+| "Packet src dest (Fwd v) |\<in>| network s \<Longrightarrow> mp_trans (s ,Receive_fwd src dest v,
+    s)"
+
+
+definition do_step :: "('v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set)) \<Rightarrow>
+  (nat \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool)" where
+  "do_step step \<equiv> \<lambda> a s1 s2 . let (new_state, packets) =  (node_states step s1) in
       gs2 = gs1\<lparr>node_states := new_state, network := (network gs1) |\<union>| packets\<rparr>"
 
 definition phase1_set1::"nat \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool" where
@@ -347,15 +375,6 @@ definition ProposeV::"nat \<Rightarrow> 'v \<Rightarrow> 'v mp_state \<Rightarro
   "ProposeV acc v s s' \<equiv>
     (let (new_state, packets) = propose acc v (node_states s) in
       s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
-
-fun p_trans_fun::"'v mp_state \<Rightarrow> 'v p_action \<Rightarrow> 'v mp_state \<Rightarrow> bool"  where
-  "p_trans_fun s (Send_1a l) s' = (Send1a l s s')"|
-  "p_trans_fun s (Respond_1a acc p) s' = (Receive1a acc p s s')"|
-  "p_trans_fun s (Respond_1b l p) s' = (Receive1b l p s s')"|
-  "p_trans_fun s (Send_2a acc p) s' = (Send2a acc p s s')"|
-  "p_trans_fun s (Respond_2b l p) s' = (Receive2b l p s s')"|
-  "p_trans_fun s (FwdA acc p) s' = (ReceiveFwd acc p s s')"|
-  "p_trans_fun s (Propose acc v) s' = (ProposeV acc v s s')"
 
 definition p_trans where
   "p_trans \<equiv> { (r,a,r') . p_trans_fun r a r'}"
