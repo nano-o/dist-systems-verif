@@ -264,7 +264,7 @@ fun process_msg where
 | "process_msg (Vote i cm) s = undefined"
 | "process_msg (Fwd v) s = receive_fwd v s"
 
-export_code learn process_msg in Scala file "simplePaxos.scala"
+export_code learn send_1a propose process_msg in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
 
