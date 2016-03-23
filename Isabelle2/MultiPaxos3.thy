@@ -143,6 +143,7 @@ definition propose :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state
         then (s,{||}) (* TODO: here we loose the proposal... *)
         else (s, {|Packet a (leader_of_bal s (ballot s)) (Fwd v)|})) )"
  
+(* TODO: what if the target process is not the leader anymore *)
 definition receive_fwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_fwd v s \<equiv> let a = id s in 
     (if (leader_of_bal s (ballot s) = a) then do_2a s (Cmd v) else (s, ({||})))"
@@ -316,20 +317,28 @@ by (induct a n arbitrary:n rule:init_nodes_state.induct, auto)
 definition mp_start where
   "mp_start \<equiv> {\<lparr>node_states = (init_nodes_state nas nas), network = {||}\<rparr>}"
 
-fun mp_trans_fun::"'v mp_state \<Rightarrow> 'v mp_action \<Rightarrow> 'v mp_state \<Rightarrow> bool"  where
-  "mp_trans_fun s (Propose a v) s' = (
-    let (new_s, ps) = propose v (node_states s $ a) in
-    s' = s\<lparr>node_states := (node_states s)(a $:= new_s), 
-      network := (network s |\<union>| ps)\<rparr> )"
-(* Alternative: *)
+definition update_state where 
+  "update_state a a_s packets s \<equiv>
+    s\<lparr>node_states := (node_states s)(a $:= a_s),
+      network := network s |\<union>| packets\<rparr>"
+
 inductive mp_trans where
   "mp_trans (s, Propose a v, 
     let (new_s, ps) = propose v (node_states s $ a) in
-      s\<lparr>node_states := (node_states s)(a $:= new_s), 
-        network := (network s |\<union>| ps)\<rparr>)"
-| "Packet src dest (Fwd v) |\<in>| network s \<Longrightarrow> mp_trans (s ,Receive_fwd src dest v,
-    s)"
-
+      update_state a new_s ps s)"
+| "Packet src dest (Fwd v) |\<in>| network s \<Longrightarrow>
+      mp_trans (s, Receive_fwd src dest v, 
+        let (new_s, ps) = receive_fwd v (node_states s $ dest) in 
+          update_state a new_s ps s)"
+| "\<lbrakk>Packet src dest (Phase1a l b) |\<in>| network s; l = src\<rbrakk> \<Longrightarrow> 
+    mp_trans (s, Receive_1a_send_1b src dest b, 
+      let (new_s, ps) = receive_1a l b (node_states s $ dest) in 
+          update_state dest new_s ps s)"
+| "mp_trans (s, Send_1as l,
+    let (new_s, ps) = send_1a (node_states s $ l) in
+      update_state l new_s ps s)"
+| "Packet src dest (? v) |\<in>| network s \<Longrightarrow>
+    mp_trans (s, Receive_1b src l vs b, s)"
 
 definition do_step :: "('v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set)) \<Rightarrow>
   (nat \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool)" where
