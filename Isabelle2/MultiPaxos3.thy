@@ -323,33 +323,26 @@ definition update_state where
       network := network s |\<union>| packets\<rparr>"
 
 inductive mp_trans where
-  "mp_trans (s, Propose a v, 
-    let (new_s, ps) = propose v (node_states s $ a) in
-      update_state a new_s ps s)"
-| "Packet src dest (Fwd v) |\<in>| network s \<Longrightarrow>
-      mp_trans (s, Receive_fwd src dest v, 
-        let (new_s, ps) = receive_fwd v (node_states s $ dest) in 
-          update_state a new_s ps s)"
-| "\<lbrakk>Packet src dest (Phase1a l b) |\<in>| network s; l = src\<rbrakk> \<Longrightarrow> 
-    mp_trans (s, Receive_1a_send_1b src dest b, 
-      let (new_s, ps) = receive_1a l b (node_states s $ dest) in 
-          update_state dest new_s ps s)"
-| "mp_trans (s, Send_1as l,
-    let (new_s, ps) = send_1a (node_states s $ l) in
-      update_state l new_s ps s)"
-| "\<lbrakk>Packet src l (Phase1b vs b a) |\<in>| network s; src = a\<rbrakk> \<Longrightarrow>
-    mp_trans (s, Receive_1b src l vs b,
-    let (new_s, ps) = receive_1b vs b l (node_states s $ l) in
-      update_state l new_s ps s)"
-| "\<lbrakk>Packet src l (Phase2b i b a cm) |\<in>| network s; src = a\<rbrakk> \<Longrightarrow>
-    mp_trans (s, Receive_2b a l i b cm,
-    let (new_s, ps) = receive_2b i b l cm (node_states s $ l) in
-      update_state l new_s ps s)"
-| "\<lbrakk>Packet src dest (Phase2a i b cm l) |\<in>| network s; src = l\<rbrakk> \<Longrightarrow>
-    mp_trans (s, Receive_2a_send_2b l dest i b cm,
-    let (new_s, ps) = receive_2a i b cm dest (node_states s $ dest) in
-      update_state dest new_s ps s)"
-| "learn i v (node_states s $ a) = Some (new_s, ps) \<Longrightarrow> 
+  "propose v (node_states s $ a) = (new_s, ps) \<Longrightarrow>
+    mp_trans (s, Propose a v, update_state a new_s ps s)"
+| "\<lbrakk>receive_fwd v (node_states s $ dest) = (new_s, ps); 
+    Packet src dest (Fwd v) |\<in>| network s\<rbrakk> \<Longrightarrow>
+      mp_trans (s, Receive_fwd src dest v, update_state a new_s ps s)"
+| "\<lbrakk>receive_1a l b (node_states s $ dest) = (new_s, ps);
+    Packet src dest (Phase1a l b) |\<in>| network s; l = src\<rbrakk> \<Longrightarrow>
+    mp_trans (s, Receive_1a_send_1b src dest b, update_state dest new_s ps s)"
+| "send_1a (node_states s $ l) = (new_s, ps) \<Longrightarrow>
+    mp_trans (s, Send_1as l, update_state l new_s ps s)"
+| "\<lbrakk>receive_1b vs b l (node_states s $ l) = (new_s, ps); 
+    Packet src l (Phase1b vs b a) |\<in>| network s; src = a\<rbrakk> \<Longrightarrow>
+      mp_trans (s, Receive_1b src l vs b, update_state l new_s ps s)"
+| "\<lbrakk>receive_2b i b l cm (node_states s $ l) = (new_s, ps);
+    Packet src l (Phase2b i b a cm) |\<in>| network s; src = a\<rbrakk> \<Longrightarrow>
+      mp_trans (s, Receive_2b a l i b cm, update_state l new_s ps s)"
+| "\<lbrakk>receive_2a i b cm dest (node_states s $ dest) = (new_s, ps);
+    Packet src dest (Phase2a i b cm l) |\<in>| network s; src = l\<rbrakk> \<Longrightarrow>
+      mp_trans (s, Receive_2a_send_2b l dest i b cm, update_state dest new_s ps s)"
+| "learn i v (node_states s $ a) = Some (new_s, ps) \<Longrightarrow>
     mp_trans (s, Learn a i v, update_state a new_s ps s)"
 
 definition p_ioa where
