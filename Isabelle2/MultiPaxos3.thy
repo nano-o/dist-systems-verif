@@ -337,59 +337,23 @@ inductive mp_trans where
 | "mp_trans (s, Send_1as l,
     let (new_s, ps) = send_1a (node_states s $ l) in
       update_state l new_s ps s)"
-| "Packet src dest (? v) |\<in>| network s \<Longrightarrow>
-    mp_trans (s, Receive_1b src l vs b, s)"
-
-definition do_step :: "('v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set)) \<Rightarrow>
-  (nat \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool)" where
-  "do_step step \<equiv> \<lambda> a s1 s2 . let (new_state, packets) =  (node_states step s1) in
-      gs2 = gs1\<lparr>node_states := new_state, network := (network gs1) |\<union>| packets\<rparr>"
-
-definition phase1_set1::"nat \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool" where
-  "phase1_set1 l s s' \<equiv> (
-    let (new_state, packets) = send_1a l (node_states s) in
-      s' = s\<lparr>network := (network s) |\<union>| packets\<rparr>)"
-
-definition phase1_step2::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool" where
-  "phase1_step2 acc p s s' \<equiv> 
-    dst p = acc \<and> p |\<in>| network s \<and>
-    (let (new_state, packets) = receive_1a acc (msg p) (node_states s) in
-      s' = s\<lparr>node_states := new_state, network := (network s) |\<union>| packets\<rparr>)"
-
-definition Receive1b::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool" where
-  "Receive1b l p s s' \<equiv>
-    dst p = l \<and> p |\<in>| network s \<and>    
-    (let (new_state, packets) = receive_1b l (msg p) (node_states s) in
-      s' = s\<lparr>node_states := new_state, network := (network s) |\<union>| packets\<rparr>)"
-
-definition Send2a::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool" where
-  "Send2a acc p s s' \<equiv> 
-    dst p = acc \<and> p \<in> network s \<and>
-    (let (new_state, packets) = receive_2a acc (msg p) (node_states s) in
-      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
-
-definition Receive2b::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool" where
-  "Receive2b l p s s' \<equiv>
-    dst p = l \<and> p \<in> network s \<and>    
-    (let (new_state, packets) = receive_2b l (msg p) (node_states s) in
-      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
-
-definition ReceiveFwd::"nat \<Rightarrow> 'v packet \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool" where
-  "ReceiveFwd acc p s s' \<equiv> 
-    dst p = acc \<and> p \<in> network s \<and>    
-    (let (new_state, packets) = receive_fwd acc (msg p) (node_states s) in
-      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
-
-definition ProposeV::"nat \<Rightarrow> 'v \<Rightarrow> 'v mp_state \<Rightarrow>'v mp_state \<Rightarrow> bool" where
-  "ProposeV acc v s s' \<equiv>
-    (let (new_state, packets) = propose acc v (node_states s) in
-      s' = s\<lparr>node_states := new_state, network := (network s) \<union> packets\<rparr>)"
-
-definition p_trans where
-  "p_trans \<equiv> { (r,a,r') . p_trans_fun r a r'}"
+| "\<lbrakk>Packet src l (Phase1b vs b a) |\<in>| network s; src = a\<rbrakk> \<Longrightarrow>
+    mp_trans (s, Receive_1b src l vs b,
+    let (new_s, ps) = receive_1b vs b l (node_states s $ l) in
+      update_state l new_s ps s)"
+| "\<lbrakk>Packet src l (Phase2b i b a cm) |\<in>| network s; src = a\<rbrakk> \<Longrightarrow>
+    mp_trans (s, Receive_2b a l i b cm,
+    let (new_s, ps) = receive_2b i b l cm (node_states s $ l) in
+      update_state l new_s ps s)"
+| "\<lbrakk>Packet src dest (Phase2a i b cm l) |\<in>| network s; src = l\<rbrakk> \<Longrightarrow>
+    mp_trans (s, Receive_2a_send_2b l dest i b cm,
+    let (new_s, ps) = receive_2a i b cm dest (node_states s $ dest) in
+      update_state dest new_s ps s)"
+| "learn i v (node_states s $ a) = Some (new_s, ps) \<Longrightarrow> 
+    mp_trans (s, Learn a i v, update_state a new_s ps s)"
 
 definition p_ioa where
-  "p_ioa \<equiv> \<lparr>ioa.asig = p_asig, start = p_start, trans = p_trans\<rparr>"
+  "p_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = mp_start, trans = {(s,a,t) . mp_trans (s, a, t)}\<rparr>"
 
 end
 
