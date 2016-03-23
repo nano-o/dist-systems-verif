@@ -1,5 +1,5 @@
 theory MultiPaxos3
-imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat"
+imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
   LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
   "../../IO-Automata/IOA"
 begin
@@ -67,6 +67,7 @@ record 'v acc_state =
   next_inst :: "nat"
   pending :: "inst \<Rightarrow>f 'v cmd option"
   leader :: "bool"
+  last_decision :: "nat option"
 
 fun accs where
   "accs (0::nat) = {||}"
@@ -84,7 +85,8 @@ definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" 
     decided = K$ None,
     next_inst = 1, (* instances start at 1 *)
     pending = K$ None,
-    leader = False \<rparr>"
+    leader = False,
+    last_decision = None\<rparr>"
 
 definition nr where
   -- {* The number of replicas *}
@@ -242,10 +244,13 @@ definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow>
             s2 = s\<lparr>twobs := (twobs s)(i $:= (twobs s $ i)(b $:= new_twobs))\<rparr>
         in
           (if (2 * length new_twobs > nr s)
-            then (s2\<lparr>decided := (decided s2)(i $:= Some v)\<rparr>, {||})
+            then (s2\<lparr>decided := (decided s2)(i $:= Some v), last_decision := Some i\<rparr>, {||})
             else (s2, {||}) ) )
       else
         (s, {||}) )"
+
+definition get_last_decision where 
+  "get_last_decision s \<equiv> the (decided s $ (the (last_decision s)))"
 
 value "largestprefix [(1,v1), (2,v2), (4,v4)]"
 
@@ -264,7 +269,12 @@ fun process_msg where
 | "process_msg (Vote i cm) s = undefined"
 | "process_msg (Fwd v) s = receive_fwd v s"
 
-export_code learn send_1a propose process_msg in Scala file "simplePaxos.scala"
+text {* We need to rename a few modules to let the Scala compiler resolve circular dependencies. *}
+code_identifier
+  code_module Code_Numeral \<rightharpoonup> (Scala) Nat
+| code_module List \<rightharpoonup> (Scala) Set
+
+export_code learn send_1a propose process_msg get_last_decision in Scala file "simplePaxos.scala" 
 
 section {* The I/O-automata *}
 
@@ -315,7 +325,7 @@ shows "(init_nodes_state a n) $ a = init_acc_state n a" using assms
 by (induct a n arbitrary:n rule:init_nodes_state.induct, auto)
 
 definition mp_start where
-  "mp_start \<equiv> {\<lparr>node_states = (init_nodes_state nas nas), network = {||}\<rparr>}"
+  "mp_start \<equiv> \<lparr>node_states = (init_nodes_state nas nas), network = {||}\<rparr>"
 
 definition update_state where 
   "update_state a a_s packets s \<equiv>
@@ -346,7 +356,7 @@ inductive mp_trans where
     mp_trans (s, Learn a i v, update_state a new_s ps s)"
 
 definition p_ioa where
-  "p_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = mp_start, trans = {(s,a,t) . mp_trans (s, a, t)}\<rparr>"
+  "p_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = {mp_start}, trans = {(s,a,t) . mp_trans (s, a, t)}\<rparr>"
 
 end
 
