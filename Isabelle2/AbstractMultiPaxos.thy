@@ -244,3 +244,5 @@ apply(rule invariantI)
   using ballot_array_props.intro quorums_axioms by fastforce
 
 end
+
+end
