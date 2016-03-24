@@ -6,6 +6,8 @@ begin
 
 text {* A version of MultiPaxos using FinFuns *}
 
+text {* TODO: to make it faster: replace $:= by finfun_update_code, implement checkpointing... *}
+
 subsection {* Ordering on pairs *}
 
 fun less_eq_pair where
@@ -29,7 +31,7 @@ end
 
 subsection {* Actions, messages, and state. *}
 
-datatype 'v cmd = Cmd 'v | NoOp
+datatype 'v cmd = Cmd (the_val: 'v) | NoOp
 
 type_synonym bal = nat
 type_synonym inst = nat
@@ -57,7 +59,7 @@ record 'v acc_state =
     -- {* the highest ballot in which an acceptor participated *}
   vote :: "inst \<Rightarrow>f 'v cmd option"
     -- {* The last vote cast by an acceptor, for each instance *}
-  last_ballot :: "nat \<Rightarrow>f bal option"
+  last_ballot :: "inst \<Rightarrow>f bal option"
     -- {* For an acceptor a, this is the ballot in which "vote a" was cast, for each instance *}
   onebs :: "bal \<Rightarrow>f inst \<Rightarrow>f (acc \<times> ('v cmd \<times> bal) option) list"
     -- {* For an acceptor a and a ballot b, lists of 1b-message descriptions, indexed by ballot then instance. *}
@@ -145,7 +147,7 @@ definition propose :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state
         then (s,{||}) (* TODO: here we loose the proposal... *)
         else (s, {|Packet a (leader_of_bal s (ballot s)) (Fwd v)|})) )"
  
-(* TODO: what if the target process is not the leader anymore *)
+(* What if the target process is not the leader anymore? TODO: Then let's forward it again. *)
 definition receive_fwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_fwd v s \<equiv> let a = id s in 
     (if (leader_of_bal s (ballot s) = a) then do_2a s (Cmd v) else (s, ({||})))"
@@ -284,13 +286,13 @@ record 'v mp_state =
 
 datatype 'v mp_action =
   Receive_fwd acc acc 'v
-| Propose acc 'v
+| Propose acc "'v cmd"
 | Send_1as acc
 | Receive_1a_send_1b acc acc bal
 | Receive_1b acc acc "inst \<Rightarrow>f ('v cmd \<times> bal) option" bal
 | Receive_2a_send_2b acc acc inst bal "'v cmd"
 | Receive_2b acc acc inst bal "'v cmd"
-| Learn acc inst 'v
+| Learn acc inst "'v cmd"
 
 locale mp_ioa = IOA +
   fixes nas :: nat
@@ -334,7 +336,7 @@ definition update_state where
 
 inductive mp_trans where
   "propose v (node_states s $ a) = (new_s, ps) \<Longrightarrow>
-    mp_trans (s, Propose a v, update_state a new_s ps s)"
+    mp_trans (s, Propose a (Cmd v), update_state a new_s ps s)"
 | "\<lbrakk>receive_fwd v (node_states s $ dest) = (new_s, ps); 
     Packet src dest (Fwd v) |\<in>| network s\<rbrakk> \<Longrightarrow>
       mp_trans (s, Receive_fwd src dest v, update_state a new_s ps s)"
@@ -353,10 +355,10 @@ inductive mp_trans where
     Packet src dest (Phase2a i b cm l) |\<in>| network s; src = l\<rbrakk> \<Longrightarrow>
       mp_trans (s, Receive_2a_send_2b l dest i b cm, update_state dest new_s ps s)"
 | "learn i v (node_states s $ a) = Some (new_s, ps) \<Longrightarrow>
-    mp_trans (s, Learn a i v, update_state a new_s ps s)"
+    mp_trans (s, Learn a i (Cmd v), update_state a new_s ps s)"
 
-definition p_ioa where
-  "p_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = {mp_start}, trans = {(s,a,t) . mp_trans (s, a, t)}\<rparr>"
+definition mp_ioa where
+  "mp_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = {mp_start}, trans = {(s,a,t) . mp_trans (s, a, t)}\<rparr>"
 
 end
 

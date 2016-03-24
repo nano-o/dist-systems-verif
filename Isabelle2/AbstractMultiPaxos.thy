@@ -17,7 +17,8 @@ record ('v,'a) amp_state =
   vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
 
 text {* We give all the parameters in order to fix their type. Also fixed ballots to be nat. *}
-locale abs_multi_paxos = IOA + quorums +
+locale amp_ioa = IOA + 
+  fixes acceptors::"'a fset" and quorums::"'a fset fset"
   fixes learners::"'l fset"
   assumes "learners \<noteq> {||}"
 begin
@@ -77,8 +78,9 @@ end
 
 section {* Agreement proof *}
 
-locale amp_proof = IOA + abs_multi_paxos acceptors quorums learners for acceptors :: "'a fset" 
-  and quorums and learners :: "'l fset" +
+locale amp_proof = IOA + quorums acceptors quorums + 
+    amp_ioa acceptors quorums learners for acceptors :: "'a fset" 
+    and quorums and learners :: "'l fset" +
   fixes the_ioa :: "(('v,'a)amp_state, ('v,'a,'l)amp_action) ioa"
   defines "the_ioa \<equiv> amp_ioa"
 begin

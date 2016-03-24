@@ -1,6 +1,13 @@
 theory MultiPaxosCorrectness
-imports AbstractMultiPaxos MultiPaxosHist2
+imports AbstractMultiPaxos MultiPaxosHist2 "../../IO-Automata/Simulations"
 begin
+
+locale mp_correctness = mph_ioa + amp_ioa
+begin
+
+subsection {* mp refines mph *}
+
+subsection {* mph refines amp *}
 
 definition pending_of_a where
   "pending_of_a s \<equiv>  
@@ -19,5 +26,7 @@ definition ref_map :: "'v mph_state \<Rightarrow> ('v cmd, nat) amp_state" where
   "ref_map s \<equiv> \<lparr>propCmd = prop_cmp_of_mp (mp_state s), 
     ballot = finfun_apply ((\<lambda> acc_s . ballot acc_s) o$ (node_states (mp_state s))), 
     vote = peal_3 (vote_hist s)\<rparr>"
+
+end
 
 end

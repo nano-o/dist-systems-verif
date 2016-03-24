@@ -14,13 +14,13 @@ record 'v mph_state =
 locale mph_ioa = mp_ioa 
 begin
 
-definition init_state :: "'v mph_state" where
-  "init_state \<equiv> \<lparr>
+definition mph_start :: "'v mph_state" where
+  "mph_start \<equiv> \<lparr>
     mp_state = mp_start,
     vote_hist = K$ K$ K$ None \<rparr>"
 
-definition trans where
-  "trans \<equiv> {(s,act,t) . 
+definition mph_trans where
+  "mph_trans \<equiv> {(s,act,t) . 
     let 
       s1 = mp_state s;
       t1 = mp_state t;
@@ -38,6 +38,9 @@ definition trans where
             (a $:= (vote_hist s $ i $ a)
               ((the ((last_ballot (node_states t1 $ a)) $ i)) $:= vote (node_states s1 $ a) $ i)))
         else vote_hist s = vote_hist t )}"
+
+definition mph_ioa where 
+  "mph_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = {mph_start}, trans = mph_trans\<rparr>"
 
 end
 
