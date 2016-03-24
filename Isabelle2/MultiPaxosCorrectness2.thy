@@ -69,7 +69,9 @@ definition fwd_sim :: "'v mp_state \<Rightarrow> ('v cmd, nat) amp_state set" wh
         last_vote_of = \<lambda> a i . vote ((node_states s) $ a) $ i
     in
       {t . propCmd t = prop_cmp_of_mp s 
-        \<and> amp_state.ballot t = finfun_apply ((\<lambda> acc_s . ballot acc_s) o$ (node_states s))
+        \<and> amp_state.ballot t = 
+          (let f = (finfun_apply ((\<lambda> acc_s . ballot acc_s) o$ (node_states s)))
+          in (\<lambda> a . if (0 < a \<and> a \<le> nas) then f a else None))
         \<and> (\<forall> i a . case (last_bal_of a i) of None \<Rightarrow> \<forall> b . amp_state.vote t i a b = None
             | Some b \<Rightarrow> \<forall> c . c > b \<longrightarrow> amp_state.vote t i a c = None 
                 \<and> amp_state.vote t i a b = last_vote_of a i)}"
@@ -81,7 +83,12 @@ abbreviation mp_ioa_2 where
   "mp_ioa_2 \<equiv> rename mp_ioa rn1"
 
 theorem
-  "is_forward_sim fwd_sim mp_ioa_2 amp_ioa_2" oops
+  "is_forward_sim fwd_sim mp_ioa_2 amp_ioa_2" using mp_ioa_correctness_axioms init_acc
+apply(auto simp add: is_forward_sim_def)
+apply(auto simp add:fwd_sim_def rename_def amp_ioa_def amp_start_def mp_ioa_def mp_start_def
+  mp_ioa_correctness_def init_acc_state_def)[1]
+
+
 
 end
 

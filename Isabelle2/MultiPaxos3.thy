@@ -319,12 +319,14 @@ definition mp_asig where
 
 fun init_nodes_state where
   "init_nodes_state (0::nat) n = undefined"
-| "init_nodes_state (Suc i) n = (init_nodes_state i n)(Suc i $:= init_acc_state n (Suc i))"
+| "init_nodes_state (Suc i) n = 
+    (if Suc i > n then undefined else (init_nodes_state i n)(Suc i $:= init_acc_state n (Suc i)))"
 
 lemma init_acc: 
 assumes "a \<le> n" and "a > 0"
 shows "(init_nodes_state a n) $ a = init_acc_state n a" using assms
 by (induct a n arbitrary:n rule:init_nodes_state.induct, auto)
+
 
 definition mp_start where
   "mp_start \<equiv> \<lparr>node_states = (init_nodes_state nas nas), network = {||}\<rparr>"

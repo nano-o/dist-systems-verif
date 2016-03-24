@@ -1,7 +1,7 @@
 theory AbstractMultiPaxos
 imports Main LinorderOption "~~/src/HOL/Library/FSet" Quorums
-  "/home/nano/Documents/IO-Automata/IOA_Automation"  "~~/src/HOL/Eisbach/Eisbach_Tools"
-  "/home/nano/Documents/IO-Automata/Simulations" BallotArrays
+  "../../IO-Automata/IOA_Automation"  "~~/src/HOL/Eisbach/Eisbach_Tools"
+  "../../IO-Automata/Simulations" BallotArrays
 begin
 
 datatype ('v,'a,'l) amp_action =
