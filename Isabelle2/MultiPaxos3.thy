@@ -295,12 +295,32 @@ apply force
 apply force
 done
 
+definition test_c where "test_c d \<equiv> (d,{})"
+definition test_u where "test_u k v r \<equiv>
+  if v = fst r
+  then (if (k \<in> snd r) then (fst r, snd r - {k}) else r)
+  else (
+    if (k \<in> snd r)
+      then r
+      else (fst r, {k} \<union> snd r) )"
+definition test where "test \<equiv> finfun_rec test_c test_u"
+interpretation test:finfun_rec_wf_aux test_c test_u unfolding test_def
+apply (unfold_locales)
+apply (simp_all add:test_c_def test_u_def)
+apply (smt Diff_insert_absorb fst_conv insertCI insert_Diff insert_Diff_if insert_is_Un singletonD snd_conv)
+done
+
+thm test.finfun_rec_upd
+
+print_codeproc
+code_thms test
+
+value "test (finfun_update ((K$ (0::nat))::nat \<Rightarrow>f nat) 0 42)"
+
 definition serialize_finfun where
   "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
 
-export_code serialize_finfun in Scala
-
-term "serialize_finfun ((K$ (1::nat)):: nat \<Rightarrow>f nat)"
+value "serialize_finfun ((K$ (1::nat)):: nat \<Rightarrow>f nat)"
 
 definition deserialize_finfun where
   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
