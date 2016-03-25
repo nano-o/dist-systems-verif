@@ -1,8 +1,22 @@
 (* Author: Ian Roessle  *)
 theory FinFunMBs
-imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Nat"  "~~/src/HOL/Library/Nat"
- "~~/src/HOL/Library/FinFun_Syntax"
+imports "~~/src/HOL/Main"  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Nat"
+"~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
 begin
+
+(*
+fun is_in_list where
+  "is_in_list x [] = False"
+| "is_in_list x (y#xs) = (if x = y then True else is_in_list x xs)"
+
+definition (in linorder) insort_insert_key2 :: "('b \<Rightarrow> 'a) \<Rightarrow> 'b \<Rightarrow> 'b list \<Rightarrow> 'b list" where
+"insort_insert_key2 f x xs =
+  (if is_in_list (f x) (map f xs) then xs else insort_key f x xs)"
+
+hide_const insort_insert
+
+abbreviation "insort_insert \<equiv> insort_insert_key2 (\<lambda>x. x)"
+*)
 
 (* Builds a finfun in ascending order 
   inputs:
@@ -68,41 +82,174 @@ primrec access_range_x :: "(nat \<Rightarrow>f nat) \<Rightarrow> nat \<Rightarr
 need to be timed with increasing input size and plotted
 
 *)
-definition ff_test_asc :: "nat \<Rightarrow> (nat list)" where
-  "ff_test_asc a \<equiv>
+definition mb1a :: "nat \<Rightarrow> (nat list)" where
+  "mb1a a \<equiv>
           finfun_to_list (bl_asc a )"
-definition ff_test_dsc :: "nat \<Rightarrow> (nat list)" where
-  "ff_test_dsc a \<equiv>
+definition mb1b :: "nat \<Rightarrow> (nat list)" where
+  "mb1b a \<equiv>
           finfun_to_list (bl_dsc a )"
 
 (* Micro benchmark #2
- Builds an assending finfun of input size. 
+ Builds an assending finfun of input size and repeat_count. 
+
 Accesses either the front 10 or end 10 elements, of inputted repeat count.
-
 *)
-definition mb2_frontaccess :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
-  "mb2_frontaccess sz repeat \<equiv>
+(* Front access *)
+definition mb2a :: "(nat \<Rightarrow>f nat) \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
+  "mb2a ary repeat \<equiv>
         (let
-            array = bl_asc sz;
-            array=access_range_x array 10 9 repeat
+            array=access_range_x ary 10 9 repeat
+          in 
+          array)"           
+(* Tail access*) 
+
+definition mb2b :: " (nat \<Rightarrow>f nat) \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
+  "mb2b ary sz repeat \<equiv>
+        (let
+            array=access_range_x ary sz 9 repeat
           in 
           array)"           
 
-definition mb2_endaccess :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
-  "mb2_endaccess sz repeat \<equiv>
-        (let
-            array = bl_asc sz;
-            array=access_range_x array sz 9 repeat
+(* runs experiment 1a on increasing array sizes.
+This function is copied and timer code added on the scala side 
+
+For now it's important that (end-start)%step == 0. This ensures that the first element is the start element.
+Expected behavior for when this isn't true is that the last element wouldn't match the end element. 
+This performs correctly but instead the first element doesn't match.
+
+list_asc:
+  Input 1: start element
+  Input 2: end element
+  Input 3: step size
+*)
+
+fun list_asc_offset :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat list" where
+"list_asc_offset n 0 offset = [] " |
+"list_asc_offset 0 (Suc s) offset  = [] " |
+"list_asc_offset (Suc n) (Suc s) offset  = (list_asc_offset (n-s) (Suc s) offset)@[(Suc n)+offset]"
+definition list_asc :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat list" where
+  "list_asc start end step \<equiv> list_asc_offset (end-start+1) step (start-1)" 
+
+definition exp_stub :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat list" where
+  "exp_stub start stop step \<equiv> 
+   (let
+            array = list_asc 100 1500 100
           in 
-          array)"           
+          array)"     
 
 
-value "bl_asc 3"
+abbreviation test :: "nat \<Rightarrow>f nat \<Rightarrow> (nat)"
+  where "test \<equiv> finfun_rec(\<lambda> (d::nat) . (0))  
+    (\<lambda> k v r . if (v \<noteq> 1) 
+      then (r+1) else r)"
+
+definition t2 :: " (nat \<Rightarrow>f nat) \<Rightarrow>  (nat)" where
+  "t2 f \<equiv>
+   (let
+            ary = (K$ 0);
+            ary = finfun_update ary 1 1;
+            ary = finfun_update ary 2 0;
+            ary = test ary
+          in 
+          ary)"     
+
+value "t2 f"
+
+definition build_ff_filter :: " (nat \<Rightarrow>f nat) \<Rightarrow>  nat \<Rightarrow> (nat \<Rightarrow>f nat)" where
+  "build_ff_filter ff_in filterval \<equiv>
+   (let
+            ary = (K$ 0);
+            ary = finfun_update_code ary 1 1;
+            ary = finfun_update_code ary 2 2;
+            ary = finfun_update_code ary 3 3
+
+            
+          in 
+          ary)"     
+
+
+
+value "bl_asc 2"
 value "bl_dsc 3"
+value "build_ff_filter a b"
 value "finfun_to_list (bl_asc 3)"
 value "finfun_to_list (bl_dsc 3)"
 
-export_code access_x access_range_x mb2_endaccess mb2_frontaccess ff_test_dsc ff_test_asc in Scala file ""
+
+text {* Serializing finfuns to lists *}
+
+abbreviation serialize_c where
+  "serialize_c d \<equiv> ({}, d)"
+abbreviation serialize_u_2 where
+  "serialize_u_2 a b r \<equiv>  if b = snd r then r else (
+    let x = {(a,b)} \<union> (fst r) - {(a,x) | x . True} in (
+      if {fst p | p . p \<in> x} = UNIV
+      then ({}, b) 
+      else (x, snd r) ) )"
+abbreviation serialize_u where
+  "serialize_u a b r \<equiv>  if b = snd r then r else (
+    let x = {(a,b)} \<union> (fst r) - {(a,x) | x . True} in  (x, snd r) )"
+
+definition serialize_finfun_2 where
+  "serialize_finfun_2 \<equiv> finfun_rec serialize_c serialize_u"
+
+interpretation finfun_rec_wf_aux serialize_c serialize_u
+apply (unfold_locales)
+apply simp
+apply force
+apply force
+done
+
+definition test_c where "test_c d \<equiv> (d,{})" (* d is the default element as a passthrough *)
+definition test_u where "test_u k v r \<equiv>
+  if v = fst r
+  then (if (k \<in> snd r) then (fst r, snd r - {k}) else r)
+  else (
+    if (k \<in> snd r)
+      then r
+      else (fst r, {k} \<union> snd r) )"
+definition test where "test \<equiv> finfun_rec test_c test_u"
+interpretation test:finfun_rec_wf_aux test_c test_u 
+apply (unfold_locales)
+apply (simp_all add:test_c_def test_u_def)
+apply (smt Diff_insert_absorb fst_conv insertCI insert_Diff insert_Diff_if insert_is_Un singletonD snd_conv)
+done
+
+thm test.finfun_rec_upd 
+
+print_codeproc
+code_thms test
+
+lemma finfun_rec_upd2 [simp,code]:
+  "finfun_rec test_c test_u (finfun_update_code f a' b') = finfun_rec test_c test_u (f(a' $:= b'))"
+  
+apply auto
+done
+
+
+(*  "finfun_rec cnst upd (f(a' $:= b')) = upd a' b' (finfun_rec cnst upd f)" *)
+
+lemma finfun_rec_upd3 [code]:
+  "finfun_rec test_c test_u (finfun_update_code f a' b') = test_u a' b' (finfun_rec test_c test_u f)"
+apply(simp only:finfun_rec_upd2) using test.finfun_rec_upd
+apply (simp only:test.finfun_rec_upd)
+done
+
+
+value "test ((K$ (0::nat))::nat \<Rightarrow>f nat)( 0 $:=42)"
+
+definition serialize_finfun  where
+  "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
+
+value "serialize_finfun (((K$ (1::nat))(2$:=3)):: nat \<Rightarrow>f nat)"
+
+value "serialize_finfun ((K$ (1::nat)):: nat \<Rightarrow>f nat)"
+
+definition deserialize_finfun where
+  "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
+
+
+export_code access_x access_range_x mb1a mb1b mb2a mb2b list_asc_offset list_asc exp_stub in Scala file "bench.scala"
 
 
 end
