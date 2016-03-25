@@ -1,4 +1,4 @@
-theory MultiPaxos3
+theory MultiPaxos4
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
   LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
   "../../IO-Automata/IOA"
@@ -6,7 +6,7 @@ begin
 
 text {* A version of MultiPaxos using FinFuns *}
 
-text {* TODO: to make it faster: replace $:= by finfun_update_code, implement checkpointing... *}
+text {* TODO: implement checkpointing *}
 
 subsection {* Ordering on pairs *}
 
@@ -134,7 +134,7 @@ definition do_2a where
       inst = (next_inst s);
       msg = Phase2a inst (the (ballot s)) v a;
       new_state = s\<lparr>next_inst := (inst+1),
-        pending := (pending s)(inst $:= (Some v))\<rparr>
+        pending := finfun_update_code (pending s) inst (Some v)\<rparr>
     in
       (new_state, send_all s msg)"
 
@@ -234,7 +234,7 @@ definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarr
   "receive_2a i b v l s =
     (let a = id s; bal = (ballot s) in
       (if (bal = Some b)
-        then (s\<lparr>vote := (vote s)(i $:= Some v)\<rparr>, send_all s (Phase2b i b a v))
+        then (s\<lparr>vote := finfun_update_code (vote s) i (Some v)\<rparr>, send_all s (Phase2b i b a v))
         else (s, {||})))"
 
 definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
@@ -243,10 +243,10 @@ definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow>
       then
         (let 
             new_twobs = a2 # (twobs s $ i $ b);
-            s2 = s\<lparr>twobs := (twobs s)(i $:= (twobs s $ i)(b $:= new_twobs))\<rparr>
+            s2 = s\<lparr>twobs := finfun_update_code (twobs s) i (twobs s $ i)(b $:= new_twobs)\<rparr>
         in
           (if (2 * length new_twobs > nr s)
-            then (s2\<lparr>decided := (decided s2)(i $:= Some v), last_decision := Some i\<rparr>, {||})
+            then (s2\<lparr>decided := finfun_update_code (decided s2) i (Some v), last_decision := Some i\<rparr>, {||})
             else (s2, {||}) ) )
       else
         (s, {||}) )"
@@ -273,54 +273,8 @@ fun process_msg where
 
 text {* Serializing finfuns to lists *}
 
-abbreviation serialize_c where
-  "serialize_c d \<equiv> ({}, d)"
-abbreviation serialize_u_2 where
-  "serialize_u_2 a b r \<equiv>  if b = snd r then r else (
-    let x = {(a,b)} \<union> (fst r) - {(a,x) | x . True} in (
-      if {fst p | p . p \<in> x} = UNIV
-      then ({}, b) 
-      else (x, snd r) ) )"
-abbreviation serialize_u where
-  "serialize_u a b r \<equiv>  if b = snd r then r else (
-    let x = {(a,b)} \<union> (fst r) - {(a,x) | x . True} in  (x, snd r) )"
-
-definition serialize_finfun_2 where
-  "serialize_finfun_2 \<equiv> finfun_rec serialize_c serialize_u"
-
-interpretation finfun_rec_wf_aux serialize_c serialize_u
-apply (unfold_locales)
-apply simp
-apply force
-apply force
-done
-
-definition test_c where "test_c d \<equiv> (d,{})"
-definition test_u where "test_u k v r \<equiv>
-  if v = fst r
-  then (if (k \<in> snd r) then (fst r, snd r - {k}) else r)
-  else (
-    if (k \<in> snd r)
-      then r
-      else (fst r, {k} \<union> snd r) )"
-definition test where "test \<equiv> finfun_rec test_c test_u"
-interpretation test:finfun_rec_wf_aux test_c test_u unfolding test_def
-apply (unfold_locales)
-apply (simp_all add:test_c_def test_u_def)
-apply (smt Diff_insert_absorb fst_conv insertCI insert_Diff insert_Diff_if insert_is_Un singletonD snd_conv)
-done
-
-thm test.finfun_rec_upd
-
-print_codeproc
-code_thms test
-
-value "test (finfun_update ((K$ (0::nat))::nat \<Rightarrow>f nat) 0 42)"
-
-definition serialize_finfun where
-  "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
-
-value "serialize_finfun ((K$ (1::nat)):: nat \<Rightarrow>f nat)"
+definition serialize_finfun where 
+  "serialize_finfun ff \<equiv> finfun_rec (\<lambda> d . []) (\<lambda> a b r . (a,b)#r) ff"
 
 definition deserialize_finfun where
   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
@@ -333,7 +287,7 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code learn send_1a propose process_msg get_last_decision init_acc_state
-  serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala"
+  serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala" 
 
 section {* The I/O-automata *}
 
