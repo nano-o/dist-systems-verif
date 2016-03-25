@@ -273,8 +273,34 @@ fun process_msg where
 
 text {* Serializing finfuns to lists *}
 
-definition serialize_finfun where 
-  "serialize_finfun ff \<equiv> finfun_rec (\<lambda> d . []) (\<lambda> a b r . (a,b)#r) ff"
+abbreviation serialize_c where
+  "serialize_c d \<equiv> ({}, d)"
+abbreviation serialize_u_2 where
+  "serialize_u_2 a b r \<equiv>  if b = snd r then r else (
+    let x = {(a,b)} \<union> (fst r) - {(a,x) | x . True} in (
+      if {fst p | p . p \<in> x} = UNIV
+      then ({}, b) 
+      else (x, snd r) ) )"
+abbreviation serialize_u where
+  "serialize_u a b r \<equiv>  if b = snd r then r else (
+    let x = {(a,b)} \<union> (fst r) - {(a,x) | x . True} in  (x, snd r) )"
+
+definition serialize_finfun_2 where
+  "serialize_finfun_2 \<equiv> finfun_rec serialize_c serialize_u"
+
+interpretation finfun_rec_wf_aux serialize_c serialize_u
+apply (unfold_locales)
+apply simp
+apply force
+apply force
+done
+
+definition serialize_finfun where
+  "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
+
+export_code serialize_finfun in Scala
+
+term "serialize_finfun ((K$ (1::nat)):: nat \<Rightarrow>f nat)"
 
 definition deserialize_finfun where
   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
@@ -287,7 +313,7 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code learn send_1a propose process_msg get_last_decision init_acc_state
-  serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala" 
+  serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
 
