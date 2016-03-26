@@ -319,7 +319,13 @@ text {* Here I declare test_code as a code equation. The code generator can now
 lemma test_code[code]: "test (finfun_update_code f a b) = test_u a b (test f)"
 by (metis finfun_update_code_def test.finfun_rec_upd test_def)
 
-value "test ((K$ (0::nat))::nat \<Rightarrow>f nat)(0 $:= 42)"
+text {* This lemma should be proved easily after interpreting the finfun_rec_wf locale.
+The finfun_rec_wf locale may be modified to separate the case of finite and infinite universal sets, 
+and that would eliminate the need for the fourth well-formedness condition in the case of infinite 
+univeral sets. *}
+lemma test_code_2[code]: "test (finfun_const d) = (d, {})" sorry
+
+value "test ((K$ (0::nat))::nat \<Rightarrow>f nat)(0 $:= 42)(1 $:= 43)"
 
 definition serialize_finfun where
   "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
