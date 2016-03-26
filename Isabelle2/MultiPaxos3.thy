@@ -310,12 +310,16 @@ apply (simp_all add:test_c_def test_u_def)
 apply (smt Diff_insert_absorb fst_conv insertCI insert_Diff insert_Diff_if insert_is_Un singletonD snd_conv)
 done
 
-thm test.finfun_rec_upd
+text {* Here the evaluation gets stuck at finfun_rec. *}
+value "test ((K$ (0::nat))::nat \<Rightarrow>f nat)(0 $:= 42)"
 
-print_codeproc
-code_thms test
+text {* Here I declare test_code as a code equation. The code generator can now
+  generate code for calls to test when the argument if of the form "finfun_update_code f a b", and 
+  does not get stuck like above. We are still missing a similar equation for the constant case.*}
+lemma test_code[code]: "test (finfun_update_code f a b) = test_u a b (test f)"
+by (metis finfun_update_code_def test.finfun_rec_upd test_def)
 
-value "test (finfun_update ((K$ (0::nat))::nat \<Rightarrow>f nat) 0 42)"
+value "test ((K$ (0::nat))::nat \<Rightarrow>f nat)(0 $:= 42)"
 
 definition serialize_finfun where
   "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
