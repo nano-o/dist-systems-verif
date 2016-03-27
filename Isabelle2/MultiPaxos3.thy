@@ -75,6 +75,15 @@ fun accs where
   "accs (0::nat) = {||}"
 | "accs (Suc n) = (accs n) |\<union>| {|Suc n|}"
 
+lemma accs_def_2:"accs n = Abs_fset {1..<Suc n}"
+proof (induct n)
+  case 0 thus ?case
+  by (metis accs.simps(1) atLeastLessThanSuc bot_fset_def not_one_le_zero) 
+next
+  case (Suc n) thus ?case 
+  by simp (metis Suc_leI atLeastLessThanSuc eq_onp_same_args finite_atLeastLessThan finsert.abs_eq zero_less_Suc)
+qed
+
 definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
   "init_acc_state n a \<equiv> \<lparr>
     id = a,
@@ -296,18 +305,21 @@ apply force
 done
 
 definition test_c where "test_c d \<equiv> (d,{})"
-definition test_u where "test_u k v r \<equiv>
+definition test_u where "test_u (k::nat) v r \<equiv>
   if v = fst r
   then (if (k \<in> snd r) then (fst r, snd r - {k}) else r)
   else (
     if (k \<in> snd r)
       then r
-      else (fst r, {k} \<union> snd r) )"
+      else let s = {k} \<union> snd r in (fst r, s))"
 definition test where "test \<equiv> finfun_rec test_c test_u"
 interpretation test:finfun_rec_wf_aux test_c test_u unfolding test_def
 apply (unfold_locales)
-apply (simp_all add:test_c_def test_u_def)
-apply (smt Diff_insert_absorb fst_conv insertCI insert_Diff insert_Diff_if insert_is_Un singletonD snd_conv)
+prefer 3
+apply (simp add:test_c_def test_u_def Let_def)
+apply (simp add:test_u_def test_c_def)
+apply (simp add:test_u_def test_c_def Let_def)
+apply (metis Diff_insert Diff_insert2 insert_Diff_if insert_absorb singleton_insert_inj_eq')
 done
 
 text {* Here the evaluation gets stuck at finfun_rec. *}
@@ -323,9 +335,16 @@ text {* This lemma should be proved easily after interpreting the finfun_rec_wf 
 The finfun_rec_wf locale may be modified to separate the case of finite and infinite universal sets, 
 and that would eliminate the need for the fourth well-formedness condition in the case of infinite 
 univeral sets. *}
-lemma test_code_2[code]: "test (finfun_const d) = (d, {})" sorry
+lemma test_code_2[code]: "test (finfun_const d) = (d, {})"
+using test.finfun_rec_const_infinite
+by (metis infinite_UNIV_char_0 test_c_def test_def)
 
 value "test ((K$ (0::nat))::nat \<Rightarrow>f nat)(0 $:= 42)(1 $:= 43)"
+
+definition filter_ff where "filter_ff P ff \<equiv> ff"
+
+lemma "\<And> k . P k \<Longrightarrow> (filter_ff P ff) $ k = (finfun_default ff)"
+  and "\<And> k . \<not> P k \<Longrightarrow> (filter_ff P ff) $ k = ff $ k" oops
 
 definition serialize_finfun where
   "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
