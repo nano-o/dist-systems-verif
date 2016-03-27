@@ -34,13 +34,16 @@ locale mp_ioa_correctness = mp_ioa +
   assumes "nas > 0"
 begin
 
-definition mp_quorums where
-  "mp_quorums \<equiv> Abs_fset {q . 2 * fcard q > nas \<and> (\<forall> a . a |\<in>| q \<longrightarrow> a < nas) }"
+lemma card_accs: "fcard (accs nas) = nas"
+  proof -
+    have "\<And> n . card {1..<Suc n} = n" by simp
+    thus ?thesis using accs_def_2
+    by (metis eq_onp_same_args fcard.abs_eq finite_atLeastLessThan)
+  qed
 
-lemma  
-  assumes "q |\<in>| mp_quorums"
-  shows "2 * fcard q > nas" using assms
-oops
+sublocale card_quorums "accs nas" 
+apply (unfold_locales)
+by (metis card_accs fcard_fempty less_numeral_extra(3) mp_ioa_correctness_axioms mp_ioa_correctness_def)
 
 sublocale amp_ioa "accs nas" "{||}" "accs nas"
 using mp_ioa_correctness_axioms
@@ -49,9 +52,6 @@ apply (simp add: mp_ioa_correctness_def)
 apply (induct rule:accs.induct)
 apply auto
 done
-
-sublocale quorums "accs nas" "mp_quorums"
-using mp_ioa_correctness_axioms oops
 
 definition pending_of_a where
   "pending_of_a s \<equiv>  
@@ -87,8 +87,7 @@ theorem
 apply(auto simp add: is_forward_sim_def)
 apply(auto simp add:fwd_sim_def rename_def amp_ioa_def amp_start_def mp_ioa_def mp_start_def
   mp_ioa_correctness_def init_acc_state_def)[1]
-
-
+oops
 
 end
 
