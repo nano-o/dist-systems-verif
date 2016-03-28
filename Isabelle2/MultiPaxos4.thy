@@ -64,7 +64,7 @@ record 'v acc_state =
   onebs :: "bal \<Rightarrow>f inst \<Rightarrow>f (acc \<times> ('v cmd \<times> bal) option) list"
     -- {* For an acceptor a and a ballot b, lists of 1b-message descriptions, indexed by ballot then instance. *}
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f acc list"
-    -- {* For an acceptor a: lists describing the 2b messages, indexed by instance then ballot. *}
+    -- {* For an acceptor a: lists describing the 2b messages,   indexed by instance then ballot. *}
   decided :: "inst \<Rightarrow>f 'v cmd option"
   next_inst :: "nat"
   pending :: "inst \<Rightarrow>f 'v cmd option"
@@ -288,6 +288,26 @@ definition serialize_finfun where
 definition deserialize_finfun where
   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
 
+
+subsection {* Benchmarking experiments *}
+
+definition test_update  where 
+  "test_update s i \<equiv> s\<lparr>twobs := finfun_update_code (twobs s) i (K$ [])(0 $:= [1,2])\<rparr>"
+
+definition  test_state :: "nat \<Rightarrow> nat acc_state" where
+ "test_state i \<equiv> 
+ (let 
+        s= (init_acc_state 3 1);
+        s = test_update s i
+
+        in s)"
+
+definition ebench where
+ "ebench s \<equiv> update_twobs (test_state 77) 97 0 [1,2,3]"
+
+definition ebench2 where
+ "ebench2 \<equiv> update_twobs (test_state 77) 97 0 (new_twobs (test_state 77) 97 0 3)"
+
 subsection {* Code generation *}
 
 text {* We need to rename a few modules to let the Scala compiler resolve circular dependencies. *}
@@ -296,7 +316,7 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code learn send_1a propose process_msg get_last_decision init_acc_state
-  serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala" 
+  serialize_finfun deserialize_finfun ebench ebench2 test_state test_update in Scala file "simplePaxos.scala" 
 
 section {* The I/O-automata *}
 
@@ -381,6 +401,8 @@ inductive mp_trans where
 
 definition mp_ioa where
   "mp_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = {mp_start}, trans = {(s,a,t) . mp_trans (s, a, t)}\<rparr>"
+
+
 
 end
 
