@@ -282,8 +282,8 @@ fun process_msg where
 
 text {* Serializing finfuns to lists *}
 
-definition serialize_finfun where 
-  "serialize_finfun ff \<equiv> finfun_rec (\<lambda> d . []) (\<lambda> a b r . (a,b)#r) ff"
+definition serialize_finfun where
+  "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
 
 definition deserialize_finfun where
   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
@@ -296,7 +296,7 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code learn send_1a propose process_msg get_last_decision init_acc_state
-  serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala" 
+  serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
 
