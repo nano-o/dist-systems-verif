@@ -237,16 +237,25 @@ definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarr
         then (s\<lparr>vote := finfun_update_code (vote s) i (Some v)\<rparr>, send_all s (Phase2b i b a v))
         else (s, {||})))"
 
+definition is_decided where "is_decided s i \<equiv> decided s $ i \<noteq> None"
+
+definition new_twobs where "new_twobs s i b a \<equiv> a # (twobs s $ i $ b)"
+
+definition update_twobs where "update_twobs s i b new \<equiv> 
+  s\<lparr>twobs := finfun_update_code (twobs s) i (twobs s $ i)(b $:= new)\<rparr>"
+
+definition update_decided where "update_decided s i v \<equiv> s\<lparr>decided := finfun_update_code (decided s) i (Some v), last_decision := Some i\<rparr>"
+
 definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2b i b a2 v s \<equiv> let a = id s in 
-    (if (decided s $ i = None)
+    (if (\<not> is_decided s i)
       then
         (let 
-            new_twobs = a2 # (twobs s $ i $ b);
-            s2 = s\<lparr>twobs := finfun_update_code (twobs s) i (twobs s $ i)(b $:= new_twobs)\<rparr>
+            new_twobs = new_twobs s i b a2;
+            s2 = update_twobs s i b new_twobs
         in
           (if (2 * length new_twobs > nr s)
-            then (s2\<lparr>decided := finfun_update_code (decided s2) i (Some v), last_decision := Some i\<rparr>, {||})
+            then (update_decided s2 i v, {||})
             else (s2, {||}) ) )
       else
         (s, {||}) )"
