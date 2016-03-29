@@ -1,6 +1,6 @@
 theory MultiPaxosCorrectness2
 imports AbstractMultiPaxos MultiPaxos3 "../../IO-Automata/Simulations"
-begin
+begin        
 datatype 'v Common_actions =
   Propose acc "'v cmd"
 | Learn acc inst "'v cmd"
@@ -55,20 +55,34 @@ done
 
 definition pending_of_a where
   "pending_of_a s \<equiv>  
-    fold (\<lambda> i r . case (pending s) $ i of None \<Rightarrow> r | Some c \<Rightarrow> {|c|} |\<union>| r) 
+    fold (\<lambda> i r . case (pending s) $ i of None \<Rightarrow> r | Some c \<Rightarrow> {|c|} |\<union>| r)
       (finfun_to_list ((pending s))) {||}"
 
-definition prop_cmp_of_mp where 
-  "prop_cmp_of_mp s \<equiv> 
+definition pending_of where
+  "pending_of s \<equiv> let f =  finfun_apply (pending s) in
+    {the (f i) | i . f i \<noteq> None}"
+
+definition prop_cmd where
+  "prop_cmd s \<equiv> \<Union>{pending_of ((node_states s) $ a) | a . a |\<in>| accs nas}"
+
+definition prop_cmd_2 where
+  "prop_cmd_2 s \<equiv> let f = finfun_apply o pending o finfun_apply (node_states s) in 
+    {the (f a i) | a i . f a i \<noteq> None}"
+
+definition prop_cmd_of_mp where 
+  "prop_cmd_of_mp s \<equiv> 
     fold (\<lambda> a r . pending_of_a (node_states s $ a) |\<union>| r)
       (finfun_to_list (node_states s)) {||}"
+
+lemma "prop_cmd_of_mp mp_start = {||}"
+apply(auto simp add:mp_start_def prop_cmd_of_mp_def pending_of_a_def)
 
 definition fwd_sim :: "'v mp_state \<Rightarrow> ('v cmd, nat) amp_state set" where
   "fwd_sim s \<equiv> 
     let last_bal_of = \<lambda> a i . last_ballot ((node_states s) $ a) $ i;
         last_vote_of = \<lambda> a i . vote ((node_states s) $ a) $ i
     in
-      {t . propCmd t = prop_cmp_of_mp s 
+      {t . propCmd t = prop_cmd s 
         \<and> amp_state.ballot t = 
           (let f = (finfun_apply ((\<lambda> acc_s . ballot acc_s) o$ (node_states s)))
           in (\<lambda> a . if (0 < a \<and> a \<le> nas) then f a else None))
@@ -81,6 +95,9 @@ abbreviation amp_ioa_2 where
 
 abbreviation mp_ioa_2 where 
   "mp_ioa_2 \<equiv> rename mp_ioa rn1"
+
+
+lemma "amp_state.ballot (fwd_sim mp_start) = (\<lambda> a . None)"
 
 theorem
   "is_forward_sim fwd_sim mp_ioa_2 amp_ioa_2" using mp_ioa_correctness_axioms init_acc
