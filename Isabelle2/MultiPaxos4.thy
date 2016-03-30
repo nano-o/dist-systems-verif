@@ -75,6 +75,8 @@ fun accs where
   "accs (0::nat) = {||}"
 | "accs (Suc n) = (accs n) |\<union>| {|Suc n|}"
 
+value "accs 3"
+
 definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
   "init_acc_state n a \<equiv> \<lparr>
     id = a,
@@ -88,6 +90,21 @@ definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" 
     next_inst = 1, (* instances start at 1 *)
     pending = K$ None,
     leader = False,
+    last_decision = None\<rparr>"
+
+definition leader_1_init_state :: "nat \<Rightarrow> 'v acc_state" where
+  "leader_1_init_state n \<equiv> \<lparr>
+    id = 1,
+    acc_state.acceptors = accs n,
+    ballot = Some 1,
+    vote = K$ None,
+    last_ballot = K$ None,
+    onebs = K$ K$ [],
+    twobs = K$ K$ [],
+    decided = K$ None,
+    next_inst = 1, (* instances start at 1 *)
+    pending = K$ None,
+    leader = True,
     last_decision = None\<rparr>"
 
 definition nr where
@@ -127,6 +144,9 @@ definition leader_of_bal where
 
 definition send_all where "send_all s m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  (acceptors s)"
 
+definition send_all_2 where "send_all_2 s a m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  
+  (acceptors s |-| {|a|})"
+
 definition do_2a where
   "do_2a s v \<equiv>
     let
@@ -134,9 +154,12 @@ definition do_2a where
       inst = (next_inst s);
       msg = Phase2a inst (the (ballot s)) v a;
       new_state = s\<lparr>next_inst := (inst+1),
-        pending := finfun_update_code (pending s) inst (Some v)\<rparr>
+        pending := finfun_update_code (pending s) inst (Some v),
+        twobs := finfun_update_code (twobs s) inst (K$ [a])\<rparr>
     in
-      (new_state, send_all s msg)"
+      (new_state, send_all_2 s a msg)"
+
+value "let s = (leader_1_init_state 3) in leader_of_bal s (ballot s) = 1 \<and> leader s"
 
 definition propose :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
@@ -244,7 +267,8 @@ definition new_twobs where "new_twobs s i b a \<equiv> a # (twobs s $ i $ b)"
 definition update_twobs where "update_twobs s i b new \<equiv> 
   s\<lparr>twobs := finfun_update_code (twobs s) i (twobs s $ i)(b $:= new)\<rparr>"
 
-definition update_decided where "update_decided s i v \<equiv> s\<lparr>decided := finfun_update_code (decided s) i (Some v), last_decision := Some i\<rparr>"
+definition update_decided where "update_decided s i v \<equiv> 
+  s\<lparr>decided := finfun_update_code (decided s) i (Some v), last_decision := Some i\<rparr>"
 
 definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2b i b a2 v s \<equiv> let a = id s in 
@@ -259,6 +283,21 @@ definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow>
             else (s2, {||}) ) )
       else
         (s, {||}) )"
+
+definition receive_2b_butcher :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
+  "receive_2b_butcher i b a2 v s \<equiv> let a = id s in 
+    (if (True)
+      then
+        (let 
+            new_twobs = new_twobs s i b a2;
+            s2 = update_twobs s i b new_twobs
+        in
+          (if (2 * length new_twobs > nr s)
+            then (update_decided s2 i v, {||})
+            else (s2, {||}) ) )
+      else
+        (s, {||}) )"
+
 
 definition get_last_decision where 
   "get_last_decision s \<equiv> the (decided s $ (the (last_decision s)))"
@@ -293,15 +332,23 @@ subsection {* Benchmarking experiments *}
 
 definition test_update  where 
   "test_update s i \<equiv> s\<lparr>twobs := finfun_update_code (twobs s) i (K$ [])(0 $:= [1,2])\<rparr>"
+definition test_update_2  where 
+  "test_update_2 s i \<equiv> s\<lparr>twobs := finfun_update_code (twobs s) i (twobs s $ i)(0 $:= [1,2])\<rparr>"
 
 definition  test_state :: "nat \<Rightarrow> nat acc_state" where
  "test_state i \<equiv> 
  (let 
-        s= (init_acc_state 3 1);
-        s = test_update s i
+        command = 9000::nat;
+        v = Cmd(command);
+        s= (leader_1_init_state 3):: (nat acc_state);
+        s = fst (propose command s):: (nat acc_state);
+        s = fst (receive_2b 77 (the (ballot s)) 1 v s);
+        s = fst (receive_2b 77 (the (ballot s)) 2 v s);
+        s = fst (receive_2b 77 (the (ballot s)) 3 v s)
 
         in s)"
 
+(* "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> *)
 definition ebench where
  "ebench s \<equiv> update_twobs (test_state 77) 97 0 [1,2,3]"
 
@@ -316,7 +363,7 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code learn send_1a propose process_msg get_last_decision init_acc_state
-  serialize_finfun deserialize_finfun ebench ebench2 test_state test_update in Scala file "simplePaxos.scala" 
+  serialize_finfun deserialize_finfun ebench ebench2 test_state leader_1_init_state test_update_2 receive_2b_butcher in Scala file "simplePaxos.scala" 
 
 section {* The I/O-automata *}
 
