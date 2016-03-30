@@ -125,18 +125,20 @@ definition leader_of_bal where
   "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
     (b mod (nr s))"
 
-definition send_all where "send_all s m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  (acceptors s)"
+definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  (acceptors s |-| {|a|})"
 
 definition do_2a where
   "do_2a s v \<equiv>
     let
       a = id s;
       inst = (next_inst s);
-      msg = Phase2a inst (the (ballot s)) v a;
+      b = the (ballot s);
+      msg = Phase2a inst b v a;
       new_state = s\<lparr>next_inst := (inst+1),
-        pending := finfun_update_code (pending s) inst (Some v)\<rparr>
+        pending := finfun_update_code (pending s) inst (Some v),
+        twobs := finfun_update_code (twobs s) inst ((K$ [])(b $:= [a]))\<rparr>
     in
-      (new_state, send_all s msg)"
+      (new_state, send_all s a msg)"
 
 definition propose :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
@@ -222,11 +224,13 @@ definition receive_1b :: "(inst \<Rightarrow>f ('v cmd \<times> bal) option) \<R
               s2 = s1\<lparr>leader := True\<rparr>;
               s3 = s2\<lparr>next_inst := max_i+1\<rparr>;
               twoa_is = [1..<max_i+1];
+              (* TODO: the following might traverse all the finfun, which is a problem when there are many instances. *)
+              s4 = fold (\<lambda> i s . s\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= [a]))\<rparr>) twoa_is s3;
               msgs = map (\<lambda> i . case h $ i of 
                   None \<Rightarrow> Phase2a i bal NoOp a
                 | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
-              pckts = map (\<lambda> m . send_all s m) msgs
-            in (s3, fold (op |\<union>|) pckts {||}) )
+              pckts = map (\<lambda> m . send_all s a m) msgs
+            in (s4, fold (op |\<union>|) pckts {||}) )
           else (s1, {||}) ) )
     else (s, {||})) )"
 
@@ -234,7 +238,9 @@ definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarr
   "receive_2a i b v l s =
     (let a = id s; bal = (ballot s) in
       (if (bal = Some b)
-        then (s\<lparr>vote := finfun_update_code (vote s) i (Some v)\<rparr>, send_all s (Phase2b i b a v))
+        then (s\<lparr>vote := finfun_update_code (vote s) i (Some v),
+          twobs := finfun_update_code (twobs s) i ((K$ [])((the bal) $:= [a]))\<rparr>, 
+          send_all s a (Phase2b i b a v))
         else (s, {||})))"
 
 definition is_decided where "is_decided s i \<equiv> decided s $ i \<noteq> None"
@@ -248,7 +254,7 @@ definition update_decided where "update_decided s i v \<equiv> s\<lparr>decided 
 
 definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2b i b a2 v s \<equiv> let a = id s in 
-    (if (\<not> is_decided s i)
+    (if (True) (* TODO: fix this. Was \<not> is_decided s i. Removed because that traversed the whole finfun. *)
       then
         (let 
             new_twobs = new_twobs s i b a2;
@@ -295,7 +301,7 @@ code_identifier
   code_module Code_Numeral \<rightharpoonup> (Scala) Nat
 | code_module List \<rightharpoonup> (Scala) Set
 
-export_code learn send_1a propose process_msg get_last_decision init_acc_state
+export_code learn send_1a propose process_msg init_acc_state
   serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
