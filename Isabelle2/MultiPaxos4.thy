@@ -263,8 +263,6 @@ definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow>
 definition get_last_decision where 
   "get_last_decision s \<equiv> the (decided s $ (the (last_decision s)))"
 
-value "largestprefix [(1,v1), (2,v2), (4,v4)]"
-
 text {* output transition could return an option *}
 definition learn :: "inst \<Rightarrow> 'v  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset) option" where 
   "learn i v s \<equiv> 
@@ -317,13 +315,7 @@ datatype 'v mp_action =
 locale mp_ioa = IOA +
   fixes nas :: nat
     -- {* The number of acceptors *}
-begin    
-
-text {* TODO: get rid of this! *}
-no_notation Append  (infixl "#" 65)
-notation Cons (infixr "#" 65)
-no_notation Concat  (infixl "@" 65)
-notation append (infixr "@" 65)
+begin
 
 definition mp_asig where
   "mp_asig \<equiv>
@@ -341,6 +333,25 @@ fun init_nodes_state where
   "init_nodes_state (0::nat) n = undefined"
 | "init_nodes_state (Suc i) n = 
     (if Suc i > n then undefined else (init_nodes_state i n)(Suc i $:= init_acc_state n (Suc i)))"
+
+definition init_nodes_state_2 where
+  "init_nodes_state_2 \<equiv> Abs_finfun
+    (\<lambda> a . if a |\<in>| accs nas then init_acc_state nas a else undefined)"
+
+lemma init_nodes_state_2_is_finfun: "(\<lambda> a . if a |\<in>| accs nas then init_acc_state nas a else undefined) \<in> finfun"
+apply(simp add:finfun_def)
+apply (rule exI[where x="undefined"])
+apply auto
+subgoal proof -
+show ?thesis (is "finite ?S")
+  proof -
+    have "?S \<subseteq> {a . a |\<in>| accs nas}" by blast
+    moreover have "finite {a . a |\<in>| accs nas}"
+    by (metis (full_types) Abs_fset_cases Abs_fset_inverse equalityI mem_Collect_eq notin_fset subsetI) 
+    ultimately show ?thesis by auto
+  qed
+qed
+done
 
 lemma init_acc: 
 assumes "a \<le> n" and "a > 0"
