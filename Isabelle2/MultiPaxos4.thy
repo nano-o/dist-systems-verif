@@ -1,33 +1,12 @@
 theory MultiPaxos4
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
   LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
-  "../../IO-Automata/IOA"
+  "../../IO-Automata/IOA" "FinFun_Supplemental" Pair_order
 begin
 
 text {* A version of MultiPaxos using FinFuns *}
 
 text {* TODO: implement checkpointing *}
-
-subsection {* Ordering on pairs *}
-
-fun less_eq_pair where
-  "less_eq_pair (x,y) (u,v) = (y \<le> v)"
-
-fun less_pair where 
-  "less_pair (x,y) (u,v) = (y < v)"
-
-instantiation prod :: (type,order) preorder
-begin
-
-definition less_eq_def: "less_eq x y = less_eq_pair x y"
-definition less_def: "less x y = less_pair x y"
-
-instance
-apply(intro_classes)
-apply (auto simp add:less_eq_def less_def)
-done
-
-end
 
 subsection {* Actions, messages, and state. *}
 
@@ -61,10 +40,11 @@ record 'v acc_state =
     -- {* The last vote cast by an acceptor, for each instance *}
   last_ballot :: "inst \<Rightarrow>f bal option"
     -- {* For an acceptor a, this is the ballot in which "vote a" was cast, for each instance *}
-  onebs :: "bal \<Rightarrow>f inst \<Rightarrow>f (acc \<times> ('v cmd \<times> bal) option) list"
-    -- {* For an acceptor a and a ballot b, lists of 1b-message descriptions, indexed by ballot then instance. *}
-  twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f acc list"
-    -- {* For an acceptor a: lists describing the 2b messages, indexed by instance then ballot. *}
+  onebs :: "bal \<Rightarrow>f acc \<Rightarrow>f inst \<Rightarrow>f ('v cmd \<times> bal) option option"
+    -- {* For a ballot b, an acceptor a, and an instance i,
+      this is the 1b information received from a in ballot b about instance i. *}
+  twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f acc fset"
+    -- {* fset describing the 2b messages received, indexed by instance and ballot. *}
   decided :: "inst \<Rightarrow>f 'v cmd option"
   next_inst :: "nat"
   pending :: "inst \<Rightarrow>f 'v cmd option"
@@ -82,8 +62,8 @@ definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" 
     ballot = None,
     vote = K$ None,
     last_ballot = K$ None,
-    onebs = K$ K$ [],
-    twobs = K$ K$ [],
+    onebs = K$ K$ K$ None,
+    twobs = K$ K$ {||},
     decided = K$ None,
     next_inst = 1, (* instances start at 1 *)
     pending = K$ None,
@@ -96,13 +76,10 @@ definition nr where
 
 subsection {* Event handlers *}
 
-text {* If we had finfun_Ex we could do this better.
-  Here we use instance 0 by default, but that's arbitrary. *}
 definition one_b_quorum_received where
   "one_b_quorum_received b s \<equiv> 
-    let at_b = onebs s $ b;
-        at_b_i = at_b $ 0
-    in 2 * length at_b_i > nr s"
+    let at_b = onebs s $ b
+    in 2 * fcard (finfun_fset_dom at_b) > nr s"
 
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
   -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
@@ -112,20 +89,11 @@ fun nx_bal where
   "nx_bal a None N = suc_bal a 0 N"
 | "nx_bal a (Some b) N = suc_bal a b N"
 
-definition one_a_msgs where
-  -- {* The set of 1a messages to send to try to become the leader *}
-  "one_a_msgs s \<equiv> 
-    let
-      a = id s;
-      next_bal = nx_bal a (ballot s) (nr s);
-      msg_1a = Phase1a a next_bal
-    in {Packet a b msg_1a | b . b |\<in>| (acceptors s)}"
+definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  (acceptors s |-| {|a|})"
 
 definition leader_of_bal where
   "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
     (b mod (nr s))"
-
-definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  (acceptors s |-| {|a|})"
 
 definition do_2a where
   "do_2a s v \<equiv>
@@ -136,7 +104,7 @@ definition do_2a where
       msg = Phase2a inst b v a;
       new_state = s\<lparr>next_inst := (inst+1),
         pending := finfun_update_code (pending s) inst (Some v),
-        twobs := finfun_update_code (twobs s) inst ((K$ [])(b $:= [a]))\<rparr>
+        twobs := finfun_update_code (twobs s) inst ((K$ {||})(b $:= {|a|}))\<rparr>
     in
       (new_state, send_all s a msg)"
 
@@ -154,53 +122,94 @@ definition receive_fwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_
   "receive_fwd v s \<equiv> let a = id s in 
     (if (leader_of_bal s (ballot s) = a) then do_2a s (Cmd v) else (s, ({||})))"
 
+definition last_votes where 
+  "last_votes s \<equiv> let
+    combiner = (\<lambda> (vo,bo) . vo \<bind> (\<lambda> v . bo \<bind> (\<lambda> b . Some (v,b))))
+  in combiner o$ ($ vote s, last_ballot s $)"
+
 definition send_1a :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
-  -- {* a tries to become the leader *}
-  "send_1a s \<equiv>
-    (let
-        a = id s;
-        b = nx_bal a (ballot s) (nr s);
-        msg_1a = Phase1a a b in
-      (s\<lparr>ballot := Some b\<rparr>, fimage (\<lambda> a2 . Packet a a2 msg_1a) (acceptors s)))"
+  -- {* a tries to become the leader. *}
+  "send_1a s \<equiv> let
+      a = id s;
+      b = nx_bal a (ballot s) (nr s);
+      msg_1a = Phase1a a b;
+      s = s\<lparr>ballot := Some b, 
+        onebs := (onebs s)(b $:= (onebs s $ b)(a $:= (\<lambda> x . Some x) o$ last_votes s))\<rparr>
+   in
+     (s, send_all s a msg_1a)"
 
 definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_1a l b s \<equiv>
-    (let bal = ballot s; a = id s in
-      (if (bal = None \<or> ((the bal) < b))
+    let bal = ballot s; a = id s in
+      (if bal < Some b
        then
           (let
-            combiner = (\<lambda> (vo,bo) . vo \<bind> (\<lambda> v . bo \<bind> (\<lambda> b . Some (v,b))));
-            last_votes = combiner o$ ($ vote s, last_ballot s $);
-            msg_1b = Phase1b last_votes b a;
+            msg_1b = Phase1b (last_votes s) b a;
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := Some b\<rparr>
           in
           (state, {|packet|}))
-       else (s, {||})))"
+       else (s, {||}))"
 
 definition update_onebs :: 
   "'v acc_state \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> 'v acc_state" where
-  -- {* Update the list of highest voted values when receiving a 1b
+  -- {* Update the map of highest voted values when receiving a 1b
     message from a2 for ballot bal containing last_vs *}
-  "update_onebs s bal a2 last_vs \<equiv>
-    let
-      a = id s;
-      combiner = \<lambda> (xs, y) . (case y of None \<Rightarrow> (a2, None)#xs | Some z \<Rightarrow> (a2, Some z)#xs);
-      pair_map = ($ (onebs s $ bal), last_vs $);
-      at_bal = combiner o$ pair_map
-    in s\<lparr>onebs := (onebs s)(bal $:= at_bal)\<rparr>"
+  "update_onebs s bal a2 last_vs \<equiv> let
+      onebs_bal_a2 = (\<lambda> x . Some x) o$ last_vs
+    in s\<lparr>onebs := (onebs s)(bal $:= (onebs s $ bal)(a2 $:= onebs_bal_a2))\<rparr>"
 
-definition highest_voted :: "(nat \<Rightarrow>f (acc \<times> ('v cmd \<times> nat) option) list) \<Rightarrow> (nat \<Rightarrow>f ('v cmd) option)" where
-  -- {* Makes sense only if no list in the map is empty. *}
-  "highest_voted m \<equiv>
+definition highest_votes :: "(inst \<Rightarrow>f acc \<Rightarrow>f ('v cmd \<times> nat) option option) \<Rightarrow> nat \<Rightarrow>f 'v cmd option" where
+  "highest_votes m \<equiv>
     let
-        votes = (map snd) o$ m;
-        highest = (\<lambda> l . if (l = []) then None else (fold max l (l!0)) \<bind> (\<lambda> vb . Some (fst vb)))
-    in highest o$ votes"
+        votes = \<lambda> ff . (\<lambda> x . x \<bind> (\<lambda> y . y \<bind> (\<lambda> z . Some z))) o$ ff;
+        bal = \<lambda> vote . vote \<bind> Some o snd;
+        highest = \<lambda> ff . ffold (\<lambda> x r . if (bal x < bal r) then r else x) None 
+          (finfun_fset_image (votes ff))
+    in (\<lambda> vote . vote \<bind> Some o fst ) o$ (highest o$ m)"
 
-text {* Instead of trying to define the max as a recursive function, let's use finfun_to_list. *}
-value "((K$ False)(5 $:= True)(4 $:= False)(2 $:= True)) $ (2::int)"
-value "finfun_to_list (((K$ False)(5 $:= True)(4 $:= False)(2 $:= True))::(nat \<Rightarrow>f bool))"
+definition test :: "nat option \<Rightarrow> nat option \<Rightarrow> bool" 
+  where "test a b \<equiv> a < b"
+
+definition highest_votes_2 :: "(inst \<Rightarrow>f acc \<Rightarrow>f ('v cmd \<times> nat) option option) \<Rightarrow> _" where
+  "highest_votes_2 m \<equiv>
+    let
+        votes = \<lambda> (ff::acc \<Rightarrow>f ('v cmd \<times> nat) option option) . 
+          (\<lambda> x . x \<bind> (\<lambda> y . y \<bind> (\<lambda> z . Some z))) o$ ff;
+        bal = \<lambda> vote . vote \<bind> Some o snd;
+        max = \<lambda> x r . if (bal x < bal r) then r else x;
+        im = \<lambda> (ff::acc \<Rightarrow>f ('v cmd \<times> nat) option option) .finfun_fset_image (votes ff);
+        highest = \<lambda> (ff::acc \<Rightarrow>f ('v cmd \<times> nat) option option) . ffold max None (im ff)
+    in highest o$ m"
+
+definition test2 :: "(acc \<Rightarrow>f ('v cmd \<times> nat) option option) \<Rightarrow> _" where
+  "test2 ff \<equiv>
+    let
+        votes = 
+          (\<lambda> x . x \<bind> (\<lambda> y . y \<bind> (\<lambda> z . Some z))) o$ ff;
+        bal = \<lambda> vote . vote \<bind> Some o snd;
+        max = \<lambda> x r . if (bal x < bal r) then r else x;
+        im = finfun_fset_image votes;
+        highest = ffold max None im
+    in highest"
+
+export_code test3 in SML
+
+definition test4 where "test4 \<equiv> ffold max (0::nat) {||}"
+
+export_code test4 in SML
+
+definition test3 :: "(acc \<Rightarrow>f ('v cmd \<times> nat) option option) \<Rightarrow> _" where
+  "test3 ff \<equiv>
+    let
+        votes = 
+          (\<lambda> x . x \<bind> (\<lambda> y . y \<bind> (\<lambda> z . Some z))) o$ ff;
+        bal = \<lambda> vote . vote \<bind> Some o snd;
+        max = \<lambda> x r . if (bal x < bal r) then r else x;
+        im = finfun_fset_image votes
+    in im"
+
+export_code test3 in SML
 
 text {* 
   When a quorum of 1b messages is received, we complete all started instances by sending 2b messages containing a safe value.
@@ -211,21 +220,22 @@ text {*
   But that's unlikely under high load...
 
   For now we propose values to all the instances ever started.
+
+  TODO: it's a mess, rewrite.
 *}
 definition receive_1b :: "(inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
  "receive_1b last_vs bal a2 s \<equiv> (let a = id s in (
     if (Some bal = ballot s)
     then
       (let s1 = update_onebs s bal a2 last_vs
-       in (if one_b_quorum_received bal s1 
+       in (if one_b_quorum_received bal s1
           then (let
-              h = highest_voted (onebs s1 $ bal);
-              max_i = let l = (finfun_to_list (onebs s1 $ bal)) in (if l = [] then 0 else hd (rev l));
               s2 = s1\<lparr>leader := True\<rparr>;
+              h = highest_votes (onebs s1 $ bal);
+              max_i = hd (rev (finfun_to_list h));
               s3 = s2\<lparr>next_inst := max_i+1\<rparr>;
               twoa_is = [1..<max_i+1];
-              (* TODO: the following might traverse all the finfun, which is a problem when there are many instances. *)
-              s4 = fold (\<lambda> i s . s\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= [a]))\<rparr>) twoa_is s3;
+              s4 = fold (\<lambda> i s . s\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= {|a|}))\<rparr>) twoa_is s3;
               msgs = map (\<lambda> i . case h $ i of 
                   None \<Rightarrow> Phase2a i bal NoOp a
                 | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
@@ -239,18 +249,19 @@ definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarr
     (let a = id s; bal = (ballot s) in
       (if (bal = Some b)
         then (s\<lparr>vote := finfun_update_code (vote s) i (Some v),
-          twobs := finfun_update_code (twobs s) i ((K$ [])((the bal) $:= [a]))\<rparr>, 
+          twobs := finfun_update_code (twobs s) i ((K$ {||})(b $:= {|a|}))\<rparr>, 
           send_all s a (Phase2b i b a v))
         else (s, {||})))"
 
 definition is_decided where "is_decided s i \<equiv> decided s $ i \<noteq> None"
 
-definition new_twobs where "new_twobs s i b a \<equiv> a # (twobs s $ i $ b)"
+definition new_twobs where "new_twobs s i b a \<equiv> finsert a (twobs s $ i $ b)"
 
 definition update_twobs where "update_twobs s i b new \<equiv> 
   s\<lparr>twobs := finfun_update_code (twobs s) i (twobs s $ i)(b $:= new)\<rparr>"
 
-definition update_decided where "update_decided s i v \<equiv> s\<lparr>decided := finfun_update_code (decided s) i (Some v), last_decision := Some i\<rparr>"
+definition update_decided where "update_decided s i v \<equiv> 
+  s\<lparr>decided := finfun_update_code (decided s) i (Some v), last_decision := Some i\<rparr>"
 
 definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2b i b a2 v s \<equiv> let a = id s in 
@@ -260,7 +271,7 @@ definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow>
             new_twobs = new_twobs s i b a2;
             s2 = update_twobs s i b new_twobs
         in
-          (if (2 * length new_twobs > nr s)
+          (if (2 * fcard new_twobs > nr s)
             then (update_decided s2 i v, {||})
             else (s2, {||}) ) )
       else
