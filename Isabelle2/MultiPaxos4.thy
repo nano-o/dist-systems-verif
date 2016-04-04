@@ -30,8 +30,14 @@ datatype 'v  packet =
   -- {* A message with sender/destination information *}
   Packet (sender: acc) (dst: acc) (msg: "'v msg")
 
+(* TODO: try this? *)
+typedef inst2 = "UNIV::nat set" by auto
+
+(* TODO: us that? *)
+datatype 'v vote_info = voted "'v cmd" bal | not_voted
+
 record 'v acc_state =
-  id :: acc
+  self :: acc
   acceptors :: "acc fset"
     -- {* The set of all acceptors *}
   ballot :: "bal option"
@@ -57,7 +63,7 @@ fun accs where
 
 definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
   "init_acc_state n a \<equiv> \<lparr>
-    id = a,
+    self = a,
     acc_state.acceptors = accs n,
     ballot = None,
     vote = K$ None,
@@ -76,11 +82,6 @@ definition nr where
 
 subsection {* Event handlers *}
 
-definition one_b_quorum_received where
-  "one_b_quorum_received b s \<equiv> 
-    let at_b = onebs s $ b
-    in 2 * fcard (finfun_fset_dom at_b) > nr s"
-
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
   -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
   where "suc_bal a b N \<equiv> (b div N + 1) * N + a"
@@ -89,7 +90,7 @@ fun nx_bal where
   "nx_bal a None N = suc_bal a 0 N"
 | "nx_bal a (Some b) N = suc_bal a b N"
 
-definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  (acceptors s |-| {|a|})"
+definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (self s) a2 m)  (acceptors s |-| {|a|})"
 
 definition leader_of_bal where
   "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
@@ -98,7 +99,7 @@ definition leader_of_bal where
 definition do_2a where
   "do_2a s v \<equiv>
     let
-      a = id s;
+      a = self s;
       inst = (next_inst s);
       b = the (ballot s);
       msg = Phase2a inst b v a;
@@ -110,7 +111,7 @@ definition do_2a where
 
 definition propose :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
-  "propose v s \<equiv> let a = id s in
+  "propose v s \<equiv> let a = self s in
     (if (leader_of_bal s (ballot s) = a \<and> leader s)
       then do_2a s (Cmd v)
       else ( if (leader_of_bal s (ballot s) = a)
@@ -119,7 +120,7 @@ definition propose :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state
  
 (* What if the target process is not the leader anymore? TODO: Then let's forward it again. *)
 definition receive_fwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
-  "receive_fwd v s \<equiv> let a = id s in 
+  "receive_fwd v s \<equiv> let a = self s in 
     (if (leader_of_bal s (ballot s) = a) then do_2a s (Cmd v) else (s, ({||})))"
 
 definition last_votes where 
@@ -130,7 +131,7 @@ definition last_votes where
 definition send_1a :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* a tries to become the leader. *}
   "send_1a s \<equiv> let
-      a = id s;
+      a = self s;
       b = nx_bal a (ballot s) (nr s);
       msg_1a = Phase1a a b;
       s = s\<lparr>ballot := Some b, 
@@ -140,7 +141,7 @@ definition send_1a :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v pack
 
 definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_1a l b s \<equiv>
-    let bal = ballot s; a = id s in
+    let bal = ballot s; a = self s in
       (if bal < Some b
        then
           (let
@@ -159,57 +160,10 @@ definition update_onebs ::
       onebs_bal_a2 = (\<lambda> x . Some x) o$ last_vs
     in s\<lparr>onebs := (onebs s)(bal $:= (onebs s $ bal)(a2 $:= onebs_bal_a2))\<rparr>"
 
-definition highest_votes :: "(inst \<Rightarrow>f acc \<Rightarrow>f ('v cmd \<times> nat) option option) \<Rightarrow> nat \<Rightarrow>f 'v cmd option" where
-  "highest_votes m \<equiv>
-    let
-        votes = \<lambda> ff . (\<lambda> x . x \<bind> (\<lambda> y . y \<bind> (\<lambda> z . Some z))) o$ ff;
-        bal = \<lambda> vote . vote \<bind> Some o snd;
-        highest = \<lambda> ff . ffold (\<lambda> x r . if (bal x < bal r) then r else x) None 
-          (finfun_fset_image (votes ff))
-    in (\<lambda> vote . vote \<bind> Some o fst ) o$ (highest o$ m)"
-
-definition test :: "nat option \<Rightarrow> nat option \<Rightarrow> bool" 
-  where "test a b \<equiv> a < b"
-
-definition highest_votes_2 :: "(inst \<Rightarrow>f acc \<Rightarrow>f ('v cmd \<times> nat) option option) \<Rightarrow> _" where
-  "highest_votes_2 m \<equiv>
-    let
-        votes = \<lambda> (ff::acc \<Rightarrow>f ('v cmd \<times> nat) option option) . 
-          (\<lambda> x . x \<bind> (\<lambda> y . y \<bind> (\<lambda> z . Some z))) o$ ff;
-        bal = \<lambda> vote . vote \<bind> Some o snd;
-        max = \<lambda> x r . if (bal x < bal r) then r else x;
-        im = \<lambda> (ff::acc \<Rightarrow>f ('v cmd \<times> nat) option option) .finfun_fset_image (votes ff);
-        highest = \<lambda> (ff::acc \<Rightarrow>f ('v cmd \<times> nat) option option) . ffold max None (im ff)
-    in highest o$ m"
-
-definition test2 :: "(acc \<Rightarrow>f ('v cmd \<times> nat) option option) \<Rightarrow> _" where
-  "test2 ff \<equiv>
-    let
-        votes = 
-          (\<lambda> x . x \<bind> (\<lambda> y . y \<bind> (\<lambda> z . Some z))) o$ ff;
-        bal = \<lambda> vote . vote \<bind> Some o snd;
-        max = \<lambda> x r . if (bal x < bal r) then r else x;
-        im = finfun_fset_image votes;
-        highest = ffold max None im
-    in highest"
-
-export_code test3 in SML
-
-definition test4 where "test4 \<equiv> ffold max (0::nat) {||}"
-
-export_code test4 in SML
-
-definition test3 :: "(acc \<Rightarrow>f ('v cmd \<times> nat) option option) \<Rightarrow> _" where
-  "test3 ff \<equiv>
-    let
-        votes = 
-          (\<lambda> x . x \<bind> (\<lambda> y . y \<bind> (\<lambda> z . Some z))) o$ ff;
-        bal = \<lambda> vote . vote \<bind> Some o snd;
-        max = \<lambda> x r . if (bal x < bal r) then r else x;
-        im = finfun_fset_image votes
-    in im"
-
-export_code test3 in SML
+definition one_b_quorum_received where
+  "one_b_quorum_received b s \<equiv> 
+    let at_b = onebs s $ b
+    in 2 * fcard (finfun_fset_dom at_b) > nr s"
 
 text {* 
   When a quorum of 1b messages is received, we complete all started instances by sending 2b messages containing a safe value.
@@ -220,33 +174,34 @@ text {*
   But that's unlikely under high load...
 
   For now we propose values to all the instances ever started.
-
-  TODO: it's a mess, rewrite.
 *}
-definition receive_1b :: "(inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
- "receive_1b last_vs bal a2 s \<equiv> (let a = id s in (
-    if (Some bal = ballot s)
+definition receive_1b :: "(inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow>
+    'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
+ "receive_1b last_vs bal a2 s \<equiv> (let a = self s in (
+    if (Some bal = ballot s \<and> \<not> leader s) (* if leadership has not been acquired in the current ballot *)
     then
-      (let s1 = update_onebs s bal a2 last_vs
-       in (if one_b_quorum_received bal s1
-          then (let
-              s2 = s1\<lparr>leader := True\<rparr>;
-              h = highest_votes (onebs s1 $ bal);
-              max_i = hd (rev (finfun_to_list h));
-              s3 = s2\<lparr>next_inst := max_i+1\<rparr>;
-              twoa_is = [1..<max_i+1];
-              s4 = fold (\<lambda> i s . s\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= {|a|}))\<rparr>) twoa_is s3;
-              msgs = map (\<lambda> i . case h $ i of 
-                  None \<Rightarrow> Phase2a i bal NoOp a
-                | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
-              pckts = map (\<lambda> m . send_all s a m) msgs
-            in (s4, fold (op |\<union>|) pckts {||}) )
-          else (s1, {||}) ) )
+      (let s2 = update_onebs s bal a2 last_vs
+       in (if one_b_quorum_received bal s2
+          then ( let 
+              onebs_at_bal = onebs s $ bal; (* acc \<Rightarrow> inst \<Rightarrow> (vote \<times> bal) option *)
+              inst_packets = (\<lambda> i . let
+                  inst_votes = (\<lambda> ff . ff $ i \<bind> id) o$ onebs_at_bal; (* acc \<Rightarrow> (vote \<times> bal) option *)
+                  to_linorder = \<lambda> x . x \<bind> Some o snd; (* We compare votes by ballot *)
+                  inst_max_es = image_max_es to_linorder inst_votes; (* Invariant: is a singleton *)
+                  msg = (\<lambda> vote . case (vote \<bind> Some o fst) of None \<Rightarrow> Phase2a i bal (NoOp::'v cmd) a
+                    | Some v \<Rightarrow> Phase2a i bal v a)
+                in fbind inst_max_es (\<lambda> vote . send_all s a (msg vote)));
+              instances = ffUnion (finfun_fset_image ((\<lambda> ff . (finfun_fset_dom ff)) o$ onebs_at_bal));
+              packets = fbind instances inst_packets;
+              next_i = Max (fset instances);
+              s3 = s2\<lparr>leader := True, next_inst := next_i\<rparr>
+            in (s3, packets) )
+          else (s2, {||}) ) )
     else (s, {||})) )"
 
 definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2a i b v l s =
-    (let a = id s; bal = (ballot s) in
+    (let a = self s; bal = (ballot s) in
       (if (bal = Some b)
         then (s\<lparr>vote := finfun_update_code (vote s) i (Some v),
           twobs := finfun_update_code (twobs s) i ((K$ {||})(b $:= {|a|}))\<rparr>, 
@@ -264,7 +219,7 @@ definition update_decided where "update_decided s i v \<equiv>
   s\<lparr>decided := finfun_update_code (decided s) i (Some v), last_decision := Some i\<rparr>"
 
 definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
-  "receive_2b i b a2 v s \<equiv> let a = id s in 
+  "receive_2b i b a2 v s \<equiv> let a = self s in 
     (if (True) (* TODO: fix this. Was \<not> is_decided s i. Removed because that traversed the whole finfun. *)
       then
         (let 
