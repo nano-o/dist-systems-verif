@@ -51,7 +51,7 @@ qed
 
 value "max_es snd {(1::int,1::int), (2,3::int)}"
 
-lemma max_in_set: "finite es \<Longrightarrow> x |\<in>| max_es f es \<Longrightarrow> x \<in> es"
+lemma max_in_set_aux: "finite es \<Longrightarrow> x |\<in>| max_es f es \<Longrightarrow> x \<in> es"
 proof (induct es arbitrary: x rule:finite_induct)
   case empty thus ?case by (simp add:max_es_def)
 next
@@ -59,9 +59,12 @@ next
   by (metis ffmember_filter finsertE max_acc_def) 
 qed
 
+lemma max_es_in_set:"x |\<in>| max_es f es \<Longrightarrow> x \<in> es"
+by (metis fempty_iff max_acc_folding.eq_fold max_acc_folding.infinite max_es_def max_in_set_aux)
+
 lemma max_acc_maxs:
   fixes xs x f 
-  assumes  "finite xs" "fBex (max_es f xs) ((op <) (f y) o f)" 
+  assumes  "finite xs" and "fBex (max_es f xs) ((op <) (f y) o f)" 
   shows "\<not> (y |\<in>| (max_es f xs))" using assms
 proof (induct xs arbitrary:y rule:finite_induct)
   case (empty y) thus ?case by (simp add:max_es_def)
@@ -70,13 +73,13 @@ next
   by (smt comp_eq_dest_lhs fBexE fBexI ffmember_filter finsertE max_acc_def max_acc_folding.eq_fold max_acc_folding_idem.insert_idem max_es_def not_le order_refl)  
 qed
 
-lemma max_es_1:
+lemma max_es_1_aux:
   fixes xs y f 
   assumes "y |\<in>| (max_es f xs)"
   shows "\<not> fBex (max_es f xs) ((op <) (f y) o f)"
 by (metis assms fempty_iff max_acc_folding.eq_fold max_acc_folding.infinite max_acc_maxs max_es_def)
 
-lemma max_es_2:
+lemma max_es_2_aux:
 fixes xs x f
 assumes "finite xs" and "x \<in> xs" and "\<not> fBex (max_es f xs) ((op <) (f x) o f)"
 shows "x |\<in>| (max_es f xs)" using assms
@@ -86,5 +89,17 @@ next
   case (insert x xs) thus ?case
   by (metis finite.insertI finsert_iff insert_Diff insert_absorb2 max_acc_def max_acc_folding.eq_fold max_acc_folding_idem.insert_idem max_es_def) 
 qed
+
+lemma max_es_1:
+fixes xs y f x
+assumes "y |\<in>| (max_es f xs)" and "x \<in> xs" and "x \<noteq> y" 
+shows "\<not> f y < f x" using assms
+by (smt dual_order.strict_implies_order fBexE fBexI fempty_iff less_le_trans max_acc_folding.eq_fold max_acc_folding.infinite max_es_1_aux max_es_2_aux max_es_def o_apply)
+
+lemma max_es_2:
+fixes xs x f
+assumes "finite xs" and "x \<in> xs" and "\<And> y . \<lbrakk>y \<in> xs; y \<noteq> x\<rbrakk> \<Longrightarrow> \<not> f x < f y"
+shows "x |\<in>| (max_es f xs)" using assms
+by (metis (mono_tags, hide_lams) comp_apply fBexE max_es_2_aux max_es_in_set)
 
 end
