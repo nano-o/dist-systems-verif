@@ -1,14 +1,19 @@
 theory FinFun_Supplemental
 imports "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
+  FSet_Maximal
 begin
 
 subsection {* The domain of a finfun as an fset, using finfun_rec *}
 
 text {* Note that CARD is executable in card_UNIV *}
 
-definition finfun_fset_dom_c :: "'b \<Rightarrow> 'b \<times> ('a :: card_UNIV) fset"
+text {*
+First tried with in a locale for infinite types but it was a bit messy.
+Using undefined in case of finite cardinality seems easier. *}
+
+definition finfun_fset_dom_c :: "'b \<Rightarrow> 'b \<times> 'a  fset"
   where "finfun_fset_dom_c d \<equiv> if CARD('a) = 0 then (d,{||}) else undefined"
-definition finfun_fset_dom_u :: "('a :: card_UNIV) \<Rightarrow> 'b \<Rightarrow>'b \<times> 'a fset \<Rightarrow> 'b \<times> 'a fset" where 
+definition finfun_fset_dom_u :: "'a \<Rightarrow> 'b \<Rightarrow>'b \<times> 'a fset \<Rightarrow> 'b \<times> 'a fset" where 
   "finfun_fset_dom_u k v r \<equiv> if CARD('a) = 0 then (
     if v = fst r
     then (if (k |\<in>| snd r) then (fst r, snd r |-|  {|k|}) else r)
@@ -74,5 +79,12 @@ subsection {* The image of a finfun as an fset *}
 
 definition finfun_fset_image where 
   "finfun_fset_image ff \<equiv> (\<lambda> x . ff $ x) |`| finfun_fset_dom ff"
+
+subsection {* Maximal elements in the image *}
+
+definition image_max_es where
+  "image_max_es f ff \<equiv> max_es f (fset (finfun_fset_image ff))"
+
+value "image_max_es id ((K$ 0)::nat \<Rightarrow>f nat)(1 $:= 4)(2 $:= 1)"
 
 end
