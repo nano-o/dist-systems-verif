@@ -2,11 +2,18 @@ theory FSet_Maximal
 imports Main "~~/src/HOL/Library/FSet"
 begin
 
-subsubsection {* Executable max *}
+section {* Obtaining the fset of maximal elements among a set. *}
+
+subsection {* Definition of max_es *}
 
 definition max_acc where "max_acc (f::'a \<Rightarrow> ('b::linorder)) x xs \<equiv>
   if fBex xs ((op <) (f x) o f) then xs 
   else finsert x (ffilter (\<lambda> b2 . \<not> f b2 < f x) xs)"
+
+definition max_es where 
+  "max_es f xs \<equiv> Finite_Set.fold (max_acc (f::'a \<Rightarrow> ('b::linorder))) {||} xs"
+
+subsection {* interpretation of folding_idem *}
 
 interpretation max_acc_commute:comp_fun_commute "max_acc f" for f
 proof (unfold_locales, simp only: fun_eq_iff, rule allI)
@@ -34,8 +41,7 @@ proof(unfold_locales, simp only:comp_def fun_eq_iff, rule allI)
   qed
 qed       
 
-definition max_es where 
-  "max_es f xs \<equiv> Finite_Set.fold (max_acc (f::'a \<Rightarrow> ('b::linorder))) {||} xs"
+subsection {* A code equation for max_es *}
 
 lemma [code]:"max_es f (set xs) = fold (max_acc f) xs {||}"
 proof -
@@ -50,6 +56,8 @@ proof -
 qed
 
 value "max_es snd {(1::int,1::int), (2,3::int)}"
+
+subsection {* Properties of max_es *}
 
 lemma max_in_set_aux: "finite es \<Longrightarrow> x |\<in>| max_es f es \<Longrightarrow> x \<in> es"
 proof (induct es arbitrary: x rule:finite_induct)
