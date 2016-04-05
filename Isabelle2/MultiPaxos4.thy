@@ -30,11 +30,10 @@ datatype 'v  packet =
   -- {* A message with sender/destination information *}
   Packet (sender: acc) (dst: acc) (msg: "'v msg")
 
-(* TODO: try this? *)
-typedef inst2 = "UNIV::nat set" by auto
-
-(* TODO: us that? *)
+(* TODO: use that? *)
 datatype 'v vote_info = voted "'v cmd" bal | not_voted
+
+datatype 'v inst_status = not_started | pending "'v cmd" | decided (decision:"'v cmd")
 
 record 'v acc_state =
   self :: acc
@@ -51,15 +50,23 @@ record 'v acc_state =
       this is the 1b information received from a in ballot b about instance i. *}
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f acc fset"
     -- {* fset describing the 2b messages received, indexed by instance and ballot. *}
-  decided :: "inst \<Rightarrow>f 'v cmd option"
   next_inst :: "nat"
-  pending :: "inst \<Rightarrow>f 'v cmd option"
+  inst_status :: "inst \<Rightarrow>f 'v inst_status"
   leader :: "bool"
   last_decision :: "nat option"
 
 fun accs where
   "accs (0::nat) = {||}"
 | "accs (Suc n) = (accs n) |\<union>| {|Suc n|}"
+
+lemma accs_def_2:"accs n = Abs_fset {1..<Suc n}"
+proof (induct n)
+  case 0 thus ?case
+  by (metis accs.simps(1) atLeastLessThanSuc bot_fset_def not_one_le_zero) 
+next
+  case (Suc n) thus ?case 
+  by simp (metis Suc_leI atLeastLessThanSuc eq_onp_same_args finite_atLeastLessThan finsert.abs_eq zero_less_Suc)
+qed
 
 definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
   "init_acc_state n a \<equiv> \<lparr>
@@ -70,9 +77,8 @@ definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" 
     last_ballot = K$ None,
     onebs = K$ K$ K$ None,
     twobs = K$ K$ {||},
-    decided = K$ None,
     next_inst = 1, (* instances start at 1 *)
-    pending = K$ None,
+    inst_status = K$ not_started,
     leader = False,
     last_decision = None\<rparr>"
 
@@ -104,7 +110,7 @@ definition do_2a where
       b = the (ballot s);
       msg = Phase2a inst b v a;
       new_state = s\<lparr>next_inst := (inst+1),
-        pending := finfun_update_code (pending s) inst (Some v),
+        inst_status := finfun_update_code (inst_status s) inst (pending v),
         twobs := finfun_update_code (twobs s) inst ((K$ {||})(b $:= {|a|}))\<rparr>
     in
       (new_state, send_all s a msg)"
@@ -208,39 +214,40 @@ definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarr
           send_all s a (Phase2b i b a v))
         else (s, {||})))"
 
-definition is_decided where "is_decided s i \<equiv> decided s $ i \<noteq> None"
+definition is_decided where 
+  "is_decided s i \<equiv> case (inst_status s $ i) of decided _ \<Rightarrow> True | _ \<Rightarrow> False"
 
 definition new_twobs where "new_twobs s i b a \<equiv> finsert a (twobs s $ i $ b)"
 
 definition update_twobs where "update_twobs s i b new \<equiv> 
   s\<lparr>twobs := finfun_update_code (twobs s) i (twobs s $ i)(b $:= new)\<rparr>"
 
-definition update_decided where "update_decided s i v \<equiv> 
-  s\<lparr>decided := finfun_update_code (decided s) i (Some v), last_decision := Some i\<rparr>"
-
 definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2b i b a2 v s \<equiv> let a = self s in 
-    (if (True) (* TODO: fix this. Was \<not> is_decided s i. Removed because that traversed the whole finfun. *)
+    (if (\<not> is_decided s i)
       then
         (let 
             new_twobs = new_twobs s i b a2;
             s2 = update_twobs s i b new_twobs
         in
           (if (2 * fcard new_twobs > nr s)
-            then (update_decided s2 i v, {||})
+            then let 
+                s3 = s2\<lparr>inst_status := (inst_status s)(i $:= decided v)\<rparr> in
+              (s3, {||})
             else (s2, {||}) ) )
       else
         (s, {||}) )"
 
 definition get_last_decision where 
-  "get_last_decision s \<equiv> the (decided s $ (the (last_decision s)))"
+  "get_last_decision s \<equiv> decision (inst_status s $ (the (last_decision s)))"
 
 text {* output transition could return an option *}
 definition learn :: "inst \<Rightarrow> 'v  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset) option" where 
-  "learn i v s \<equiv> 
-    case (decided s $ i) of None \<Rightarrow> None |
-      Some cm \<Rightarrow> (case cm of NoOp \<Rightarrow> None 
-        | Cmd c \<Rightarrow> (if v = c then Some (s, {||}) else None))"
+  "learn i v s \<equiv>
+    case (inst_status s $ i) of decided x \<Rightarrow> 
+      (case x of NoOp \<Rightarrow> None 
+      | Cmd c \<Rightarrow> (if v = c then Some (s, {||}) else None))
+    | _ \<Rightarrow> None"
 
 fun process_msg where
   "process_msg (Phase1a l b) s = receive_1a l b s"
@@ -306,12 +313,14 @@ fun init_nodes_state where
 | "init_nodes_state (Suc i) n = 
     (if Suc i > n then undefined else (init_nodes_state i n)(Suc i $:= init_acc_state n (Suc i)))"
 
-definition init_nodes_state_2 where
-  "init_nodes_state_2 \<equiv> Abs_finfun
-    (\<lambda> a . if a |\<in>| accs nas then init_acc_state nas a else undefined)"
+definition init_nodes_state_2_fun where 
+  "init_nodes_state_2_fun \<equiv> \<lambda> a . if a |\<in>| accs nas then init_acc_state nas a else undefined"
 
-lemma init_nodes_state_2_is_finfun: "(\<lambda> a . if a |\<in>| accs nas then init_acc_state nas a else undefined) \<in> finfun"
-apply(simp add:finfun_def)
+definition init_nodes_state_2 where
+  "init_nodes_state_2 \<equiv> Abs_finfun init_nodes_state_2_fun"
+
+lemma init_nodes_state_2_is_finfun: "init_nodes_state_2_fun \<in> finfun"
+apply(simp add:finfun_def init_nodes_state_2_fun_def)
 apply (rule exI[where x="undefined"])
 apply auto
 subgoal proof -
@@ -332,7 +341,7 @@ by (induct a n arbitrary:n rule:init_nodes_state.induct, auto)
 
 
 definition mp_start where
-  "mp_start \<equiv> \<lparr>node_states = (init_nodes_state nas nas), network = {||}\<rparr>"
+  "mp_start \<equiv> \<lparr>node_states = (init_nodes_state_2), network = {||}\<rparr>"
 
 definition update_state where 
   "update_state a a_s packets s \<equiv>
