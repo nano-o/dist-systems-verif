@@ -1,5 +1,6 @@
 theory BallotArrays2
 imports Main Quorums LinorderOption "~~/src/HOL/Library/FinFun_Syntax"
+  FinFun_Supplemental
 begin
 
 locale ballot_array =
@@ -19,14 +20,24 @@ definition conservative_array where
 
 text {* Here the max is the one from Lattices_Big *}
 
+(* TODO: this is not used... *)
 definition max_voted_round where
   "max_voted_round a bound \<equiv> Max {b . vote $ a $ b \<noteq> None \<and> b \<le> bound}"
-  
+
+definition max_voted_round_2 where
+  "max_voted_round_2 a bound \<equiv> Max {b \<in> fset (finfun_fset_dom (vote $ a)) . b \<le> bound}"
+
 definition max_voted_round_q where
   "max_voted_round_q q bound \<equiv> 
     if \<exists> b a . a |\<in>| q \<and> b \<le> bound \<and> vote $ a $ b \<noteq> None
     then Some (Max {b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote $ a $ b \<noteq> None})
     else None"
+
+definition max_voted_round_q_2 where
+  "max_voted_round_q_2 q bound \<equiv> let
+    max_acc = (\<lambda> ff . {b \<in> fset (finfun_fset_dom ff) . b \<le> bound}) o$ vote;
+    max_acc_q = id o$ max_acc (* TODO: here we would need the ` operator *)
+  in max_acc"
 
 lemma finite_voted_bals:"finite {b::nat . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote $ a $ b \<noteq> None}"
 proof -
@@ -34,7 +45,7 @@ proof -
     by auto
   moreover have "finite {b::nat . b \<le> bound}" by simp
   ultimately show ?thesis
-  by (metis (no_types, lifting) finite_subset) 
+  by (metis (no_types, lifting) finite_subset)
 qed
 
 lemma max_voted_round_none:
@@ -274,7 +285,7 @@ next
           by (metis dual_order.strict_trans1 less_def less_o.simps(4))
         thus ?thesis by (metis "5" a(4) cc option.distinct(1) that(2)) 
       next
-        case bb (* Here we probably need the fact that the array is conservative: *)
+        case bb (* Here we need the fact that the array is conservative: *)
         have 1:"vote $ a $ k = Some v" if "a |\<in>| acceptors" and " vote $ a $ k \<noteq> None"  for a using that assms(5) 
           by (auto simp add:conservative_array_def conservative_def)
             (metis a(1) a(2) assms(2) fset_rev_mp option.inject quorums_axioms quorums_def)  
@@ -298,7 +309,7 @@ next
       by (metis safe_at_def) 
   qed 
 qed
-  
+
 end
 
 end

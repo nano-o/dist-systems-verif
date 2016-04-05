@@ -1,5 +1,5 @@
 theory BallotArrays
-imports Main Quorums LinorderOption
+imports Main Quorums LinorderOption FSet_Maximal
 begin
 
 locale ballot_array =
@@ -18,9 +18,6 @@ definition conservative_array where
   "conservative_array \<equiv> \<forall> b . conservative b"
 
 text {* Here the max is the one from Lattices_Big *}
-
-definition max_voted_round where
-  "max_voted_round a bound \<equiv> Max {b . vote a b \<noteq> None \<and> b \<le> bound}"
   
 definition max_voted_round_q where
   "max_voted_round_q q bound \<equiv> 
@@ -80,6 +77,15 @@ definition max_vote where
         let max_voter = (SOME a . a |\<in>| q \<and> vote a b \<noteq> None)
         in (vote) max_voter b"
 
+(* TODO: use this? *)
+definition max_votes where
+  "max_votes q bound \<equiv> 
+    let votes = {(b,v) . \<exists> b . \<exists> a \<in> q . b \<le> bound \<and> vote a b = Some v}
+  in fbind (max_es fst votes) (\<lambda> ((b::nat),v) . {|v|})"
+
+definition max_vote_2 where
+  "max_vote_2 q bound \<equiv>  SOME v . v |\<in>| max_votes q bound"
+
 lemma max_vote_some_prop:
   assumes "max_vote q (bound::nat) = Some v"
   obtains a b\<^sub>m\<^sub>a\<^sub>x where "vote a b\<^sub>m\<^sub>a\<^sub>x = max_vote q bound" and "a |\<in>| q"
@@ -87,7 +93,7 @@ lemma max_vote_some_prop:
   and "b\<^sub>m\<^sub>a\<^sub>x \<le> bound"
 proof -
   from assms obtain b\<^sub>m\<^sub>a\<^sub>x where 0:"max_voted_round_q q bound = Some (b\<^sub>m\<^sub>a\<^sub>x::nat)"
-    by (auto simp add:max_vote_def) (metis (lifting) not_None_eq option.simps(4)) 
+    by (auto simp add:max_vote_def) (metis (lifting) not_None_eq option.simps(4))
   with max_voted_round_some obtain a where
     "a |\<in>| q" and "vote a b\<^sub>m\<^sub>a\<^sub>x \<noteq> None" and 1:"b\<^sub>m\<^sub>a\<^sub>x \<le> bound" by metis
   hence 
@@ -149,21 +155,25 @@ begin
 lemma "safe_at v (bot::nat)"
 by (auto simp add:safe_at_def)
 
+(* Only used in save \<Rightarrow> agreement *)
 lemma chosen_at_is_choosable:
   assumes "chosen_at v b"
   shows "choosable v b" using assms
   by (auto simp add:chosen_at_def choosable_def)
 
+(* Not used *)
 lemma safe_at_prec:
   assumes "safe_at v b" and "b2 < b"
   shows "safe_at v b2"
   using assms by (meson order.strict_trans safe_at_def)
 
+(* Only used in save \<Rightarrow> agreement *)
 lemma chosen_at_same:
   assumes "chosen_at v1 b1" and "chosen_at v2 b1"
   shows "v1 = v2" 
 by (metis assms chosen_at_def option.inject quorum_inter_witness)
 
+(* Not used *)
 lemma all_choosable_no_safe:
   assumes "\<And> (v::'b) . choosable v b"
   and "safe_at v (Suc b)" and "(v1::'b) \<noteq> v2"
