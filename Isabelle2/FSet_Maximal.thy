@@ -1,8 +1,8 @@
+section {* Obtaining the fset of maximal elements among a set. *}
+
 theory FSet_Maximal
 imports Main "~~/src/HOL/Library/FSet"
 begin
-
-section {* Obtaining the fset of maximal elements among a set. *}
 
 subsection {* Definition of max_es *}
 
