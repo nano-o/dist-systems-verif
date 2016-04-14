@@ -143,7 +143,7 @@ definition leader_of_bal where
 definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  (acceptors s |-| {|a|})"
 
 definition do_2a where
-  "do_2a s v \<equiv>
+    "do_2a s v \<equiv>
     let
       a = id s;
       inst = (next_inst s);
@@ -317,7 +317,7 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code learn send_1a propose process_msg init_acc_state
-  serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala"
+  serialize_finfun deserialize_finfun get_next_instance get_ballot is_leader get_leader in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
 
@@ -326,7 +326,7 @@ record 'v mp_state =
   network :: "'v packet fset"
 
 datatype 'v mp_action =
-  Receive_fwd acc acc 'v
+  Receive_fwd acc acc 'v 
 | Propose acc "'v cmd"
 | Send_1as acc
 | Receive_1a_send_1b acc acc bal

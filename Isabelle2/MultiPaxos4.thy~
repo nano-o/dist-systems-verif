@@ -73,14 +73,14 @@ record 'v acc_state =
 
 fun accs where
   "accs (0::nat) = {||}"
-| "accs (Suc n) = (accs n) |\<union>| {|n|}"
+| "accs (Suc n) = (accs n) |\<union>| {|Suc n|}"
 
 definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
   "init_acc_state n a \<equiv> \<lparr>
     id = a,
     acc_state.acceptors = accs n,
     ballot = None,
-    vote = K$ None, 
+    vote = K$ None,
     last_ballot = K$ None,
     onebs = K$ K$ [],
     twobs = K$ K$ [],
@@ -104,28 +104,13 @@ definition one_b_quorum_received where
         at_b_i = at_b $ 0
     in 2 * length at_b_i > nr s"
 
-fun getOwnedBallot where 
-  "getOwnedBallot a (Suc b) N = (if ((Suc b) mod N = a) then (Suc b)
-    else (getOwnedBallot a b N))"
-| "getOwnedBallot a 0 N = 0"
-
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
   -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
-  where "suc_bal a b N \<equiv> getOwnedBallot a (b + N) N"
+  where "suc_bal a b N \<equiv> (b div N + 1) * N + a"
 
 fun nx_bal where
   "nx_bal a None N = suc_bal a 0 N"
 | "nx_bal a (Some b) N = suc_bal a b N"
-
-definition get_ballot where "get_ballot s \<equiv> ballot s"
-
-definition is_leader where "is_leader s \<equiv> leader s"
-
-definition get_leader where 
-  "get_leader s \<equiv> case ballot s of Some (b::nat) \<Rightarrow> Some (b mod (nr s)) | _ \<Rightarrow> None"
-
-definition get_next_instance where
-  "get_next_instance s \<equiv> next_inst s"
 
 definition one_a_msgs where
   -- {* The set of 1a messages to send to try to become the leader *}
