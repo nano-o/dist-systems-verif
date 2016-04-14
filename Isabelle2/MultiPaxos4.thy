@@ -51,6 +51,7 @@ datatype 'v  packet =
   -- {* A message with sender/destination information *}
   Packet (sender: acc) (dst: acc) (msg: "'v msg")
 
+
 record 'v acc_state =
   id :: acc
   acceptors :: "acc fset"
@@ -75,6 +76,28 @@ fun accs where
   "accs (0::nat) = {||}"
 | "accs (Suc n) = (accs n) |\<union>| {|n|}"
 
+definition nr where
+  -- {* The number of replicas *}
+  "nr s \<equiv> fcard (acceptors s)"
+
+text {* A few functions to export to Scala for use by the runtime. *}
+
+definition get_ballot where "get_ballot s \<equiv> ballot s"
+
+definition is_leader where "is_leader s \<equiv> leader s"
+
+definition get_leader where 
+  "get_leader s \<equiv> case ballot s of Some (b::nat) \<Rightarrow> Some (b mod (nr s)) | _ \<Rightarrow> None"
+
+datatype 'v inst_status = s_not_participated | s_pending "'v cmd" | s_decided (decision:"'v cmd")
+
+definition get_instance_info where
+  "get_instance_info s i \<equiv> 
+    case decided s $ i of Some c \<Rightarrow> s_decided c | _ \<Rightarrow> (
+      case pending s $ i of Some c \<Rightarrow> s_pending c | _ \<Rightarrow> s_not_participated )"
+
+definition get_next_instance where
+  "get_next_instance s \<equiv> next_inst s"
 definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
   "init_acc_state n a \<equiv> \<lparr>
     id = a,
@@ -90,9 +113,6 @@ definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" 
     leader = False,
     last_decision = None\<rparr>"
 
-definition nr where
-  -- {* The number of replicas *}
-  "nr s \<equiv> fcard (acceptors s)"
 
 subsection {* Event handlers *}
 
@@ -117,15 +137,7 @@ fun nx_bal where
   "nx_bal a None N = suc_bal a 0 N"
 | "nx_bal a (Some b) N = suc_bal a b N"
 
-definition get_ballot where "get_ballot s \<equiv> ballot s"
 
-definition is_leader where "is_leader s \<equiv> leader s"
-
-definition get_leader where 
-  "get_leader s \<equiv> case ballot s of Some (b::nat) \<Rightarrow> Some (b mod (nr s)) | _ \<Rightarrow> None"
-
-definition get_next_instance where
-  "get_next_instance s \<equiv> next_inst s"
 
 definition one_a_msgs where
   -- {* The set of 1a messages to send to try to become the leader *}
@@ -249,12 +261,15 @@ definition receive_1b :: "(inst \<Rightarrow>f ('v cmd \<times> bal) option) \<R
           else (s1, {||}) ) )
     else (s, {||})) )"
 
+text {* TODO: ok to update next_inst here? *}
 definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2a i b v l s =
     (let a = id s; bal = (ballot s) in
       (if (bal = Some b)
         then (s\<lparr>vote := finfun_update_code (vote s) i (Some v),
-          twobs := finfun_update_code (twobs s) i ((K$ [])((the bal) $:= [a]))\<rparr>, 
+          twobs := finfun_update_code (twobs s) i ((K$ [])((the bal) $:= [a])),
+          next_inst := i+1,
+          pending := finfun_update_code (pending s) i (Some v)\<rparr>,
           send_all s a (Phase2b i b a v))
         else (s, {||})))"
 
@@ -262,7 +277,7 @@ definition is_decided where "is_decided s i \<equiv> decided s $ i \<noteq> None
 
 definition new_twobs where "new_twobs s i b a \<equiv> a # (twobs s $ i $ b)"
 
-definition update_twobs where "update_twobs s i b new \<equiv> 
+definition update_twobs where "update_twobs s i b new \<equiv>
   s\<lparr>twobs := finfun_update_code (twobs s) i (twobs s $ i)(b $:= new)\<rparr>"
 
 definition update_decided where "update_decided s i v \<equiv> s\<lparr>decided := finfun_update_code (decided s) i (Some v), last_decision := Some i\<rparr>"
@@ -317,7 +332,8 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code learn send_1a propose process_msg init_acc_state
-  serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala"
+  serialize_finfun deserialize_finfun get_ballot is_leader  get_leader  get_instance_info 
+in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
 
@@ -338,13 +354,7 @@ datatype 'v mp_action =
 locale mp_ioa = IOA +
   fixes nas :: nat
     -- {* The number of acceptors *}
-begin    
-
-text {* TODO: get rid of this! *}
-no_notation Append  (infixl "#" 65)
-notation Cons (infixr "#" 65)
-no_notation Concat  (infixl "@" 65)
-notation append (infixr "@" 65)
+begin
 
 definition mp_asig where
   "mp_asig \<equiv>
