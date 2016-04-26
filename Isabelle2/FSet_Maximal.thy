@@ -4,7 +4,7 @@ theory FSet_Maximal
 imports Main "~~/src/HOL/Library/FSet"
 begin
 
-subsection {* Definition of max_es *}
+subsection {* Definition of @{text max_es} *}
 
 definition max_acc where "max_acc (f::'a \<Rightarrow> ('b::linorder)) x xs \<equiv>
   if fBex xs ((op <) (f x) o f) then xs 
@@ -13,7 +13,7 @@ definition max_acc where "max_acc (f::'a \<Rightarrow> ('b::linorder)) x xs \<eq
 definition max_es where 
   "max_es f xs \<equiv> Finite_Set.fold (max_acc (f::'a \<Rightarrow> ('b::linorder))) {||} xs"
 
-subsection {* interpretation of folding_idem *}
+subsection {* interpretation of @{text folding_idem} *}
 
 interpretation max_acc_commute:comp_fun_commute "max_acc f" for f
 proof (unfold_locales, simp only: fun_eq_iff, rule allI)
@@ -41,7 +41,7 @@ proof(unfold_locales, simp only:comp_def fun_eq_iff, rule allI)
   qed
 qed       
 
-subsection {* A code equation for max_es *}
+subsection {* A code equation for @{text max_es} *}
 
 lemma [code]:"max_es f (set xs) = fold (max_acc f) xs {||}"
 proof -
@@ -57,7 +57,7 @@ qed
 
 value "max_es snd {(1::int,1::int), (2,3::int)}"
 
-subsection {* Properties of max_es *}
+subsection {* Properties of @{text max_es} *}
 
 lemma max_in_set_aux: "finite es \<Longrightarrow> x |\<in>| max_es f es \<Longrightarrow> x \<in> es"
 proof (induct es arbitrary: x rule:finite_induct)

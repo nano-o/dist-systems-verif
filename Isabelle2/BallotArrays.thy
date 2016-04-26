@@ -2,7 +2,10 @@ theory BallotArrays
 imports Main Quorums LinorderOption FSet_Maximal
 begin
 
+section {* Definition of ballot arrays and their properties. *}
+
 locale ballot_array =
+  -- {* @{typ 'a} is the type of acceptors *}
   fixes ballot :: "'a \<Rightarrow> nat option"
   and vote :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   and quorums :: "'a fset fset"
@@ -17,13 +20,64 @@ definition conservative where
 definition conservative_array where
   "conservative_array \<equiv> \<forall> b . conservative b"
 
-text {* Here the max is the one from Lattices_Big *}
+text {* Here the max is the one from @{text Lattices_Big} *}
   
 definition max_voted_round_q where
   "max_voted_round_q q bound \<equiv> 
     if \<exists> b a . a |\<in>| q \<and> b \<le> bound \<and> vote a b \<noteq> None
     then Some (Max {b . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote a b \<noteq> None})
     else None"
+ 
+definition max_vote where
+  "max_vote q bound \<equiv>
+    case max_voted_round_q q bound of
+      None \<Rightarrow> None
+    | Some b \<Rightarrow> 
+        let max_voter = (SOME a . a |\<in>| q \<and> vote a b \<noteq> None)
+        in (vote) max_voter b"
+
+text {* TODO: here's a more declarative definition of @{term max_vote} (needs @{verbatim FSet_Maximal.thy}): *}
+
+definition max_votes where
+  "max_votes q bound \<equiv> 
+    let votes = {(b,v) . \<exists> b . \<exists> a \<in> q . b \<le> bound \<and> vote a b = Some v}
+  in fbind (max_es fst votes) (\<lambda> ((b::nat),v) . {|v|})"
+
+definition max_vote_2 where
+  "max_vote_2 q bound \<equiv>  SOME v . v |\<in>| max_votes q bound"
+
+definition proved_safe_at where
+  "proved_safe_at Q b v \<equiv>
+    case b of 0 \<Rightarrow> True
+  | Suc c \<Rightarrow> (case (max_vote Q c) of (* note that here c is b-1 *)
+      None \<Rightarrow> True
+    | Some v' \<Rightarrow> v = v')"
+
+definition chosen_at where
+  "chosen_at v b \<equiv> \<exists> q . q |\<in>| quorums \<and> (\<forall> a . a |\<in>| q \<longrightarrow> (vote) a b = (Some v))"
+
+definition chosen where
+  "chosen v \<equiv> \<exists> b . chosen_at v b"
+  
+definition choosable where
+  "choosable v b \<equiv>
+    \<exists> q . q |\<in>| quorums \<and> (\<forall> a . a |\<in>| q \<longrightarrow> (
+      ballot a > Some b \<longrightarrow> vote a b = Some v))"
+
+definition safe_at where
+  "safe_at v b \<equiv>
+    (\<forall> b2 . \<forall> v2 .
+      ((b2 < b \<and> choosable v2 b2) \<longrightarrow> (v = v2)))"
+
+definition safe where
+  "safe \<equiv> \<forall> b . \<forall> a . a |\<in>| acceptors \<longrightarrow> 
+    (let vote = (vote) a b in (case vote of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b))"
+  
+definition well_formed where
+  "well_formed \<equiv> \<forall> a b . a |\<in>| acceptors \<and> ballot a < b  
+    \<longrightarrow> vote a (the b) = None"
+
+subsection {* A few lemmas *}
 
 lemma finite_voted_bals:"finite {b::nat . \<exists> a . a |\<in>| q \<and> b \<le> bound \<and> vote a b \<noteq> None}"
 proof -
@@ -68,23 +122,6 @@ proof -
   ultimately show ?thesis using that
   by (smt Max_in empty_iff finite_nat_set_iff_bounded_le mem_Collect_eq) 
 qed
- 
-definition max_vote where
-  "max_vote q bound \<equiv>
-    case max_voted_round_q q bound of
-      None \<Rightarrow> None
-    | Some b \<Rightarrow> 
-        let max_voter = (SOME a . a |\<in>| q \<and> vote a b \<noteq> None)
-        in (vote) max_voter b"
-
-(* TODO: use this? *)
-definition max_votes where
-  "max_votes q bound \<equiv> 
-    let votes = {(b,v) . \<exists> b . \<exists> a \<in> q . b \<le> bound \<and> vote a b = Some v}
-  in fbind (max_es fst votes) (\<lambda> ((b::nat),v) . {|v|})"
-
-definition max_vote_2 where
-  "max_vote_2 q bound \<equiv>  SOME v . v |\<in>| max_votes q bound"
 
 lemma max_vote_some_prop:
   assumes "max_vote q (bound::nat) = Some v"
@@ -115,39 +152,10 @@ apply (simp add:max_vote_def split add:option.split_asm)
     apply (smt max_voted_round_none)
   apply (smt max_voted_round_some not_None_eq option.simps(3) someI_ex)
 done
-  
-definition proved_safe_at where
-  "proved_safe_at Q b v \<equiv>
-    case b of 0 \<Rightarrow> True
-  | Suc c \<Rightarrow> (case (max_vote Q c) of (* note that here c is b-1 *)
-      None \<Rightarrow> True
-    | Some v' \<Rightarrow> v = v')"
-
-definition chosen_at where
-  "chosen_at v b \<equiv> \<exists> q . q |\<in>| quorums \<and> (\<forall> a . a |\<in>| q \<longrightarrow> (vote) a b = (Some v))"
-
-definition chosen where
-  "chosen v \<equiv> \<exists> b . chosen_at v b"
-  
-definition choosable where
-  "choosable v b \<equiv>
-    \<exists> q . q |\<in>| quorums \<and> (\<forall> a . a |\<in>| q \<longrightarrow> (
-      ballot a > Some b \<longrightarrow> vote a b = Some v))"
-
-definition safe_at where
-  "safe_at v b \<equiv>
-    (\<forall> b2 . \<forall> v2 .
-      ((b2 < b \<and> choosable v2 b2) \<longrightarrow> (v = v2)))"
-
-definition safe where
-  "safe \<equiv> \<forall> b . \<forall> a . a |\<in>| acceptors \<longrightarrow> 
-    (let vote = (vote) a b in (case vote of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b))"
-  
-definition well_formed where
-  "well_formed \<equiv> \<forall> a b . a |\<in>| acceptors \<and> ballot a < b  
-    \<longrightarrow> vote a (the b) = None"
 
 end
+
+subsection {* Correctness of the @{term proved_safe_at} computation *}
 
 locale ballot_array_props = ballot_array + quorums
 begin
@@ -155,38 +163,42 @@ begin
 lemma "safe_at v (bot::nat)"
 by (auto simp add:safe_at_def)
 
-(* Only used in save \<Rightarrow> agreement *)
+(* Only used in safe \<Rightarrow> agreement *)
 lemma chosen_at_is_choosable:
   assumes "chosen_at v b"
   shows "choosable v b" using assms
   by (auto simp add:chosen_at_def choosable_def)
 
+(*<*)
 (* Not used *)
 lemma safe_at_prec:
   assumes "safe_at v b" and "b2 < b"
   shows "safe_at v b2"
   using assms by (meson order.strict_trans safe_at_def)
+(*>*)
 
-(* Only used in save \<Rightarrow> agreement *)
+(* Only used in safe \<Rightarrow> agreement *)
 lemma chosen_at_same:
   assumes "chosen_at v1 b1" and "chosen_at v2 b1"
   shows "v1 = v2" 
 by (metis assms chosen_at_def option.inject quorum_inter_witness)
 
+(*<*)
 (* Not used *)
 lemma all_choosable_no_safe:
   assumes "\<And> (v::'b) . choosable v b"
   and "safe_at v (Suc b)" and "(v1::'b) \<noteq> v2"
   shows False
-  by (metis assms(1) assms(2) assms(3) lessI safe_at_def) 
+  by (metis assms(1) assms(2) assms(3) lessI safe_at_def)
+(*>*) 
 
 lemma safe_is_safe:
   assumes "safe" and "chosen v\<^sub>1" and "chosen v\<^sub>2"
   shows "v\<^sub>1 = v\<^sub>2"
-  -- {* This follows the proof of Proposition 1 from "Generalized Consensus and paxos" *}
+  -- {* This follows the proof of Proposition 1 from the paper "Generalized Consensus and Paxos" *}
 proof -
-  text {* The main argument as a lemma to avoid repetitions*}
-  { fix b\<^sub>1 b\<^sub>2 v\<^sub>1 v\<^sub>2
+  { text {* The main argument as a lemma, to avoid repetitions*}
+    fix b\<^sub>1 b\<^sub>2 v\<^sub>1 v\<^sub>2
     assume 1:"chosen_at v\<^sub>1 b\<^sub>1" and 2:"chosen_at v\<^sub>2 b\<^sub>2"
     with this obtain q\<^sub>1 and q\<^sub>2 where 3:"\<And> a . a |\<in>| q\<^sub>1 \<Longrightarrow> (vote) a b\<^sub>1 = (Some v\<^sub>1)" 
     and 4:"\<And> a . a |\<in>| q\<^sub>2 \<Longrightarrow> (vote) a b\<^sub>2 = (Some v\<^sub>2)" and 5:"q\<^sub>1 |\<in>| quorums" and 6:"q\<^sub>2 |\<in>| quorums"
@@ -215,7 +227,7 @@ proof -
   ultimately show ?thesis by fastforce
 qed
 
-text {* The main lemma *}
+text {* The main lemma. Inspired by section 2.2.2 of the paper "Fast Paxos", by Leslie Lamport. *}
 
 lemma proved_safe_is_safe:
   assumes "safe" and "q |\<in>| quorums"
@@ -284,7 +296,8 @@ next
           by (metis dual_order.strict_trans1 less_def less_o.simps(4))
         thus ?thesis by (metis "5" a(4) cc option.distinct(1) that(2)) 
       next
-        case bb (* Here we probably need the fact that the array is conservative: *)
+        case bb 
+        text {* Here we need the fact that the array is conservative *}
         have 1:"vote a k = Some v" if "a |\<in>| acceptors" and " vote a k \<noteq> None"  for a using that assms(5) 
           by (auto simp add:conservative_array_def conservative_def)
             (metis a(1) a(2) assms(2) fset_rev_mp option.inject quorums_axioms quorums_def)  

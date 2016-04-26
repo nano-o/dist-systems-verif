@@ -1,5 +1,5 @@
 theory MultiPaxosCorrectness2
-imports AbstractMultiPaxos MultiPaxos3 "../../IO-Automata/Simulations"
+imports AbstractMultiPaxosFinfun MultiPaxos3 "../../IO-Automata/Simulations"
 begin        
 datatype 'v Common_actions =
   Propose acc "'v cmd"
@@ -41,9 +41,10 @@ lemma card_accs: "fcard (accs nas) = nas"
     by (metis eq_onp_same_args fcard.abs_eq finite_atLeastLessThan)
   qed
 
-sublocale card_quorums "accs nas" 
+sublocale card_quorums "accs nas"
 apply (unfold_locales)
-by (metis card_accs fcard_fempty less_numeral_extra(3) mp_ioa_correctness_axioms mp_ioa_correctness_def)
+by (metis card_accs fcard_fempty less_numeral_extra(3) 
+  mp_ioa_correctness_axioms mp_ioa_correctness_def)
 
 sublocale amp_ioa "accs nas" "{||}" "accs nas"
 using mp_ioa_correctness_axioms
@@ -66,16 +67,79 @@ definition prop_cmd where
   "prop_cmd s \<equiv> \<Union>{pending_of ((node_states s) $ a) | a . a |\<in>| accs nas}"
 
 definition prop_cmd_2 where
-  "prop_cmd_2 s \<equiv> let f = finfun_apply o pending o finfun_apply (node_states s) in 
+  "prop_cmd_2 s \<equiv> let f = finfun_apply o pending o finfun_apply (node_states s) in
     {the (f a i) | a i . f a i \<noteq> None}"
+
+
+definition prop_cmd_4 where
+  "prop_cmd_4 s \<equiv> ffUnion 
+    ((\<lambda> a . finfun_apply (pending (node_states s $ a)) 
+        |`| finfun_fset_dom (pending (node_states s $ a)))
+      |`| accs nas)"
+
+definition prop_cmd_3 where
+  "prop_cmd_3 s \<equiv> Abs_fset {c . \<exists> a i . a |\<in>| accs nas \<and> pending (node_states s $ a) $ i = Some c}"
+
+lemma 
+  assumes "\<And> a . finfun_default (pending (node_states s $ a)) = None"
+  shows "finite {c . \<exists> a i . a |\<in>| accs nas \<and> pending (node_states s $ a) $ i = Some c}"
+    (is "finite ?S")
+proof -
+  have "finite {i . pending (node_states s $ a) $ i \<noteq> None}" (is "finite (?S1 a)") for a 
+    by (metis assms finite_finfun_default)
+  moreover have "{c . \<exists> i . pending (node_states s $ a) $ i = Some c} 
+    = ((\<lambda> i . the (pending (node_states s $ a) $ i)) ` ?S1 a)" (is "?S2 a = _")
+    for a by force
+  ultimately have "finite (?S2 a)" for a by auto
+  moreover have "?S = \<Union>{?S2 a | a . a |\<in>| accs nas}" by auto
+  moreover have "finite {?S2 a | a . a |\<in>| accs nas}" 
+  proof -
+    have "finite {a . a |\<in>| accs nas}"
+      by (metis (full_types) Abs_fset_cases Abs_fset_inverse finite_nat_set_iff_bounded_le mem_Collect_eq notin_fset)
+    moreover have "{?S2 a | a . a |\<in>| accs nas} = (\<lambda> a . ?S2 a) ` {a . a |\<in>| accs nas}" by blast
+    ultimately show ?thesis by simp
+  qed
+  ultimately show ?thesis by auto
+qed
+
+definition collect_pending_c where
+  "collect_pending_c b \<equiv> ({}, b)"
+definition collect_pending_u where
+  "collect_pending_u a b r \<equiv>
+    if b = snd r then 
+      if a \<in> fst r then (fst r - {a}, snd r) else r
+    else
+      if a \<in> fst r then (fst r \<union> {a}, snd r) else r"
+definition collect_pending where 
+  "collect_pending \<equiv> finfun_rec collect_pending_c collect_pending_u"
+interpretation finfun_rec_wf_aux collect_pending_c collect_pending_u
+apply (unfold_locales)
+apply (simp_all add:collect_pending_c_def collect_pending_u_def)
+apply force
+done
+
+definition prop_cmd_3_c where
+  "prop_cmd_3_c b \<equiv> {||}"
+definition prop_cmd_3_u where
+  "prop_cmd_3_u a b r \<equiv>
+    if \<exists> s . (a,s) |\<in>| r
+    then {|(a, fst (collect_pending (pending b)))|} |\<union>| r
+    else r"
+
+(*
+definition prop_cmd_3 where
+  "prop_cmd_3 s \<equiv> (\<lambda> a_s . pending a_s) o$ (node_states s)"
+*)
 
 definition prop_cmd_of_mp where 
   "prop_cmd_of_mp s \<equiv> 
     fold (\<lambda> a r . pending_of_a (node_states s $ a) |\<union>| r)
       (finfun_to_list (node_states s)) {||}"
 
-lemma "prop_cmd_of_mp mp_start = {||}"
-apply(auto simp add:mp_start_def prop_cmd_of_mp_def pending_of_a_def)
+lemma "prop_cmd_3 mp_start = {||}"
+apply(auto simp add:mp_start_def prop_cmd_of_mp_def pending_of_a_def prop_cmd_3_def init_nodes_state_2_def)
+
+
 
 definition fwd_sim :: "'v mp_state \<Rightarrow> ('v cmd, nat) amp_state set" where
   "fwd_sim s \<equiv> 

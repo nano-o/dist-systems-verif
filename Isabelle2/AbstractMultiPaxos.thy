@@ -1,8 +1,12 @@
 theory AbstractMultiPaxos
-imports Main LinorderOption "~~/src/HOL/Library/FSet" Quorums
-  "../../IO-Automata/IOA_Automation"  "~~/src/HOL/Eisbach/Eisbach_Tools"
-  "../../IO-Automata/Simulations" BallotArrays
+imports Quorums "../../IO-Automata/Simulations" "../../IO-Automata/IOA_Automation" BallotArrays
 begin
+
+section {* Definition of the Abstract MultiPaxos I/O-automaton *}
+
+subsection {* State and actions *}
+
+text {* The actions (labels on transitions) of the I/O-automaton *}
 
 datatype ('v,'a,'l) amp_action =
   Propose 'v
@@ -11,16 +15,16 @@ datatype ('v,'a,'l) amp_action =
   -- {* an acceptor votes in a ballot according to a quorum *}
 | JoinBallot 'a nat
 
+text {* The states of the I/O-automaton *}
+
 record ('v,'a) amp_state =
   propCmd :: "'v fset"
   ballot :: "'a \<Rightarrow> nat option"
   vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
 
-text {* We give all the parameters in order to fix their type. Also fixed ballots to be nat. *}
 locale amp_ioa = IOA + 
   fixes acceptors::"'a fset" and quorums::"'a fset fset"
   fixes learners::"'l fset"
-  assumes "learners \<noteq> {||}"
 begin
 
 definition amp_asig where
@@ -30,7 +34,10 @@ definition amp_asig where
       internals = {Vote a i q b | a i b q . a |\<in>| acceptors} \<union> {JoinBallot a b | a b . a |\<in>| acceptors}\<rparr>"
 
 definition amp_start where
+  -- {* The initial state *}
   "amp_start \<equiv> {\<lparr>propCmd = {||}, ballot = (\<lambda> a . None), vote = (\<lambda> i a b . None) \<rparr>}"
+
+subsection {* The transitions *}
 
 definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) |\<union>| {|c|}\<rparr>)"
@@ -42,41 +49,45 @@ definition join_ballot where
 abbreviation proved_safe_at where 
   -- {* v is proved safe in instance i at ballot b by quorum q *}
   "proved_safe_at s i q b v \<equiv> ballot_array.proved_safe_at  (vote s i) q b v"
+
 abbreviation conservative_at where 
   "conservative_at s i \<equiv> ballot_array.conservative_array (vote s i) acceptors"
 
 definition do_vote where
-  "do_vote a i q v s s' \<equiv> a |\<in>| acceptors \<and> (case ballot s a of None \<Rightarrow> False | Some b \<Rightarrow> 
-        proved_safe_at s i q b v 
+  "do_vote a i q v s s' \<equiv> a |\<in>| acceptors \<and> (case ballot s a of None \<Rightarrow> False 
+    | Some b \<Rightarrow>
+        proved_safe_at s i q b v
         \<and> q |\<in>| quorums
         \<and> (\<forall> a2 . a2 |\<in>| q \<longrightarrow> ballot s a2 \<ge> Some b)
         \<and> conservative_at s' i
         \<and> vote s i a b = None 
-        \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := 
-            (vote s i a)(b := Some v)))\<rparr>)"
+        \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>)"
 
 abbreviation chosen where 
   "chosen s i v \<equiv> ballot_array.chosen (vote s i) quorums v"
+
 definition learn where
   "learn l i v s s' \<equiv> chosen s i v \<and> s = s'"
 
 (* Here it's better to have all existentially quantified parameters in the action itself, in
   order to avoid annoying quantifiers. *)
-fun amp_trans_fun  where
-  "amp_trans_fun r (Propose c) r' = propose c r r'"
-| "amp_trans_fun r (JoinBallot a b) r' = join_ballot a b r r'"
-| "amp_trans_fun r (Vote a q i v) r' = do_vote a i q v r r'"
-| "amp_trans_fun r (Learn i v l) r' = learn l i v r r'"
+fun amp_trans_rel  where
+  "amp_trans_rel r (Propose c) r' = propose c r r'"
+| "amp_trans_rel r (JoinBallot a b) r' = join_ballot a b r r'"
+| "amp_trans_rel r (Vote a q i v) r' = do_vote a i q v r r'"
+| "amp_trans_rel r (Learn i v l) r' = learn l i v r r'"
 
 definition amp_trans where
-  "amp_trans \<equiv> { (r,a,r') . amp_trans_fun r a r'}"
+  "amp_trans \<equiv> { (r,a,r') . amp_trans_rel r a r'}"
+
+subsection {* The I/O-automaton *}
 
 definition amp_ioa where
   "amp_ioa \<equiv> \<lparr>ioa.asig = amp_asig, start = amp_start, trans = amp_trans\<rparr>"
 
 end
 
-section {* Agreement proof *}
+section {* The agreement proof *}
 
 locale amp_proof = IOA + quorums acceptors quorums + 
     amp_ioa acceptors quorums learners for acceptors :: "'a fset" 
@@ -84,6 +95,8 @@ locale amp_proof = IOA + quorums acceptors quorums +
   fixes the_ioa :: "(('v,'a)amp_state, ('v,'a,'l)amp_action) ioa"
   defines "the_ioa \<equiv> amp_ioa"
 begin
+
+subsection {* Automation setup and a few lemmas *}
 
 lemmas amp_ioa_defs =  
    is_trans_def actions_def amp_trans_def amp_start_def
@@ -109,9 +122,13 @@ lemma vote_ballot_unch:
   shows "ballot s = ballot s'"
 using assms by (auto split add:option.split_asm)
 
+
+subsection {* @{term conservative_array}  is an inductive invariant*}
+
 declare ballot_array.conservative_array_def[inv_proofs_defs]
 abbreviation conservative_array where 
 "conservative_array s \<equiv>  \<forall> i . conservative_at s i"
+
 lemma conservative_inductive:
   "invariant the_ioa conservative_array"
 apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
@@ -149,8 +166,13 @@ apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
 done
 declare conservative_inductive[invs]
 
+
+subsection {* @{term safe}  is an inductive invariant*}
+
 abbreviation safe_at where "safe_at s i \<equiv> ballot_array.safe_at (ballot s) (vote s i) quorums"
+
 lemma safe_mono:
+  -- {* @{term safe_at} is monotonic *}
   assumes "safe_at s i v b" and "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t"
   shows "safe_at t i v b" using assms
 apply (cases a)
@@ -166,6 +188,7 @@ apply (cases a)
 done
 
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe (ballot s) (vote s i) quorums acceptors"
+
 lemma safe_inv:
   "invariant the_ioa safe"
 apply(rule invariantI)
@@ -234,16 +257,18 @@ apply(rule invariantI)
 done
 declare safe_inv[invs]
 
+subsection {* Finally, the proof that agreement holds. *}
+
 definition agreement where 
   "agreement s \<equiv> \<forall> v w i . chosen s i v \<and> chosen s i w \<longrightarrow> v = w"
+
 lemma agreement:"invariant the_ioa agreement"
 apply(rule invariantI)
     apply(auto simp add: inv_proofs_defs agreement_def ballot_array.chosen_def ballot_array.chosen_at_def)[1]
     apply (metis fempty_iff quorum_inter_witness)
   apply instantiate_invs_2
-  apply (insert ballot_array_props.safe_is_safe)
-  apply (auto simp add:agreement_def)
-  using ballot_array_props.intro quorums_axioms by fastforce
+  apply (meson agreement_def ballot_array_props.intro ballot_array_props.safe_is_safe quorums_axioms)
+done
 
 end
 

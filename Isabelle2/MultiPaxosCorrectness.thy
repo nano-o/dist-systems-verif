@@ -2,6 +2,8 @@ theory MultiPaxosCorrectness
 imports AbstractMultiPaxos MultiPaxosHist2 "../../IO-Automata/Simulations"
 begin
 
+text {* History-based version. *}
+
 locale mp_correctness = mph_ioa + amp_ioa
 begin
 

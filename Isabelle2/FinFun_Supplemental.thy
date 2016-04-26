@@ -3,7 +3,7 @@ imports "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
   FSet_Maximal
 begin
 
-subsection {* The domain of a finfun as an fset, using finfun_rec *}
+subsection {* The domain of a finfun as an fset, using @{term finfun_rec} *}
 
 text {* Note that CARD is executable in card_UNIV *}
 
@@ -78,7 +78,7 @@ value "let ff = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(43 $:= 1)
 subsection {* The image of a finfun as an fset *}
 
 definition finfun_fset_image where 
-  "finfun_fset_image ff \<equiv> (\<lambda> x . ff $ x) |`| finfun_fset_dom ff"
+  "finfun_fset_image ff \<equiv> (finfun_apply ff) |`| finfun_fset_dom ff"
 
 subsection {* Maximal elements in the image *}
 

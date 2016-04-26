@@ -1,7 +1,8 @@
 theory LinorderOption
 imports Main
 begin
-section {* nat option as a linear order *}
+
+section {* Type @{typ "nat option"} as a linear order *}
 
 fun less_eq_o where 
   "less_eq_o None _ = True"

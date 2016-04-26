@@ -4,6 +4,29 @@ imports Main LinorderOption "~~/src/HOL/Library/FSet" Quorums
   "../../IO-Automata/Simulations" BallotArrays2
 begin
 
+(*<*)
+(* TODO: try this? *)
+typedef inst2 = "UNIV::nat set" by auto
+setup_lifting type_definition_inst2
+
+lift_definition plus :: "inst2 \<Rightarrow> inst2 \<Rightarrow> inst2" is "op +" .
+
+instantiation inst2 :: linorder
+begin 
+lift_definition less_eq_inst2 :: "inst2 \<Rightarrow> inst2 \<Rightarrow> bool" is "op \<le>" .
+lift_definition less_inst2 :: "inst2 \<Rightarrow> inst2 \<Rightarrow> bool"  is "op <" .
+instance 
+apply standard
+apply (metis dual_order.order_iff_strict leD less_eq_inst2.rep_eq less_inst2.rep_eq)
+apply (metis less_eq_inst2.rep_eq order_refl)
+apply (metis le_trans less_eq_inst2.rep_eq)
+apply (metis Rep_inst2_inject dual_order.antisym less_eq_inst2.rep_eq)
+by (metis less_eq_inst2.rep_eq linear)
+end
+(*>*)
+
+text {* The actions of the I/O-Automaton *}
+
 datatype ('v,'a,'l) amp_action =
   Propose 'v
 | Learn nat 'v 'l
@@ -54,7 +77,7 @@ definition do_vote where
         \<and> (\<forall> a2 . a2 |\<in>| q \<longrightarrow> ballot s $ a2 \<ge> Some b)
         \<and> conservative_at s' i
         \<and> vote s $ i $ a $ b = None 
-        \<and> s' = s\<lparr>vote := (vote s)(i $:= (vote s $ i)(a $:= 
+        \<and> s' = s\<lparr>vote := (vote s)(i $:= (vote s $ i)(a $:=
             (vote s $ i $ a)(b $:= Some v)))\<rparr>)"
 
 abbreviation chosen where 

@@ -1,5 +1,57 @@
-session CGC = IOAutomata +
-  options [document = pdf, document_output = "output", document_variants="document:outline=/proof"]
-  theories CStruct ComposableGC Composition
-  document_files
-    "root.tex"
+session Paxos2 = HOL +
+  options [document = pdf, document_output=output]
+  theories  [document = false] 
+    "~~/src/HOL/Library/FSet" 
+    LinorderOption 
+    FSet_Maximal 
+    Quorums 
+    BallotArrays
+  theories [document = pdf, document_output = output] 
+    Paxos2
+  document_files "root.tex"
+
+session AbstractMultiPaxos = HOL +
+  options [document = pdf, document_output=output, document_variants="document:outline=/proof"]
+  theories  [document = false] 
+    "~~/src/HOL/Library/FSet" 
+    "~~/src/HOL/Library/FinFun_Syntax" 
+    "~~/src/HOL/Library/FinFun" 
+    "~~/src/HOL/Library/Code_Target_Numeral" 
+    "~~/src/HOL/Library/Monad_Syntax" 
+    FinFun_Supplemental
+  theories [document = pdf, document_output = output] 
+    AbstractMultiPaxos
+    LinorderOption 
+    Quorums 
+    BallotArrays
+  document_files "root.tex"
+
+session MultiPaxos4 = HOL +
+  options [document = pdf, document_output=output, document_variants="document:outline=/proof"]
+  theories  [document = false]
+    "~~/src/HOL/Library/FSet" 
+    "~~/src/HOL/Library/FinFun_Syntax" 
+    "~~/src/HOL/Library/FinFun" 
+    "~~/src/HOL/Library/Code_Target_Numeral" 
+    "~~/src/HOL/Library/Monad_Syntax" 
+    FinFun_Supplemental
+  theories [document = pdf, document_output = output] 
+    MultiPaxos4
+  document_files "root.tex"
+
+session All = HOL +
+  options [document = pdf, document_output=output, document_variants="document:outline=/proof"]
+  theories  [document = false] 
+    "~~/src/HOL/Library/FSet" 
+    "~~/src/HOL/Library/FinFun_Syntax" 
+    "~~/src/HOL/Library/FinFun" 
+    "~~/src/HOL/Library/Code_Target_Numeral" 
+    "~~/src/HOL/Library/Monad_Syntax" 
+    FinFun_Supplemental
+  theories [document = pdf, document_output = output] 
+    AbstractMultiPaxos
+    LinorderOption 
+    Quorums 
+    BallotArrays
+    MultiPaxos4
+  document_files "root.tex"

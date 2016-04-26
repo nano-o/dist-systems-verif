@@ -297,54 +297,82 @@ abbreviation serialize_u where
 definition serialize_finfun_2 where
   "serialize_finfun_2 \<equiv> finfun_rec serialize_c serialize_u"
 
-interpretation finfun_rec_wf_aux serialize_c serialize_u
+interpretation serialize_wf:finfun_rec_wf_aux serialize_c serialize_u
 apply (unfold_locales)
 apply simp
 apply force
 apply force
 done
 
-definition test_c where "test_c d \<equiv> (d,{})"
-definition test_u where "test_u (k::nat) v r \<equiv>
+
+subsection {* The domain of a finfun as an fset *}
+
+definition finfun_fset_dom_c where "finfun_fset_dom_c d \<equiv> (d,{||})"
+definition finfun_fset_dom_u where "finfun_fset_dom_u k v r \<equiv>
   if v = fst r
-  then (if (k \<in> snd r) then (fst r, snd r - {k}) else r)
+  then (if (k |\<in>| snd r) then (fst r, snd r |-|  {|k|}) else r)
   else (
-    if (k \<in> snd r)
+    if (k |\<in>| snd r)
       then r
-      else let s = {k} \<union> snd r in (fst r, s))"
-definition test where "test \<equiv> finfun_rec test_c test_u"
-interpretation test:finfun_rec_wf_aux test_c test_u unfolding test_def
+      else let s = {|k|} |\<union>| snd r in (fst r, s))"
+definition finfun_fset_dom_aux :: "(nat \<Rightarrow>f 'b) \<Rightarrow> ('b \<times> nat fset)" where [code del]: 
+  "finfun_fset_dom_aux \<equiv> finfun_rec finfun_fset_dom_c finfun_fset_dom_u"
+definition finfun_fset_dom where "finfun_fset_dom \<equiv> snd o finfun_fset_dom_aux"
+interpretation finfun_fset_dom_wf:finfun_rec_wf_aux finfun_fset_dom_c finfun_fset_dom_u
 apply (unfold_locales)
 prefer 3
-apply (simp add:test_c_def test_u_def Let_def)
-apply (simp add:test_u_def test_c_def)
-apply (simp add:test_u_def test_c_def Let_def)
-apply (metis Diff_insert Diff_insert2 insert_Diff_if insert_absorb singleton_insert_inj_eq')
+apply (simp add:finfun_fset_dom_c_def finfun_fset_dom_u_def Let_def)
+apply (simp add:finfun_fset_dom_c_def finfun_fset_dom_u_def)
+apply (simp add:finfun_fset_dom_c_def finfun_fset_dom_u_def Let_def)
+apply (metis fdoubleton_eq_iff finsert_absorb finsert_absorb2 finsert_fminus_if fminus_finsert2)
 done
 
-text {* Here the evaluation gets stuck at finfun_rec. *}
-value "test ((K$ (0::nat))::nat \<Rightarrow>f nat)(0 $:= 42)"
+lemma finfun_fset_dom_aux:
+  shows "let r = finfun_fset_dom_aux ff in 
+  (a |\<in>| snd r = (ff $ a \<noteq> finfun_default ff)) \<and> fst r = finfun_default ff"
+apply (induct arbitrary:a rule:finfun_weak_induct)
+subgoal using assms
+  apply (simp add:finfun_fset_dom_def)
+  by (simp add: finfun_default_const finfun_fset_dom_aux_def finfun_fset_dom_c_def finfun_fset_dom_wf.finfun_rec_const_infinite)
+subgoal premises prems for ff a b 
+proof -
+  have "finfun_default ff (a $:= b) = finfun_default ff"
+    by (metis finfun_default_update_const) 
+  thus ?thesis using prems
+    by (simp add:finfun_fset_dom_def Let_def finfun_fset_dom_u_def finfun_fset_dom_aux_def) (metis finfun_upd_apply)
+qed
+done
 
-text {* Here I declare test_code as a code equation. The code generator can now
-  generate code for calls to test when the argument if of the form "finfun_update_code f a b", and 
-  does not get stuck like above. We are still missing a similar equation for the constant case.*}
-lemma test_code[code]: "test (finfun_update_code f a b) = test_u a b (test f)"
-by (metis finfun_update_code_def test.finfun_rec_upd test_def)
+lemma finfun_fset_dom:
+  shows "a |\<in>| finfun_fset_dom ff = (ff $ a \<noteq> finfun_default ff)"
+using assms
+by (simp add:finfun_fset_dom_def) (meson finfun_fset_dom_aux)
 
-text {* This lemma should be proved easily after interpreting the finfun_rec_wf locale.
-The finfun_rec_wf locale may be modified to separate the case of finite and infinite universal sets, 
-and that would eliminate the need for the fourth well-formedness condition in the case of infinite 
-univeral sets. *}
-lemma test_code_2[code]: "test (finfun_const d) = (d, {})"
-using test.finfun_rec_const_infinite
-by (metis infinite_UNIV_char_0 test_c_def test_def)
+lemma finfun_fset_dom_aux_upd[code]:
+  "finfun_fset_dom_aux (finfun_update_code f a b) = finfun_fset_dom_u a b (finfun_fset_dom_aux f)"
+by (simp add: finfun_fset_dom_aux_def)
 
-value "test ((K$ (0::nat))::nat \<Rightarrow>f nat)(0 $:= 42)(1 $:= 43)"
+lemma finfun_fset_dom_aux_const[code]:
+  "finfun_fset_dom_aux (K$ b) = finfun_fset_dom_c b"
+by (simp add: finfun_fset_dom_aux_def finfun_fset_dom_wf.finfun_rec_const_infinite)
+
+export_code finfun_fset_dom in Scala
+
+value "finfun_fset_dom ((K$ 0)::nat \<Rightarrow>f int)(0 $:= 42)(1 $:= 43)"
+
+subsection {* The image of a finfun as an fset *}
+
+definition finfun_fset_image where 
+  "finfun_fset_image ff \<equiv> (\<lambda> x . ff $ x) |`| finfun_fset_dom ff"
+
+text {* TODO *}
 
 definition filter_ff where "filter_ff P ff \<equiv> ff"
 
 lemma "\<And> k . P k \<Longrightarrow> (filter_ff P ff) $ k = (finfun_default ff)"
   and "\<And> k . \<not> P k \<Longrightarrow> (filter_ff P ff) $ k = ff $ k" oops
+
+text {* Serialization (for Utkarsh) *}
 
 definition serialize_finfun where
   "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
@@ -383,13 +411,7 @@ datatype 'v mp_action =
 locale mp_ioa = IOA +
   fixes nas :: nat
     -- {* The number of acceptors *}
-begin    
-
-text {* TODO: get rid of this! *}
-no_notation Append  (infixl "#" 65)
-notation Cons (infixr "#" 65)
-no_notation Concat  (infixl "@" 65)
-notation append (infixr "@" 65)
+begin
 
 definition mp_asig where
   "mp_asig \<equiv>
@@ -408,14 +430,62 @@ fun init_nodes_state where
 | "init_nodes_state (Suc i) n = 
     (if Suc i > n then undefined else (init_nodes_state i n)(Suc i $:= init_acc_state n (Suc i)))"
 
+definition init_2 where "init_2 \<equiv> ffold (\<lambda> i ff . ff(i $:= init_acc_state nas (Suc i))) 
+  (K$ undefined) (Abs_fset {1..<Suc nas})"
+
+definition init_3 where "init_3 \<equiv> Abs_finfun 
+  (\<lambda> a . if a |\<in>| accs nas then init_acc_state nas a else undefined)"
+
+lemma init_3_is_finfun:"(\<lambda> a . if a |\<in>| accs nas then init_acc_state nas a else undefined) \<in> finfun"
+apply (auto simp add:finfun_def)
+apply (rule exI[where x="undefined"])
+apply auto
+subgoal
+  proof -
+    show ?thesis (is "finite ?S")
+    proof -
+      have "?S \<subseteq> {a . a |\<in>| accs nas}" by auto
+      moreover have "finite {a . a |\<in>| accs nas}"
+        by (metis (full_types) Abs_fset_cases Abs_fset_inverse finite_nat_set_iff_bounded_le mem_Collect_eq notin_fset) 
+      ultimately show ?thesis by auto
+    qed 
+  qed
+done
+
 lemma init_acc: 
 assumes "a \<le> n" and "a > 0"
 shows "(init_nodes_state a n) $ a = init_acc_state n a" using assms
 by (induct a n arbitrary:n rule:init_nodes_state.induct, auto)
 
+lemma init_acc_2: 
+assumes "a \<le> nas" and "a > 0"
+shows "init_2 $ a = init_acc_state nas a" using assms
+apply (simp add:init_2_def) oops
+
+
+definition init_nodes_state_2_fun where 
+  "init_nodes_state_2_fun \<equiv> \<lambda> a . if a |\<in>| accs nas then init_acc_state nas a else undefined"
+
+definition init_nodes_state_2 where
+  "init_nodes_state_2 \<equiv> Abs_finfun init_nodes_state_2_fun"
+
+lemma init_nodes_state_2_is_finfun: "init_nodes_state_2_fun \<in> finfun"
+apply(simp add:finfun_def init_nodes_state_2_fun_def)
+apply (rule exI[where x="undefined"])
+apply auto
+subgoal proof -
+show ?thesis (is "finite ?S")
+  proof -
+    have "?S \<subseteq> {a . a |\<in>| accs nas}" by blast
+    moreover have "finite {a . a |\<in>| accs nas}"
+    by (metis (full_types) Abs_fset_cases Abs_fset_inverse equalityI mem_Collect_eq notin_fset subsetI) 
+    ultimately show ?thesis by auto
+  qed
+qed
+done
 
 definition mp_start where
-  "mp_start \<equiv> \<lparr>node_states = (init_nodes_state nas nas), network = {||}\<rparr>"
+  "mp_start \<equiv> \<lparr>node_states = init_nodes_state_2, network = {||}\<rparr>"
 
 definition update_state where 
   "update_state a a_s packets s \<equiv>

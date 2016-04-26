@@ -1,10 +1,9 @@
 theory MultiPaxos4
-imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
-  LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
-  "../../IO-Automata/IOA" "FinFun_Supplemental" Pair_order
+imports "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
+  LinorderOption  "../../IO-Automata/IOA" "FinFun_Supplemental" Pair_order
 begin
 
-text {* A version of MultiPaxos using FinFuns *}
+section {* An executable version of MultiPaxos, using finite functions (FinFun.thy) *}
 
 text {* TODO: implement checkpointing *}
 
@@ -30,8 +29,10 @@ datatype 'v  packet =
   -- {* A message with sender/destination information *}
   Packet (sender: acc) (dst: acc) (msg: "'v msg")
 
+(*<*)
 (* TODO: use that? *)
 datatype 'v vote_info = voted "'v cmd" bal | not_voted
+(*>*)
 
 datatype 'v inst_status = not_started | pending "'v cmd" | decided (decision:"'v cmd")
 
@@ -50,22 +51,24 @@ record 'v acc_state =
       this is the 1b information received from a in ballot b about instance i. *}
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f acc fset"
     -- {* fset describing the 2b messages received, indexed by instance and ballot. *}
-  next_inst :: "nat"
+  next_inst :: "inst"
   inst_status :: "inst \<Rightarrow>f 'v inst_status"
   leader :: "bool"
   last_decision :: "nat option"
 
 fun accs where
   "accs (0::nat) = {||}"
-| "accs (Suc n) = (accs n) |\<union>| {|Suc n|}"
+| "accs (Suc n) = (accs n) |\<union>| {|n|}"
 
-lemma accs_def_2:"accs n = Abs_fset {1..<Suc n}"
+value "accs 3"
+
+lemma accs_def_2:"accs n = Abs_fset {0..<n}"
 proof (induct n)
   case 0 thus ?case
-  by (metis accs.simps(1) atLeastLessThanSuc bot_fset_def not_one_le_zero) 
+    by (simp add: bot_fset_def) 
 next
-  case (Suc n) thus ?case 
-  by simp (metis Suc_leI atLeastLessThanSuc eq_onp_same_args finite_atLeastLessThan finsert.abs_eq zero_less_Suc)
+  case (Suc n) thus ?case by simp
+    (metis atLeastLessThanSuc eq_onp_same_args finite_atLeastLessThan finsert.abs_eq le0)
 qed
 
 definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
@@ -88,6 +91,10 @@ definition nr where
 
 subsection {* Event handlers *}
 
+definition leader_of_bal where
+  "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
+    (b mod (nr s))"
+
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
   -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
   where "suc_bal a b N \<equiv> (b div N + 1) * N + a"
@@ -97,10 +104,6 @@ fun nx_bal where
 | "nx_bal a (Some b) N = suc_bal a b N"
 
 definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (self s) a2 m)  (acceptors s |-| {|a|})"
-
-definition leader_of_bal where
-  "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
-    (b mod (nr s))"
 
 definition do_2a where
   "do_2a s v \<equiv>
@@ -145,6 +148,7 @@ definition send_1a :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v pack
    in
      (s, send_all s a msg_1a)"
 
+
 definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_1a l b s \<equiv>
     let bal = ballot s; a = self s in
@@ -161,7 +165,7 @@ definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rig
 definition update_onebs :: 
   "'v acc_state \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> 'v acc_state" where
   -- {* Update the map of highest voted values when receiving a 1b
-    message from a2 for ballot bal containing last_vs *}
+    message from a2 for ballot bal containing @{term last_vs} *}
   "update_onebs s bal a2 last_vs \<equiv> let
       onebs_bal_a2 = (\<lambda> x . Some x) o$ last_vs
     in s\<lparr>onebs := (onebs s)(bal $:= (onebs s $ bal)(a2 $:= onebs_bal_a2))\<rparr>"
@@ -275,7 +279,7 @@ code_identifier
 export_code learn send_1a propose process_msg init_acc_state
   serialize_finfun deserialize_finfun in Scala file "simplePaxos.scala"
 
-section {* The I/O-automata *}
+subsection {* The I/O-automata *}
 
 record 'v mp_state = 
   node_states :: "nat \<Rightarrow>f 'v acc_state"
@@ -308,10 +312,12 @@ definition mp_asig where
         \<union> {Receive_2b a1 a2 i b c | a1 a2 i b c. a1 |\<in>| accs nas \<and> a2 |\<in>| accs nas}
         \<union> {Learn a i c | a i c . a |\<in>| accs nas}\<rparr>"
 
+(*<*)
 fun init_nodes_state where
   "init_nodes_state (0::nat) n = undefined"
 | "init_nodes_state (Suc i) n = 
     (if Suc i > n then undefined else (init_nodes_state i n)(Suc i $:= init_acc_state n (Suc i)))"
+(*>*)
 
 definition init_nodes_state_2_fun where 
   "init_nodes_state_2_fun \<equiv> \<lambda> a . if a |\<in>| accs nas then init_acc_state nas a else undefined"
@@ -319,6 +325,7 @@ definition init_nodes_state_2_fun where
 definition init_nodes_state_2 where
   "init_nodes_state_2 \<equiv> Abs_finfun init_nodes_state_2_fun"
 
+(*<*)
 lemma init_nodes_state_2_is_finfun: "init_nodes_state_2_fun \<in> finfun"
 apply(simp add:finfun_def init_nodes_state_2_fun_def)
 apply (rule exI[where x="undefined"])
@@ -338,7 +345,7 @@ lemma init_acc:
 assumes "a \<le> n" and "a > 0"
 shows "(init_nodes_state a n) $ a = init_acc_state n a" using assms
 by (induct a n arbitrary:n rule:init_nodes_state.induct, auto)
-
+(*>*)
 
 definition mp_start where
   "mp_start \<equiv> \<lparr>node_states = (init_nodes_state_2), network = {||}\<rparr>"

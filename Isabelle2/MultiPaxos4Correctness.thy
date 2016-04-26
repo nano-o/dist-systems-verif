@@ -58,7 +58,8 @@ definition cmd_of_status where "cmd_of_status s \<equiv> case s of pending v \<R
 
 definition acc_prop_cmds where
   -- \<open>maps an acceptor to the state of locally seen commands\<close>
-  "acc_prop_cmds s \<equiv> ((\<lambda> ss . fbind ss cmd_of_status) o finfun_fset_image) o$ (inst_status o$ (node_states s))"
+  "acc_prop_cmds s \<equiv> ((\<lambda> ss . fbind ss cmd_of_status) o (((op |`|) o$ finfun_apply) accs nas)) 
+    o$ (inst_status o$ (node_states s))"
 
 definition prop_cmds where
   -- \<open>The commands seen by at least one acceptor\<close>
