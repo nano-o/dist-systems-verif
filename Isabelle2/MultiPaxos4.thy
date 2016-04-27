@@ -72,6 +72,8 @@ record 'v acc_state =
   leader :: "bool"
   last_decision :: "nat option"
   working_instances :: "inst \<Rightarrow>f bool" (* Added by Ian to resolve race condition *)
+  commit_buffer :: "inst \<Rightarrow>f 'v cmd option"
+  last_committed :: "nat"
 
 fun accs where
   "accs (0::nat) = {||}"
@@ -113,7 +115,9 @@ definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" 
     pending = K$ None,
     leader = False,
     last_decision = None,
-    working_instances =  K$ False (* Added by Ian to resolve race condition *)
+    working_instances =  K$ False,
+    commit_buffer =  K$ None,
+    last_committed = 0
    \<rparr>" 
 
 
@@ -276,10 +280,10 @@ definition update_twobs where "update_twobs s i b new \<equiv>
 definition update_decided where 
   "update_decided s i v \<equiv> s\<lparr>
         decided := finfun_update_code (decided s) i (Some v), 
-        last_decision := Some i             
+        last_decision := Some i,
+        commit_buffer := (commit_buffer s)(i $:= Some v)
 \<rparr>"
 
-value "(3 div 2) + 1 ::nat"
 definition receive_2_addl  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> 'v acc_state" where
  "receive_2_addl i b v l s \<equiv>
     (let a = id s; bal = (ballot s);s2 = update_twobs s i b (new_twobs s i b l); votes = (length (twobs s2 $ i $ b))
@@ -344,6 +348,16 @@ definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarr
 definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2b i b a2 v s \<equiv> (receive_2 i b v a2 s, {||})"
 
+datatype 'v internal_event =
+  NoEvent | Commit "'v cmd"
+ 
+definition event_handler_get_next_to_commit  :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v internal_event) option" where
+  "event_handler_get_next_to_commit s \<equiv> if (((commit_buffer s) $ ((last_committed s)+1)) = None)
+    then None
+    else Some (s\<lparr>last_committed := ((last_committed s)+1), 
+          commit_buffer := ((commit_buffer s)(((last_committed s)+1) $:= None)) \<rparr>, 
+          Commit (the ((commit_buffer s) $ ((last_committed s)+1))))"
+
 definition get_last_decision where 
   "get_last_decision s \<equiv> the (decided s $ (the (last_decision s)))"
 
@@ -380,7 +394,7 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code learn send_1a propose process_msg init_acc_state
-  serialize_finfun deserialize_finfun get_ballot is_leader  get_leader  get_instance_info get_last_decision
+  serialize_finfun deserialize_finfun get_ballot is_leader  get_leader  get_instance_info
 in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
