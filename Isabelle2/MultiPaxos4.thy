@@ -380,7 +380,7 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code learn send_1a propose process_msg init_acc_state
-  serialize_finfun deserialize_finfun get_ballot is_leader  get_leader  get_instance_info 
+  serialize_finfun deserialize_finfun get_ballot is_leader  get_leader  get_instance_info get_last_decision
 in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
