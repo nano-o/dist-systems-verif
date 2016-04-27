@@ -279,24 +279,24 @@ definition update_decided where
         last_decision := Some i             
 \<rparr>"
 
+value "(3 div 2) + 1 ::nat"
 definition receive_2_addl  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> 'v acc_state" where
  "receive_2_addl i b v l s \<equiv>
-    (let a = id s; bal = (ballot s); votes = (length (twobs s $ i $ b))+1
+    (let a = id s; bal = (ballot s);s2 = update_twobs s i b (new_twobs s i b l); votes = (length (twobs s2 $ i $ b))
      in (
           if (2 * votes \<le> nr s) (* Build the quorum *)
           then (
-              let  s2 = update_twobs s i b (new_twobs s i b l)
-                in (s2)
+            (s2)
           ) else ( 
               if ( ((nr s div 2)+1) = votes) (* Decision Time *)
               then ( 
-               (update_decided s i v)
+               (update_decided s2 i v)
               ) else ( 
                   if (nr s = votes) (* Last Message *)
                   then ( 
-                    let s2= s\<lparr> working_instances := (working_instances s)(i $:= False)\<rparr>
-                    in (s2)
-                  ) else (s) (*extra messages -- but not the last one*)
+                    let s3= s2\<lparr> working_instances := (working_instances s)(i $:= False)\<rparr>
+                    in (s3)
+                  ) else (s2) (*extra messages -- but not the last one*)
               )
           )             
         )
@@ -304,23 +304,22 @@ definition receive_2_addl  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rig
 
 definition receive_2_first  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> 'v acc_state" where
  "receive_2_first i b v l s \<equiv>
-    (let a = id s; bal = (ballot s)
-     in (
-          if (3 < nr s)
-          then (
-              let s2 = s\<lparr>vote := finfun_update_code (vote s) i (Some v),
+    (let a = id s; bal = (ballot s); s2 = s\<lparr>vote := finfun_update_code (vote s) i (Some v),
                     twobs := finfun_update_code (twobs s) i ((K$ [])((the bal) $:= [a,l])),
                     next_inst := i+1,
                     pending := finfun_update_code (pending s) i (Some v),
                     working_instances := (working_instances s)(i $:= True)\<rparr>
-                in (s2)
+     in (
+          if (3 < nr s)
+          then ( 
+            (s2)
           ) else ( 
               if (3 = nr s)
               then ( 
-                let s2= s\<lparr> working_instances := (working_instances s)(i $:= True)\<rparr> (*This is still working as we have 1 more message to receive *)
-                 in (update_decided s2 i v)
+                (update_decided s2 i v)
               ) else ( (*nr = 2 *) (*Decided and not working as no more message to receive*)
-                   (update_decided s i v)
+                   let s3= s2\<lparr> working_instances := (working_instances s)(i $:= False)\<rparr> (*This is still working as we have 1 more message to receive *)
+                   in (update_decided s3 i v)
               )
           )             
         )
