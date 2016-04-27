@@ -276,49 +276,58 @@ definition update_twobs where "update_twobs s i b new \<equiv>
 definition update_decided where 
   "update_decided s i v \<equiv> s\<lparr>
         decided := finfun_update_code (decided s) i (Some v), 
-        last_decision := Some i,
-        working_instances := (working_instances s)(i $:= False) (* Added by Ian to track working instances) *)              
+        last_decision := Some i             
 \<rparr>"
 
 definition receive_2_addl  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> 'v acc_state" where
  "receive_2_addl i b v l s \<equiv>
-    (let a = id s; bal = (ballot s); new_twobs = new_twobs s i b l;
-            s2 = update_twobs s i b new_twobs
-     in  (if (2 * length new_twobs > nr s)
-            then (
-              let 
-                s3= s2\<lparr> working_instances := (working_instances s)(i $:= False)\<rparr>
-              in
-              (update_decided s3 i v)
-            )
-            else ( 
-             (s2) 
-              
-            ) 
-          )
-     )"
+    (let a = id s; bal = (ballot s); votes = (length (twobs s $ i $ b))+1
+     in (
+          if (2 * votes \<le> nr s) (* Build the quorum *)
+          then (
+              let  s2 = update_twobs s i b (new_twobs s i b l)
+                in (s2)
+          ) else ( 
+              if ( ((nr s div 2)+1) = votes) (* Decision Time *)
+              then ( 
+               (update_decided s i v)
+              ) else ( 
+                  if (nr s = votes) (* Last Message *)
+                  then ( 
+                    let s2= s\<lparr> working_instances := (working_instances s)(i $:= False)\<rparr>
+                    in (s2)
+                  ) else (s) (*extra messages -- but not the last one*)
+              )
+          )             
+        )
+    )"     
+
 definition receive_2_first  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> 'v acc_state" where
  "receive_2_first i b v l s \<equiv>
-    (let a = id s; bal = (ballot s);
-            s2 = s\<lparr>vote := finfun_update_code (vote s) i (Some v),
-            twobs := finfun_update_code (twobs s) i ((K$ [])((the bal) $:= [a,l])),
-            next_inst := i+1,
-            pending := finfun_update_code (pending s) i (Some v),
-            working_instances := (working_instances s)(i $:= True)\<rparr>
-     in  (if (2 * length (twobs s2 $ i $ b) > nr s)
-            then (
-              let 
-                s3= s2\<lparr> working_instances := (working_instances s)(i $:= False)\<rparr>
-              in
-              (update_decided s3 i v)
-            )
-            else ( 
-             (s2) 
-              
-            ) 
-          )
+    (let a = id s; bal = (ballot s)
+     in (
+          if (3 < nr s)
+          then (
+              let s2 = s\<lparr>vote := finfun_update_code (vote s) i (Some v),
+                    twobs := finfun_update_code (twobs s) i ((K$ [])((the bal) $:= [a,l])),
+                    next_inst := i+1,
+                    pending := finfun_update_code (pending s) i (Some v),
+                    working_instances := (working_instances s)(i $:= True)\<rparr>
+                in (s2)
+          ) else ( 
+              if (3 = nr s)
+              then ( 
+                let s2= s\<lparr> working_instances := (working_instances s)(i $:= True)\<rparr> (*This is still working as we have 1 more message to receive *)
+                 in (update_decided s2 i v)
+              ) else ( (*nr = 2 *) (*Decided and not working as no more message to receive*)
+                   (update_decided s i v)
+              )
+          )             
+        )
      )"
 
+
+            
 definition receive_2 :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> 'v acc_state" where
   "receive_2 i b v l s \<equiv>
     (if ((working_instances s) $ i) (* This is not the first message from the instance *)
