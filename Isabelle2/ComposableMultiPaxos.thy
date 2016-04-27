@@ -402,8 +402,12 @@ definition abort where
     then let
         acks = stop_acks s;
         im = finfun_fset_image acks;
-        dom = fbind im (\<lambda> ff . finfun_fset_dom ff)
-      in (s\<lparr>aborted := Some []\<rparr>, {||})
+        dom = fbind im (\<lambda> ff . finfun_fset_dom ff);
+        l = ffold (\<lambda> x xs . x#xs) [] dom;
+        l2 = sort l;
+        l3 = fold (\<lambda> x xs . if (xs = [] \<or> x = hd xs + 1 ) then x#xs else xs) l2 [];
+        l4 = []
+      in (s\<lparr>aborted := Some l4\<rparr>, {||})
     else (s, {||})"
 
 fun process_msg where
