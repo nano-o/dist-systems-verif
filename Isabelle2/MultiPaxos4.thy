@@ -54,9 +54,12 @@ datatype 'v  packet =
 
 record 'v acc_state =
   id :: acc
+  leader :: "bool"
   acceptors :: "acc fset"
     -- {* The set of all acceptors *}
+
   ballot :: "bal option"
+  decided :: "inst \<Rightarrow>f 'v cmd option"
     -- {* the highest ballot in which an acceptor participated *}
   vote :: "inst \<Rightarrow>f 'v cmd option"
     -- {* The last vote cast by an acceptor, for each instance *}
@@ -66,15 +69,18 @@ record 'v acc_state =
     -- {* For an acceptor a and a ballot b, lists of 1b-message descriptions, indexed by ballot then instance. *}
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f acc list"
     -- {* For an acceptor a: lists describing the 2b messages, indexed by instance then ballot. *}
-  decided :: "inst \<Rightarrow>f 'v cmd option"
+
   next_inst :: "nat"
-  pending :: "inst \<Rightarrow>f 'v cmd option"
-  leader :: "bool"
   last_decision :: "nat option"
-  working_instances :: "inst \<Rightarrow>f bool" (* Added by Ian to resolve race condition *)
+  working_instances :: "inst \<Rightarrow>f bool" 
+
   commit_buffer :: "inst \<Rightarrow>f 'v cmd option"
   last_committed :: "nat"
 
+  snapshot_reference :: "nat"
+
+  pending :: "inst \<Rightarrow>f 'v cmd option" (*Possibly useless *)
+  
 fun accs where
   "accs (0::nat) = {||}"
 | "accs (Suc n) = (accs n) |\<union>| {|n|}"
@@ -104,20 +110,26 @@ definition get_next_instance where
 definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
   "init_acc_state n a \<equiv> \<lparr>
     id = a,
+    leader = False,
     acc_state.acceptors = accs n,
+
     ballot = None,
+    decided = K$ None,
     vote = K$ None, 
     last_ballot = K$ None,
     onebs = K$ K$ [],
     twobs = K$ K$ [],
-    decided = K$ None,
+
     next_inst = 1, (* instances start at 1 *)
-    pending = K$ None,
-    leader = False,
     last_decision = None,
     working_instances =  K$ False,
+
     commit_buffer =  K$ None,
-    last_committed = 0
+    last_committed = 0,
+
+    snapshot_reference=0,
+
+    pending = K$ None
    \<rparr>" 
 
 
@@ -380,11 +392,17 @@ fun process_msg where
 
 text {* Serializing finfuns to lists *}
 
-definition serialize_finfun where
+definition serialize_finfun  :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> ('a \<times> 'b) list"  where
   "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
 
 definition deserialize_finfun where
   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
+
+
+text {* Finfun Filter for snapshots  *}
+definition finfun_filter :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> 'b \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow>f 'b" where
+  "finfun_filter ff d truncloc\<equiv> fold (\<lambda> k l . if (k < truncloc) then (l) else ((l)( k $:= (ff $ k)))) (finfun_to_list ff) (K$ d) "
+value "let ff = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(43 $:= 1) in (finfun_filter_v1 ff 0 2) "
 
 subsection {* Code generation *}
 
