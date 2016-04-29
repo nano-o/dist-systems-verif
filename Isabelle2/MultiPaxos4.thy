@@ -75,9 +75,10 @@ record 'v acc_state =
   working_instances :: "inst \<Rightarrow>f bool" 
 
   commit_buffer :: "inst \<Rightarrow>f 'v cmd option"
-  last_committed :: "nat"
+  last_committed :: "inst"
 
-  snapshot_reference :: "nat"
+  snapshot_reference :: "inst"
+  snapshot_proposal :: "inst list"
 
   pending :: "inst \<Rightarrow>f 'v cmd option" (*Possibly useless *)
   
@@ -128,7 +129,8 @@ definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" 
     last_committed = 0,
 
     snapshot_reference=0,
-
+    snapshot_proposal = [],
+    
     pending = K$ None
    \<rparr>" 
 
@@ -218,7 +220,9 @@ definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rig
        then
           (let
             combiner = (\<lambda> (vo,bo) . vo \<bind> (\<lambda> v . bo \<bind> (\<lambda> b . Some (v,b))));
-            last_votes = combiner o$ ($ vote s, last_ballot s $);
+            x = ($ vote s, last_ballot s $);
+            last_votes = combiner o$ x ;
+
             msg_1b = Phase1b last_votes b a;
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := Some b\<rparr>
@@ -360,16 +364,6 @@ definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarr
 definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2b i b a2 v s \<equiv> (receive_2 i b v a2 s, {||})"
 
-datatype 'v internal_event =
-  NoEvent | Commit "'v cmd"
- 
-definition event_handler_get_next_to_commit  :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v internal_event) option" where
-  "event_handler_get_next_to_commit s \<equiv> if (((commit_buffer s) $ ((last_committed s)+1)) = None)
-    then None
-    else Some (s\<lparr>last_committed := ((last_committed s)+1), 
-          commit_buffer := ((commit_buffer s)(((last_committed s)+1) $:= None)) \<rparr>, 
-          Commit (the ((commit_buffer s) $ ((last_committed s)+1))))"
-
 definition get_last_decision where 
   "get_last_decision s \<equiv> the (decided s $ (the (last_decision s)))"
 
@@ -398,11 +392,63 @@ definition serialize_finfun  :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> ('
 definition deserialize_finfun where
   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
 
-
 text {* Finfun Filter for snapshots  *}
 definition finfun_filter :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> 'b \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow>f 'b" where
-  "finfun_filter ff d truncloc\<equiv> fold (\<lambda> k l . if (k < truncloc) then (l) else ((l)( k $:= (ff $ k)))) (finfun_to_list ff) (K$ d) "
+  "finfun_filter ff d truncloc\<equiv> fold (\<lambda> k l . if (k \<le> truncloc) then (l) else ((l)( k $:= (ff $ k)))) (finfun_to_list ff) (K$ d) "
+
 value "let ff = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(43 $:= 1) in (finfun_filter_v1 ff 0 2) "
+
+
+
+
+subsection {* Internal Handlers *}
+
+datatype 'v internal_event =
+  NoEvent | Commit "'v cmd"
+ 
+definition event_handler_get_next_to_commit  :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v internal_event) option" where
+  "event_handler_get_next_to_commit s \<equiv> if (((commit_buffer s) $ ((last_committed s)+1)) = None)
+    then None
+    else Some (s\<lparr>last_committed := ((last_committed s)+1), 
+          commit_buffer := ((commit_buffer s)(((last_committed s)+1) $:= None)) \<rparr>, 
+          Commit (the ((commit_buffer s) $ ((last_committed s)+1))))"
+
+fun dequeue :: "'v list \<Rightarrow> (('v list \<times> 'v) option)" where
+"dequeue (a#l) = Some (l, a)" |
+"dequeue [] = None"
+    
+(* This handler performs a snapshot. Considering filtering on onebs as needed. *)
+definition event_handler_process_any_snapshots  :: "'v acc_state \<Rightarrow> 'v acc_state option" where
+  "event_handler_process_any_snapshots s \<equiv> 
+    let sp=(dequeue (snapshot_proposal s))
+    in (
+      if ( sp = None) 
+      then None (* Nothing todo *)
+      else (  
+        if ((snd (the sp)) > (last_committed s))
+        then
+          None  (* we are trying to snapshot but haven't committed that far *)
+        else
+          Some (s\<lparr>snapshot_proposal := (fst (the sp)), snapshot_reference := (snd (the sp)),
+                decided := (finfun_filter (decided s) None (snd (the sp))), 
+                vote := (finfun_filter (vote s) None (snd (the sp))),
+                last_ballot := (finfun_filter (last_ballot s) None (snd (the sp))),
+                pending := (finfun_filter (pending s) None (snd (the sp))),
+                twobs := (finfun_filter (twobs s) (K$ []) (snd (the sp)))
+                \<rparr>)
+      )
+    )"
+
+definition propose_snapshot :: "'v acc_state \<Rightarrow> inst \<Rightarrow> 'v acc_state option " where
+  "propose_snapshot s instance \<equiv> 
+    if (instance \<le> (snapshot_reference s)) then 
+       None
+    else ( 
+      let 
+        s2 = s\<lparr>snapshot_proposal := ((snapshot_proposal s) @ [instance]) \<rparr>
+       in
+        Some s2
+    )"
 
 subsection {* Code generation *}
 
