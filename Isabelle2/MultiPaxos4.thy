@@ -106,12 +106,12 @@ definition leader_of_bal where
 
 text {* A few functions to export to Scala for use by the runtime. *}
 
-definition get_ballot where "get_ballot s \<equiv> ballot s"
+definition def_IntEvtHandler_GetLeader where "def_IntEvtHandler_GetLeader s \<equiv> ballot s"
 
-definition is_leader where "is_leader s \<equiv> leader s"
+definition def_IntEvtHander_IsLeader where "def_IntEvtHander_IsLeader s \<equiv> leader s"
 
-definition get_leader where 
-  "get_leader s \<equiv> case ballot s of Some (b::nat) \<Rightarrow> Some (b mod (def_GetReplicaCount s)) | _ \<Rightarrow> None"
+definition def_IntEvtHander_GetLeader where 
+  "def_IntEvtHander_GetLeader s \<equiv> case ballot s of Some (b::nat) \<Rightarrow> Some (b mod (def_GetReplicaCount s)) | _ \<Rightarrow> None"
 
 datatype 'v inst_status = s_not_participated | s_pending "'v cmd" | s_decided (decision:"'v cmd")
 
@@ -134,11 +134,13 @@ definition finfun_merge:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow> ('a::l
   "finfun_merge from_ff to_ff \<equiv> fold (\<lambda> k l . finfun_update_code l  k (from_ff $ k) ) (finfun_to_list from_ff) to_ff "
 value "let ff = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(43 $:= 1); 
           ff2 = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(20 $:= 1)  in (finfun_default ff) "
+
+(*
 definition serialize_finfun  :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> ('a \<times> 'b) list"  where
   "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
 definition deserialize_finfun where
   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
-
+*)
 subsection {* State Manipulating Utility Functions *}
 
 definition def_ProposeInstance :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
@@ -214,8 +216,8 @@ definition def_Receive1b_HighestVoted :: "(nat \<Rightarrow>f (acc \<times> ('v 
 
 text {* If we had finfun_Ex we could do this better.
   Here we use instance 0 by default, but that's arbitrary. *}
-definition def_Receive1b_QuorumReceived where
-  "def_Receive1b_QuorumReceived b s \<equiv> 
+definition def_ExtEvtHandler_Receive1b_QuorumReceived where
+  "def_ExtEvtHandler_Receive1b_QuorumReceived b s \<equiv> 
     let at_b = onebs s $ b;
         at_b_i = at_b $ 0
     in 2 * length at_b_i > def_GetReplicaCount s"
@@ -235,7 +237,7 @@ definition def_ExtEvtHandler_Receive1b :: "(inst \<Rightarrow>f ('v cmd \<times>
     if (Some bal = ballot s)
     then
       (let s1 = def_Receive1b_UpdateOnebs s bal a2 last_vs
-       in (if def_Receive1b_QuorumReceived bal s1 
+       in (if def_ExtEvtHandler_Receive1b_QuorumReceived bal s1 
           then (let
               h = def_Receive1b_HighestVoted (onebs s1 $ bal);
               max_i = let l = (finfun_to_list (onebs s1 $ bal)) in (if l = [] then 0 else hd (rev l));
@@ -505,6 +507,8 @@ code_identifier
 | code_module List \<rightharpoonup> (Scala) Set
 
 export_code 
+  def_ExtEvtHandler_Receive1b_QuorumReceived 
+    (* Ideally protocol later would figure this out from updated sate or a different particular internal event handler *)
   def_IntEvtHandler_InitializeReplicaState
   def_IntEvtHandler_ProposeInstance 
   def_IntEvtHandler_StartLeaderElection 
@@ -513,7 +517,7 @@ export_code
   def_IntEvtHandler_RequestSnapshot
   def_IntEvtHandler_ProcessSnapshot
   def_IntEvtHandler_ProcessPeriodicCatchUp
-  serialize_finfun deserialize_finfun get_ballot is_leader  get_leader  get_instance_info
+  def_IntEvtHandler_GetLeader def_IntEvtHander_IsLeader def_IntEvtHander_GetLeader
 
 in Scala file "simplePaxos.scala"
 
