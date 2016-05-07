@@ -135,12 +135,6 @@ definition finfun_merge:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow> ('a::l
 value "let ff = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(43 $:= 1); 
           ff2 = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(20 $:= 1)  in (finfun_default ff) "
 
-(*
-definition serialize_finfun  :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> ('a \<times> 'b) list"  where
-  "serialize_finfun ff = fold (\<lambda> k l . (k, ff $ k)#l) (finfun_to_list ff) []"
-definition deserialize_finfun where
-  "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
-*)
 subsection {* State Manipulating Utility Functions *}
 
 definition def_ProposeInstance :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
