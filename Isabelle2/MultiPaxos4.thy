@@ -473,7 +473,7 @@ code_identifier
 
 export_code 
   def_ExtEvtHandler_Receive1b_QuorumReceived 
-    (* Ideally protocol later would figure this out from updated sate or a different particular internal event handler *)
+    (* Ideally protocol later would figure this out from updated state or return from 1B or a different particular internal event handler *)
   def_IntEvtHandler_InitializeReplicaState
   def_IntEvtHandler_ProposeInstance 
   def_IntEvtHandler_StartLeaderElection 
