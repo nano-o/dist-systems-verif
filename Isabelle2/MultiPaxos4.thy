@@ -99,6 +99,13 @@ definition def_LeaderOfBallot where
   "def_LeaderOfBallot s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
     (b mod (def_GetReplicaCount s))"
 
+(*START: To be depreciated. Directly called by utkarsh in code that should be removed *)
+definition get_next_instance where
+  "get_next_instance s \<equiv> next_inst s"
+ definition deserialize_finfun where
+   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
+(*END: To be depreciated. Directly called by utkarsh in code that should be removed *)
+
 text {* Finfun Filter/Merge for snapshots / catch ups *}
 
 definition def_FinfunFilterAdvanced:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow>('a \<Rightarrow> bool) \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)" where
@@ -436,6 +443,8 @@ in the receive 2a/b.
   Returns:
     New state and catch up message as needed. 
 *}
+
+
 definition def_IntEvtHandler_ProcessPeriodicCatchUp  ::  "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset) option" where 
  " def_IntEvtHandler_ProcessPeriodicCatchUp s \<equiv> 
  (let a = id s; 
