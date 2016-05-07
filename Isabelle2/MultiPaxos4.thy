@@ -84,8 +84,6 @@ record 'v acc_state =
   snapshot_proposal :: "inst list"
    -- {* A list that contains requested points to conduct snapshot. *}
 
-  pending :: "inst \<Rightarrow>f 'v cmd option" (*Possibly useless *)
-  
   catch_up_requested :: "nat"
    -- {* Zero if no catch up on going, else set to the leader that we are requesting a catch up from. *}
 
@@ -131,7 +129,6 @@ definition def_ProposeInstance :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> (
       b = the (ballot s);
       msg = Phase2a inst b (Cmd v) a;
       new_state = s\<lparr>next_inst := (inst+1),
-        pending := finfun_update_code (pending s) inst (Some (Cmd v)),
         twobs := finfun_update_code (twobs s) inst ((K$ [])(b $:= [a])),
         working_instances := (working_instances s)(inst $:=True) (* Added by ian to track working instances *)
        \<rparr>
@@ -281,7 +278,6 @@ definition def_Receive2_FirstMsg  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cm
     (let a = id s; bal = (ballot s); s2 = s\<lparr>vote := finfun_update_code (vote s) i (Some v),
                     twobs := finfun_update_code (twobs s) i ((K$ [])((the bal) $:= [a,l])),
                     next_inst := i+1,
-                    pending := finfun_update_code (pending s) i (Some v),
                     working_instances := (working_instances s)(i $:= True)\<rparr>
      in (
           if (3 < def_GetReplicaCount s)
@@ -362,7 +358,6 @@ definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<
     snapshot_reference=0,
     snapshot_proposal = [],
     
-    pending = K$ None,
     catch_up_requested = 0
    \<rparr>" 
 
@@ -437,7 +432,6 @@ definition def_IntEvtHandler_ProcessSnapshot :: "'v acc_state \<Rightarrow> 'v a
                 decided := (finfun_filter_lteq (decided s) (snd (the sp))), 
                 vote := (finfun_filter_lteq (vote s) (snd (the sp))),
                 last_ballot := (finfun_filter_lteq (last_ballot s) (snd (the sp))),
-                pending := (finfun_filter_lteq (pending s) (snd (the sp))),
                 twobs := (finfun_filter_lteq (twobs s) (snd (the sp)))
                 \<rparr>)
       )
