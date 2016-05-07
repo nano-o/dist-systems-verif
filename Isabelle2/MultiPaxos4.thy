@@ -360,6 +360,34 @@ definition def_ExtEvtHandler_ReceiveCatchUpResponse :: "(inst \<Rightarrow>f 'v 
 
 subsection {* Internal Handlers *}
 
+definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
+  "def_IntEvtHandler_InitializeReplicaState n a \<equiv> \<lparr>
+    id = a,
+    leader = False,
+    acc_state.acceptors = accs n,
+
+    ballot = None,
+    decided = K$ None,
+    vote = K$ None, 
+    last_ballot = K$ None,
+    onebs = K$ K$ [],
+    twobs = K$ K$ [],
+
+    next_inst = 1, (* instances start at 1 *)
+    last_decision = None,
+    working_instances =  K$ False,
+
+    commit_buffer =  K$ None,
+    last_committed = 0,
+
+    snapshot_reference=0,
+    snapshot_proposal = [],
+    
+    pending = K$ None,
+    catch_up_requested = 0
+   \<rparr>" 
+
+
 definition def_IntEvtHandler_ProposeInstance :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "def_IntEvtHandler_ProposeInstance v s \<equiv> def_ProposeInstance v s"
@@ -386,15 +414,15 @@ definition def_IntEvtHandler_StartLeaderElection :: "'v acc_state \<Rightarrow> 
         msg_1a = Phase1a a b in
       (s\<lparr>ballot := Some b\<rparr>, fimage (\<lambda> a2 . Packet a a2 msg_1a) (acceptors s)))"
 
-fun def_IntEvtHandler_ProcessExternalEvent where
-  "def_IntEvtHandler_ProcessExternalEvent (Phase1a l b) s = def_ExtEvtHandler_Receive1a l b s"
-| "def_IntEvtHandler_ProcessExternalEvent (Phase1b lvs b a) s = def_ExtEvtHandler_Receive1b lvs b a s"
-| "def_IntEvtHandler_ProcessExternalEvent (Phase2a i b cm l) s = def_ExtEvtHandler_Receive2a i b cm l s"
-| "def_IntEvtHandler_ProcessExternalEvent (Phase2b i b a cm) s = def_ExtEvtHandler_Receive2b i b a cm s"
-| "def_IntEvtHandler_ProcessExternalEvent (Vote i cm) s = undefined"
-| "def_IntEvtHandler_ProcessExternalEvent (Fwd v) s = def_ExtEvtHandler_ReceiveFwd v s"
-| "def_IntEvtHandler_ProcessExternalEvent (CatchUpReq i1 i2 a ) s = def_ExtEvtHandler_ReceiveCatchUp i1 i2 a s"
-| "def_IntEvtHandler_ProcessExternalEvent (CatchUpRes d ) s = def_ExtEvtHandler_ReceiveCatchUpResponse d s"
+fun fun_IntEvtHandler_ProcessExternalEvent where
+  "fun_IntEvtHandler_ProcessExternalEvent (Phase1a l b) s = def_ExtEvtHandler_Receive1a l b s"
+| "fun_IntEvtHandler_ProcessExternalEvent (Phase1b lvs b a) s = def_ExtEvtHandler_Receive1b lvs b a s"
+| "fun_IntEvtHandler_ProcessExternalEvent (Phase2a i b cm l) s = def_ExtEvtHandler_Receive2a i b cm l s"
+| "fun_IntEvtHandler_ProcessExternalEvent (Phase2b i b a cm) s = def_ExtEvtHandler_Receive2b i b a cm s"
+| "fun_IntEvtHandler_ProcessExternalEvent (Vote i cm) s = undefined"
+| "fun_IntEvtHandler_ProcessExternalEvent (Fwd v) s = def_ExtEvtHandler_ReceiveFwd v s"
+| "fun_IntEvtHandler_ProcessExternalEvent (CatchUpReq i1 i2 a ) s = def_ExtEvtHandler_ReceiveCatchUp i1 i2 a s"
+| "fun_IntEvtHandler_ProcessExternalEvent (CatchUpRes d ) s = def_ExtEvtHandler_ReceiveCatchUpResponse d s"
 text {* Serializing finfuns to lists *}
 
 definition def_IntEvtHandler_ProcessCommit :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v internal_event) option" where
@@ -469,33 +497,6 @@ definition def_IntEvtHandler_RequestSnapshot :: "'v acc_state \<Rightarrow> inst
     )"
 
 
-definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
-  "def_IntEvtHandler_InitializeReplicaState n a \<equiv> \<lparr>
-    id = a,
-    leader = False,
-    acc_state.acceptors = accs n,
-
-    ballot = None,
-    decided = K$ None,
-    vote = K$ None, 
-    last_ballot = K$ None,
-    onebs = K$ K$ [],
-    twobs = K$ K$ [],
-
-    next_inst = 1, (* instances start at 1 *)
-    last_decision = None,
-    working_instances =  K$ False,
-
-    commit_buffer =  K$ None,
-    last_committed = 0,
-
-    snapshot_reference=0,
-    snapshot_proposal = [],
-    
-    pending = K$ None,
-    catch_up_requested = 0
-   \<rparr>" 
-
 subsection {* Code generation *}
 
 text {* We need to rename a few modules to let the Scala compiler resolve circular dependencies. *}
@@ -503,8 +504,17 @@ code_identifier
   code_module Code_Numeral \<rightharpoonup> (Scala) Nat
 | code_module List \<rightharpoonup> (Scala) Set
 
-export_code def_IntEvtHandler_StartLeaderElection def_IntEvtHandler_ProposeInstance def_IntEvtHandler_ProcessExternalEvent  def_IntEvtHandler_InitializeReplicaState
+export_code 
+  def_IntEvtHandler_InitializeReplicaState
+  def_IntEvtHandler_ProposeInstance 
+  def_IntEvtHandler_StartLeaderElection 
+  fun_IntEvtHandler_ProcessExternalEvent  
+  def_IntEvtHandler_ProcessCommit
+  def_IntEvtHandler_RequestSnapshot
+  def_IntEvtHandler_ProcessSnapshot
+  def_IntEvtHandler_ProcessPeriodicCatchUp
   serialize_finfun deserialize_finfun get_ballot is_leader  get_leader  get_instance_info
+
 in Scala file "simplePaxos.scala"
 
 section {* The I/O-automata *}
