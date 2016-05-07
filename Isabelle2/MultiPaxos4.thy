@@ -100,27 +100,10 @@ definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet
 definition def_GetReplicaCount where
   -- {* The number of replicas *}
   "def_GetReplicaCount s \<equiv> fcard (acceptors s)"
+
 definition leader_of_bal where
   "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
     (b mod (def_GetReplicaCount s))"
-
-text {* A few functions to export to Scala for use by the runtime. *}
-
-definition def_IntEvtHandler_GetLeader where "def_IntEvtHandler_GetLeader s \<equiv> ballot s"
-
-definition def_IntEvtHander_IsLeader where "def_IntEvtHander_IsLeader s \<equiv> leader s"
-
-definition def_IntEvtHander_GetLeader where 
-  "def_IntEvtHander_GetLeader s \<equiv> case ballot s of Some (b::nat) \<Rightarrow> Some (b mod (def_GetReplicaCount s)) | _ \<Rightarrow> None"
-
-datatype 'v inst_status = s_not_participated | s_pending "'v cmd" | s_decided (decision:"'v cmd")
-
-definition get_instance_info where
-  "get_instance_info s i \<equiv> 
-    case decided s $ i of Some c \<Rightarrow> s_decided c | _ \<Rightarrow> (
-      case pending s $ i of Some c \<Rightarrow> s_pending c | _ \<Rightarrow> s_not_participated )"
-definition get_next_instance where
-  "get_next_instance s \<equiv> next_inst s"
 
 text {* Finfun Filter/Merge for snapshots / catch ups *}
 
@@ -383,6 +366,12 @@ definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<
     catch_up_requested = 0
    \<rparr>" 
 
+definition def_IntEvtHandler_GetLeader where "def_IntEvtHandler_GetLeader s \<equiv> ballot s"
+
+definition def_IntEvtHander_IsLeader where "def_IntEvtHander_IsLeader s \<equiv> leader s"
+
+definition def_IntEvtHander_GetLeader where 
+  "def_IntEvtHander_GetLeader s \<equiv> case ballot s of Some (b::nat) \<Rightarrow> Some (b mod (def_GetReplicaCount s)) | _ \<Rightarrow> None"
 
 definition def_IntEvtHandler_ProposeInstance :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
