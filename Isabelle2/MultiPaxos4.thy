@@ -6,16 +6,12 @@ begin
 
 text {* A version of MultiPaxos using FinFuns *}
 
-text {* TODO: implement checkpointing *}
-
 subsection {* Ordering on pairs *}
 
 fun less_eq_pair where
   "less_eq_pair (x,y) (u,v) = (y \<le> v)"
-
 fun less_pair where 
   "less_pair (x,y) (u,v) = (y < v)"
-
 instantiation prod :: (type,order) preorder
 begin
 definition less_eq_def: "less_eq x y = less_eq_pair x y"
@@ -93,26 +89,26 @@ fun accs where
 
 subsection {* Utility functions. *}
 
-definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  (acceptors s |-| {|a|})"
+definition def_SendAll where "def_SendAll s a m \<equiv> fimage (\<lambda> a2 . Packet (id s) a2 m)  (acceptors s |-| {|a|})"
 
 definition def_GetReplicaCount where
   -- {* The number of replicas *}
   "def_GetReplicaCount s \<equiv> fcard (acceptors s)"
 
-definition leader_of_bal where
-  "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
+definition def_LeaderOfBallot where
+  "def_LeaderOfBallot s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
     (b mod (def_GetReplicaCount s))"
 
 text {* Finfun Filter/Merge for snapshots / catch ups *}
 
-definition finfun_filter_advanced:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow>('a \<Rightarrow> bool) \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)" where
-  "finfun_filter_advanced ff filt_test\<equiv> fold (\<lambda> k l . if (filt_test k) then (l) else ((l)( k $:= (ff $ k)))) (finfun_to_list ff) (K$ (finfun_default ff)) "
-definition finfun_filter_lteq :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow>f 'b" where
-  "finfun_filter_lteq ff  truncloc\<equiv> finfun_filter_advanced ff (\<lambda> k . (k \<le> truncloc))"
-definition finfun_filter_gteq :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow>  'a \<Rightarrow> 'a \<Rightarrow>f 'b" where
-  "finfun_filter_gteq ff truncloc\<equiv> finfun_filter_advanced ff (\<lambda> k . (k \<ge> truncloc))"
-definition finfun_merge:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)  \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)" where
-  "finfun_merge from_ff to_ff \<equiv> fold (\<lambda> k l . finfun_update_code l  k (from_ff $ k) ) (finfun_to_list from_ff) to_ff "
+definition def_FinfunFilterAdvanced:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow>('a \<Rightarrow> bool) \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)" where
+  "def_FinfunFilterAdvanced ff filt_test\<equiv> fold (\<lambda> k l . if (filt_test k) then (l) else ((l)( k $:= (ff $ k)))) (finfun_to_list ff) (K$ (finfun_default ff)) "
+definition def_FinfunFilterLTEQ :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow>f 'b" where
+  "def_FinfunFilterLTEQ ff  truncloc\<equiv> def_FinfunFilterAdvanced ff (\<lambda> k . (k \<le> truncloc))"
+definition def_FinfunFilterGTEQ :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow>  'a \<Rightarrow> 'a \<Rightarrow>f 'b" where
+  "def_FinfunFilterGTEQ ff truncloc\<equiv> def_FinfunFilterAdvanced ff (\<lambda> k . (k \<ge> truncloc))"
+definition def_FinfunMerge:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)  \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)" where
+  "def_FinfunMerge from_ff to_ff \<equiv> fold (\<lambda> k l . finfun_update_code l  k (from_ff $ k) ) (finfun_to_list from_ff) to_ff "
 value "let ff = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(43 $:= 1); 
           ff2 = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(20 $:= 1)  in (finfun_default ff) "
 
@@ -121,7 +117,7 @@ subsection {* State Manipulating Utility Functions *}
 definition def_ProposeInstance :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   " def_ProposeInstance v s \<equiv> let a = id s in
-    (if (leader_of_bal s (ballot s) = a \<and> leader s)
+    (if (def_LeaderOfBallot s (ballot s) = a \<and> leader s)
       then 
       let
       a = id s;
@@ -133,20 +129,12 @@ definition def_ProposeInstance :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> (
         working_instances := (working_instances s)(inst $:=True) (* Added by ian to track working instances *)
        \<rparr>
     in
-      (new_state, send_all s a msg) 
-      else ( if (leader_of_bal s (ballot s) = a)
+      (new_state, def_SendAll s a msg) 
+      else ( if (def_LeaderOfBallot s (ballot s) = a)
         then (s,{||}) (* TODO: here we loose the proposal... *)
-        else (s, {|Packet a (leader_of_bal s (ballot s)) (Fwd v)|})) )"
+        else (s, {|Packet a (def_LeaderOfBallot s (ballot s)) (Fwd v)|})) )"
 
 subsection {* External Event handlers *}
-
-
- 
-(* Depreciated version.
-definition receive_fwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
-  "receive_fwd v s \<equiv> let a = id s in 
-    (if (leader_of_bal s (ballot s) = a) then do_2a s (Cmd v) else (s, ({||})))" 
-*)
 
 definition def_ExtEvtHandler_ReceiveFwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "def_ExtEvtHandler_ReceiveFwd v s \<equiv> def_ProposeInstance v s"
@@ -223,7 +211,7 @@ definition def_ExtEvtHandler_Receive1b :: "(inst \<Rightarrow>f ('v cmd \<times>
               msgs = map (\<lambda> i . case h $ i of 
                   None \<Rightarrow> Phase2a i bal NoOp a
                 | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
-              pckts = map (\<lambda> m . send_all s a m) msgs
+              pckts = map (\<lambda> m . def_SendAll s a m) msgs
             in (s4, fold (op |\<union>|) pckts {||}) )
           else (s1, {||}) ) )
     else (s, {||})) )"
@@ -309,7 +297,7 @@ definition def_Receive2_EntryPoint :: "inst \<Rightarrow> bal \<Rightarrow> 'v c
   ))
 "
 definition def_ExtEvtHandler_Receive2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
-  "def_ExtEvtHandler_Receive2a i b v l s \<equiv> (def_Receive2_EntryPoint i b v l s, send_all s (id s) (Phase2b i b (id s) v)) "
+  "def_ExtEvtHandler_Receive2a i b v l s \<equiv> (def_Receive2_EntryPoint i b v l s, def_SendAll s (id s) (Phase2b i b (id s) v)) "
 
 definition def_ExtEvtHandler_Receive2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "def_ExtEvtHandler_Receive2b i b a2 v s \<equiv> (def_Receive2_EntryPoint i b v a2 s, {||})"
@@ -318,8 +306,8 @@ text {* The leader receives this from a recovering replica *}
 definition def_ExtEvtHandler_ReceiveCatchUp :: "inst \<Rightarrow> inst \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times>  'v packet fset)" where
   "def_ExtEvtHandler_ReceiveCatchUp i1 i2 from s \<equiv> let 
       a= (id s); 
-      n1 = (finfun_filter_lteq (decided s) (i1-1));
-      needed=(finfun_filter_gteq (decided s) (i2+1)) 
+      n1 = (def_FinfunFilterLTEQ (decided s) (i1-1));
+      needed=(def_FinfunFilterGTEQ (decided s) (i2+1)) 
     in  
     (s, 
       ( {|Packet a from 
@@ -329,7 +317,7 @@ definition def_ExtEvtHandler_ReceiveCatchUp :: "inst \<Rightarrow> inst \<Righta
 text {* The replica receives this from the leader replica with catch decisions. Make sure to run the Commit internal handler after to finish the catch up.. TODO: Or should we force it here?*} 
 definition def_ExtEvtHandler_ReceiveCatchUpResponse :: "(inst \<Rightarrow>f 'v cmd option) \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times>  'v packet fset)" where
   "def_ExtEvtHandler_ReceiveCatchUpResponse d s \<equiv>  let 
-    a=(id s); s2 =  s\<lparr>decided := (finfun_merge d (decided s)), catch_up_requested := 0 \<rparr>
+    a=(id s); s2 =  s\<lparr>decided := (def_FinfunMerge d (decided s)), catch_up_requested := 0 \<rparr>
   in
     (s2, ({||}))"
 
@@ -429,10 +417,10 @@ definition def_IntEvtHandler_ProcessSnapshot :: "'v acc_state \<Rightarrow> 'v a
           None  (* we are trying to snapshot but haven't committed that far *)
         else
           Some (s\<lparr>snapshot_proposal := (fst (the sp)), snapshot_reference := (snd (the sp)),
-                decided := (finfun_filter_lteq (decided s) (snd (the sp))), 
-                vote := (finfun_filter_lteq (vote s) (snd (the sp))),
-                last_ballot := (finfun_filter_lteq (last_ballot s) (snd (the sp))),
-                twobs := (finfun_filter_lteq (twobs s) (snd (the sp)))
+                decided := (def_FinfunFilterLTEQ (decided s) (snd (the sp))), 
+                vote := (def_FinfunFilterLTEQ (vote s) (snd (the sp))),
+                last_ballot := (def_FinfunFilterLTEQ (last_ballot s) (snd (the sp))),
+                twobs := (def_FinfunFilterLTEQ (twobs s) (snd (the sp)))
                 \<rparr>)
       )
     )"
@@ -458,7 +446,7 @@ definition def_IntEvtHandler_ProcessPeriodicCatchUp  ::  "'v acc_state \<Rightar
      in ( if run then
             Some (
                 s\<lparr>catch_up_requested :=  the (ballot s)\<rparr>,  
-                {|Packet a (leader_of_bal s (ballot s)) (CatchUpReq ((last_committed s)+1) ld a)|})
+                {|Packet a (def_LeaderOfBallot s (ballot s)) (CatchUpReq ((last_committed s)+1) ld a)|})
           else
             None 
         )
