@@ -28,10 +28,11 @@ datatype 'v cmd = Cmd (the_val: 'v) | NoOp
 type_synonym bal = nat
 type_synonym inst = nat
 type_synonym acc = nat
+type_synonym ss_pointer = nat (* Snapshot pointer: from Upper Layer which is a db reference point. *)
 
 datatype 'v msg =
   Phase1a (from_leader: acc) (ballot:bal) (inst: inst) 
-| Phase1b (last_votes:"inst \<Rightarrow>f ('v cmd \<times> bal) option") (new_ballot: bal) (acceptor:acc) (new_decided:"inst \<Rightarrow>f 'v cmd option") (new_wi:"inst \<Rightarrow>f 'v cmd option") 
+| Phase1b (last_votes:"inst \<Rightarrow>f ('v cmd \<times> bal) option") (new_ballot: bal) (acceptor:acc)  (new_decided:"inst \<Rightarrow>f 'v cmd option") (new_wi:"inst \<Rightarrow>f 'v cmd option") (snapshotr:inst)  (snapshotp:"ss_pointer option") 
 | Phase2a (inst: inst) (for_ballot:bal) (suggestion:"'v cmd") (leader: acc)
 | Phase2b (inst: inst) (ballot:bal) (acceptor: acc) (cmd: "'v cmd")
 | Vote (inst: inst) (cmd: "'v cmd")
@@ -40,7 +41,7 @@ datatype 'v msg =
   -- {* Forwards a proposal to another proposer (the leader) *}
 | CatchUpReq (inst_start: inst) (inst_end: inst) (acceptor: acc)
   -- {* Forwards a request for catch up to the leader. *}
-| CatchUpRes (catchupdes:"inst \<Rightarrow>f 'v cmd option") 
+| CatchUpRes (catchupdes:"inst \<Rightarrow>f 'v cmd option")  (snapshotr:inst)  (snapshotp:"ss_pointer option") 
   -- {* The instances required to catch up *}
 datatype 'v  packet =
   -- {* A message with sender/destination information *}
@@ -77,7 +78,8 @@ record 'v acc_state =
   snapshot_reference :: "inst"
    -- {* The point strictly one less that the starting point for all the logs. The instance number at which the 
          database is caught up too. *}
-  snapshot_proposal :: "inst list"
+  snapshot_pointer :: "ss_pointer option"
+  snapshot_proposal :: "(inst \<times> ss_pointer) list"
    -- {* A list that contains requested points to conduct snapshot. *}
 
   catch_up_requested :: "nat"
@@ -100,8 +102,6 @@ definition def_LeaderOfBallot where
     (b mod (def_GetReplicaCount s))"
 
 (*START: To be depreciated. Directly called by utkarsh in code that should be removed *)
- definition deserialize_finfun where
-   "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
 (*END: To be depreciated. Directly called by utkarsh in code that should be removed *)
 
 text {* Finfun Filter/Merge for snapshots / catch ups *}
@@ -164,9 +164,19 @@ definition def_ExtEvtHandler_Receive1a :: "acc \<Rightarrow> bal \<Rightarrow> i
 
             new_decided = def_FinfunFilterLTEQ (decided s) pvar_LastCommittedFromSender; (* Send newer decided instances new leader *)                        
             new_wi = def_FinfunFilterLTEQ (working_instances s) pvar_LastCommittedFromSender; (* Send newer working instances to potentially new leader *)
-            (* TODO: In theory if we have snapshotted after pvar_LastCommittedFromSender.. we need to send the lastest snapshot in coordination with upper layer *)
-
-            msg_1b = Phase1b last_votes b a new_decided new_wi ;
+            snapr = (if ((snapshot_reference s) > pvar_LastCommittedFromSender) 
+              then (* We need to send the snapshot along *)
+                (snapshot_reference s)
+              else 
+                (0)
+            );
+            snapp = (if ((snapshot_reference s) >  pvar_LastCommittedFromSender) 
+              then (* We need to send the snapshot along *)
+                (snapshot_pointer s)
+              else 
+                (None)
+            ); 
+            msg_1b = Phase1b last_votes b a new_decided new_wi snapr snapp;
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := Some b\<rparr>
           in
@@ -186,9 +196,9 @@ definition def_Receive1b_UpdateOnebs ::
     in s\<lparr>onebs := (onebs s)(bal $:= at_bal)\<rparr>"
 
 definition def_Receive1b_UpdateDecidedandWorkingInstances :: 
-  "'v acc_state \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> 'v acc_state" where
+  "'v acc_state \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow> 'v acc_state" where
   -- {* Update self, based on the decided and working instances from the 1b message send by others *}
-  " def_Receive1b_UpdateDecidedandWorkingInstances s nd nwi \<equiv>
+  " def_Receive1b_UpdateDecidedandWorkingInstances s nd nwi sr sp \<equiv>
     let
       a = id s;
       nd = def_FinfunFilterLTEQ nd (last_committed s); (* Get rid of anything that you might have committed between the initial 1a and receiving the 1b *)
@@ -201,8 +211,12 @@ definition def_Receive1b_UpdateDecidedandWorkingInstances ::
               decided := nd, 
               commit_buffer := ncb,
               highest_decided := Some (def_FinfunMaxInstDomain (commit_buffer s))
-            \<rparr> 
-    in s1"
+            \<rparr>;
+      s2 = if (sr > 0) then 
+              (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp\<rparr>) 
+           else 
+              (s1)
+    in s2"
 
 definition def_Receive1b_HighestVoted :: "(nat \<Rightarrow>f (acc \<times> ('v cmd \<times> nat) option) list) \<Rightarrow> (nat \<Rightarrow>f ('v cmd) option)" where
   -- {* Makes sense only if no list in the map is empty. *}
@@ -230,22 +244,21 @@ text {*
 
   For now we propose values to all the instances ever started.
 *}
-definition def_ExtEvtHandler_Receive1b :: "(inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow>'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
- "def_ExtEvtHandler_Receive1b last_vs bal a2 nd nwi s \<equiv> (let a = id s in (
+definition def_ExtEvtHandler_Receive1b :: "(inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow>   'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
+ "def_ExtEvtHandler_Receive1b last_vs bal a2 nd nwi sr sp s \<equiv> (let a = id s in (
     if (Some bal = ballot s)
     then
       (let s1 = def_Receive1b_UpdateOnebs s bal a2 last_vs; 
-           s1a = def_Receive1b_UpdateDecidedandWorkingInstances s1 nd nwi
+           s1a = def_Receive1b_UpdateDecidedandWorkingInstances s1 nd nwi sr sp
        in (if def_ExtEvtHandler_Receive1b_QuorumReceived bal s1a 
           then (let
               h = def_Receive1b_HighestVoted (onebs s1a $ bal);
               twoa_is = finfun_to_list (working_instances s1a);
-              s4 = fold (\<lambda> i s . s\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= [a]))\<rparr>) twoa_is s1a; (* FIX *)
+              s4 = fold (\<lambda> i s . s\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= [a]))\<rparr>) twoa_is s1a; 
               msgs = map (\<lambda> i . case h $ i of 
                   None \<Rightarrow> Phase2a i bal NoOp a
                 | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
               pckts = map (\<lambda> m . def_SendAll s a m) msgs
-              (* TODO: Resend proposals based on everything in the working instances *)
             in (s4, fold (op |\<union>|) pckts {||}) )
           else (s1a, {||}) ) )
     else (s, {||})) )"
@@ -341,21 +354,40 @@ definition def_ExtEvtHandler_ReceiveCatchUp :: "inst \<Rightarrow> inst \<Righta
   "def_ExtEvtHandler_ReceiveCatchUp i1 i2 from s \<equiv> let 
       a= (id s); 
       n1 = (def_FinfunFilterLTEQ (decided s) (i1-1));
-      needed=(def_FinfunFilterGTEQ (decided s) (i2+1)) 
+      needed=(def_FinfunFilterGTEQ (decided s) (i2+1));
+      snapr = (if ((snapshot_reference s) > (i1-1)) 
+              then (* We need to send the snapshot along *)
+                (snapshot_reference s)
+              else 
+                (0)
+            );
+            snapp = (if ((snapshot_reference s) > (i1-1)) 
+              then (* We need to send the snapshot along *)
+                (snapshot_pointer s)
+              else 
+                (None)
+            )
     in  
     (s, 
       ( {|Packet a from 
-          (CatchUpRes needed)
+          (CatchUpRes needed snapr snapp)
         |}))"
 
 text {* The replica receives this from the leader replica with catch decisions. Make sure to run the Commit internal handler after to finish the catch up.. TODO: Or should we force it here?*} 
-definition def_ExtEvtHandler_ReceiveCatchUpResponse :: "(inst \<Rightarrow>f 'v cmd option) \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times>  'v packet fset)" where
-  "def_ExtEvtHandler_ReceiveCatchUpResponse d s \<equiv>  let 
-    a=(id s); s2 =  s\<lparr>decided := (def_FinfunMerge d (decided s)), catch_up_requested := 0 \<rparr>
+definition def_ExtEvtHandler_ReceiveCatchUpResponse :: "(inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times>  'v packet fset)" where
+  "def_ExtEvtHandler_ReceiveCatchUpResponse d sr sp s \<equiv>  let 
+    a=(id s); s1 =  s\<lparr>decided := (def_FinfunMerge d (decided s)), catch_up_requested := 0 \<rparr>;
+    s2 = if (sr > 0) then 
+              (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp\<rparr>) 
+           else 
+              (s1)
   in
     (s2, ({||}))"
 
 subsection {* Internal Handlers *}
+
+ definition def_IntEvtHandler_FinfunDeserialize where
+   "def_IntEvtHandler_FinfunDeserialize l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
 
 definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
   "def_IntEvtHandler_InitializeReplicaState n a \<equiv> \<lparr>
@@ -378,8 +410,9 @@ definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<
     last_committed = 0,
 
     snapshot_reference=0,
+    snapshot_pointer = None,
     snapshot_proposal = [],
-    
+
     catch_up_requested = 0
    \<rparr>" 
 
@@ -418,13 +451,13 @@ definition def_IntEvtHandler_StartLeaderElection :: "'v acc_state \<Rightarrow> 
 
 fun fun_IntEvtHandler_ProcessExternalEvent where
   "fun_IntEvtHandler_ProcessExternalEvent (Phase1a l b i) s = def_ExtEvtHandler_Receive1a l b i s"
-| "fun_IntEvtHandler_ProcessExternalEvent (Phase1b lvs b a nd nwi) s = def_ExtEvtHandler_Receive1b lvs b a nd nwi s"
+| "fun_IntEvtHandler_ProcessExternalEvent (Phase1b lvs b a nd nwi sr sp ) s = def_ExtEvtHandler_Receive1b lvs b a nd nwi sr sp s "
 | "fun_IntEvtHandler_ProcessExternalEvent (Phase2a i b cm l) s = def_ExtEvtHandler_Receive2a i b cm l s"
 | "fun_IntEvtHandler_ProcessExternalEvent (Phase2b i b a cm) s = def_ExtEvtHandler_Receive2b i b a cm s"
 | "fun_IntEvtHandler_ProcessExternalEvent (Vote i cm) s = undefined"
 | "fun_IntEvtHandler_ProcessExternalEvent (Fwd v) s = def_ExtEvtHandler_ReceiveFwd v s"
 | "fun_IntEvtHandler_ProcessExternalEvent (CatchUpReq i1 i2 a ) s = def_ExtEvtHandler_ReceiveCatchUp i1 i2 a s"
-| "fun_IntEvtHandler_ProcessExternalEvent (CatchUpRes d ) s = def_ExtEvtHandler_ReceiveCatchUpResponse d s"
+| "fun_IntEvtHandler_ProcessExternalEvent (CatchUpRes d sr sp ) s = def_ExtEvtHandler_ReceiveCatchUpResponse d sr sp s"
 text {* Serializing finfuns to lists *}
 
 definition def_IntEvtHandler_ProcessCommit :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v internal_event) option" where
@@ -446,15 +479,15 @@ definition def_IntEvtHandler_ProcessSnapshot :: "'v acc_state \<Rightarrow> 'v a
       if ( sp = None) 
       then None (* Nothing todo *)
       else (  
-        if ((snd (the sp)) > (last_committed s))
+        if ((fst (snd (the sp))) > (last_committed s))
         then
           None  (* we are trying to snapshot but haven't committed that far *)
         else
-          Some (s\<lparr>snapshot_proposal := (fst (the sp)), snapshot_reference := (snd (the sp)),
-                decided := (def_FinfunFilterLTEQ (decided s) (snd (the sp))), 
-                vote := (def_FinfunFilterLTEQ (vote s) (snd (the sp))),
-                last_ballot := (def_FinfunFilterLTEQ (last_ballot s) (snd (the sp))),
-                twobs := (def_FinfunFilterLTEQ (twobs s) (snd (the sp)))
+          Some (s\<lparr>snapshot_proposal := (fst (the sp)), snapshot_pointer:= Some (snd (snd (the sp))),snapshot_reference := fst (snd (the sp)),
+                decided := (def_FinfunFilterLTEQ (decided s) (fst (snd (the sp)))), 
+                vote := (def_FinfunFilterLTEQ (vote s)  (fst (snd (the sp)))),
+                last_ballot := (def_FinfunFilterLTEQ (last_ballot s)  (fst (snd (the sp)))),
+                twobs := (def_FinfunFilterLTEQ (twobs s) (fst (snd (the sp))))
                 \<rparr>)
       )
     )"
@@ -488,13 +521,13 @@ definition def_IntEvtHandler_ProcessPeriodicCatchUp  ::  "'v acc_state \<Rightar
         )
      )"
 
-definition def_IntEvtHandler_RequestSnapshot :: "'v acc_state \<Rightarrow> inst \<Rightarrow> 'v acc_state option " where
-  "def_IntEvtHandler_RequestSnapshot s instance \<equiv> 
+definition def_IntEvtHandler_RequestSnapshot :: "'v acc_state \<Rightarrow> inst \<Rightarrow> ss_pointer \<Rightarrow> 'v acc_state option " where
+  "def_IntEvtHandler_RequestSnapshot s instance ssp \<equiv> 
     if (instance \<le> (snapshot_reference s)) then 
        None
     else ( 
       let 
-        s2 = s\<lparr>snapshot_proposal := ((snapshot_proposal s) @ [instance]) \<rparr>
+        s2 = s\<lparr> snapshot_proposal := ((snapshot_proposal s) @ [(instance,ssp)]) \<rparr>
        in
         Some s2
     )"
@@ -518,6 +551,7 @@ export_code
   def_IntEvtHandler_ProcessSnapshot
   def_IntEvtHandler_ProcessPeriodicCatchUp
   def_IntEvtHandler_GetBallot def_IntEvtHander_IsLeader def_IntEvtHander_GetLeader def_IntEvtHandler_GetNextInstance
+  def_IntEvtHandler_FinfunDeserialize
 
 in Scala file "simplePaxos.scala"
 
