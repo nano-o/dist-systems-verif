@@ -100,8 +100,6 @@ definition def_LeaderOfBallot where
     (b mod (def_GetReplicaCount s))"
 
 (*START: To be depreciated. Directly called by utkarsh in code that should be removed *)
-definition get_next_instance where
-  "get_next_instance s \<equiv> next_inst s"
  definition deserialize_finfun where
    "deserialize_finfun l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
 (*END: To be depreciated. Directly called by utkarsh in code that should be removed *)
@@ -385,10 +383,9 @@ definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<
     catch_up_requested = 0
    \<rparr>" 
 
-definition def_IntEvtHandler_GetLeader where "def_IntEvtHandler_GetLeader s \<equiv> ballot s"
-
+definition def_IntEvtHandler_GetBallot where "def_IntEvtHandler_GetBallot s \<equiv> ballot s"
+definition def_IntEvtHandler_GetNextInstance where "def_IntEvtHandler_GetNextInstance s \<equiv> next_inst s"
 definition def_IntEvtHander_IsLeader where "def_IntEvtHander_IsLeader s \<equiv> leader s"
-
 definition def_IntEvtHander_GetLeader where 
   "def_IntEvtHander_GetLeader s \<equiv> case ballot s of Some (b::nat) \<Rightarrow> Some (b mod (def_GetReplicaCount s)) | _ \<Rightarrow> None"
 
@@ -520,7 +517,7 @@ export_code
   def_IntEvtHandler_RequestSnapshot
   def_IntEvtHandler_ProcessSnapshot
   def_IntEvtHandler_ProcessPeriodicCatchUp
-  def_IntEvtHandler_GetLeader def_IntEvtHander_IsLeader def_IntEvtHander_GetLeader
+  def_IntEvtHandler_GetBallot def_IntEvtHander_IsLeader def_IntEvtHander_GetLeader def_IntEvtHandler_GetNextInstance
 
 in Scala file "simplePaxos.scala"
 
