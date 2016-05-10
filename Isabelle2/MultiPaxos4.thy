@@ -379,10 +379,12 @@ definition def_ExtEvtHandler_ReceiveCatchUp :: "inst \<Rightarrow> inst \<Righta
           (CatchUpRes needed snapr snapp)
         |}))"
 
-text {* The replica receives this from the leader replica with catch decisions. Make sure to run the Commit internal handler after to finish the catch up.. TODO: Or should we force it here?*} 
+text {* The replica receives this from the leader replica with catch decisions. 
+Make sure to run the Commit internal handler after to finish the catch up.. TODO: Or should we force it here?*} 
 definition def_ExtEvtHandler_ReceiveCatchUpResponse :: "(inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times>  'v packet fset)" where
   "def_ExtEvtHandler_ReceiveCatchUpResponse d sr sp s \<equiv>  let 
-    a=(id s); s1 =  s\<lparr>decided := (def_FinfunMerge d (decided s)), catch_up_requested := 0 \<rparr>;
+    a=(id s); s1 =  s\<lparr>decided := (def_FinfunMerge d (decided s)), 
+            commit_buffer := (def_FinfunFilterLTEQ (def_FinfunMerge d (commit_buffer s)) (last_committed s)), catch_up_requested := 0 \<rparr>;
     s2 = if (sr > 0) then 
               (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp, last_committed:=sr\<rparr>) 
            else 
