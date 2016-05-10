@@ -193,9 +193,9 @@ definition def_Receive1b_UpdateOnebs ::
       pair_map = ($ (onebs s $ bal), last_vs $);
       at_bal = combiner o$ pair_map
     in s\<lparr>onebs := (onebs s)(bal $:= at_bal)\<rparr>"
-value "[1..<3]"
+value "snd(1,2,3)"
 definition def_Receive1b_UpdateDecidedandWorkingInstances :: 
-  "'v acc_state \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow> (inst list \<times> 'v acc_state )" where
+  "'v acc_state \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow> ((inst list) \<times> inst \<times> 'v acc_state )" where
   -- {* Update self, based on the decided and working instances from the 1b message send by others *}
   " def_Receive1b_UpdateDecidedandWorkingInstances s nd nwi sr sp \<equiv>
     let
@@ -227,7 +227,7 @@ definition def_Receive1b_UpdateDecidedandWorkingInstances ::
               (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp\<rparr>) 
            else 
               (s1)
-    in (holes,s2)"
+    in (holes,max_value,s2)"
 
 text {* If we had finfun_Ex we could do this better.
   Here we use instance 0 by default, but that's arbitrary. *}
@@ -245,7 +245,6 @@ text {*
   It's because holes block the execution of higher commands while we have no new client commands to propose.
   But that's unlikely under high load...
 
-  For now we propose values to all the instances ever started.
 *}
 
 definition def_ExtEvtHandler_Receive1b :: "(inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow>   'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
@@ -254,11 +253,12 @@ definition def_ExtEvtHandler_Receive1b :: "(inst \<Rightarrow>f ('v cmd \<times>
     then
       (let s1 = def_Receive1b_UpdateOnebs s bal a2 last_vs; 
            result = def_Receive1b_UpdateDecidedandWorkingInstances s1 nd nwi sr sp;
-           s2 = snd result;
-           holes = fst result
+           s2 = snd (snd result);
+           holes = fst result;
+           max_value = fst (snd result)
        in (if def_ExtEvtHandler_Receive1b_QuorumReceived bal s2 
           then (let
-                s3 = s2\<lparr>leader := if (def_LeaderOfBallot s (Some bal) = a) then (True) else (False)\<rparr>; 
+                s3 = s2\<lparr>leader := (if (def_LeaderOfBallot s (Some bal) = a) then (True) else (False)), next_inst := (max_value+1)\<rparr>; 
                 working = finfun_to_list (working_instances s3);
                 s4 = fold (\<lambda> i s_local . s_local\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= [a]))\<rparr>) working s3; 
                 s5 = fold (\<lambda> i s_local . s_local\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= [a]))\<rparr>) holes s4; 
