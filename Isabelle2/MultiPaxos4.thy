@@ -193,7 +193,7 @@ definition def_Receive1b_UpdateOnebs ::
       pair_map = ($ (onebs s $ bal), last_vs $);
       at_bal = combiner o$ pair_map
     in s\<lparr>onebs := (onebs s)(bal $:= at_bal)\<rparr>"
-value "snd(1,2,3)"
+
 definition def_Receive1b_UpdateDecidedandWorkingInstances :: 
   "'v acc_state \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow> ((inst list) \<times> inst \<times> 'v acc_state )" where
   -- {* Update self, based on the decided and working instances from the 1b message send by others *}
@@ -384,7 +384,7 @@ definition def_ExtEvtHandler_ReceiveCatchUpResponse :: "(inst \<Rightarrow>f 'v 
   "def_ExtEvtHandler_ReceiveCatchUpResponse d sr sp s \<equiv>  let 
     a=(id s); s1 =  s\<lparr>decided := (def_FinfunMerge d (decided s)), catch_up_requested := 0 \<rparr>;
     s2 = if (sr > 0) then 
-              (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp, last_committed:=sr, next_inst:=\<rparr>) 
+              (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp, last_committed:=sr\<rparr>) 
            else 
               (s1)
   in
