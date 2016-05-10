@@ -205,18 +205,10 @@ definition def_Receive1b_UpdateDecidedandWorkingInstances ::
       nd = def_FinfunFilterLTEQ nd (last_committed s); (* Get rid of anything that you might have committed between the initial 1a and receiving the 1b *)
       nwi = def_FinfunFilterLTEQ nwi (last_committed s); (* Get rid of anything that you might have committed between the initial 1a and receiving the 1b *)
 
-      max_nd = def_FinfunMaxInstDomain nd;
-      max_nwi = def_FinfunMaxInstDomain nwi;
-      max_value1 = (if max_nd \<le> max_nwi then max_nwi else max_nd);
-      max_value = (if the (highest_decided s) \<le> max_value1 then max_value1 else the (highest_decided s));
-
       nwi = (def_FinfunMergeClean nwi (working_instances s)); (* Merge the two working instance lists*)
       nwi =  def_FinfunDisjunctionDomain nwi nd; (* Get rid of anything from the working instances that you can now decide *)
       ncb = def_FinfunMergeClean nd (commit_buffer s); (* Add in new decisions to commit buffer. *)
       nd = def_FinfunMerge nd (decided s); (* Add in new decisions to decision log. *)
-
-      w = [((last_committed s)+1)..<(max_value+1)];
-      holes = fold (\<lambda> k l . if ((working_instances s $ k) = None \<and> (commit_buffer s $ k) = None ) then (k # l) else (l)) w [];
 
       s1 = s\<lparr> working_instances := nwi, 
               decided := nd, 
@@ -224,9 +216,16 @@ definition def_Receive1b_UpdateDecidedandWorkingInstances ::
               highest_decided := Some (def_FinfunMaxInstDomain (commit_buffer s))
             \<rparr>;
       s2 = if (sr > 0) then 
-              (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp\<rparr>) 
+              (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp, last_committed := sr\<rparr>) 
            else 
-              (s1)
+              (s1);
+
+      max_value = (if the (highest_decided s2) \<le> def_FinfunMaxInstDomain (commit_buffer s2) 
+                  then  def_FinfunMaxInstDomain (commit_buffer s2) else the (highest_decided s2));
+      w = [((last_committed s2)+1)..<(max_value+1)];
+      holes = fold (\<lambda> k l . if ((working_instances s2 $ k) = None \<and> (commit_buffer s2 $ k) = None ) then (k # l) else (l)) w []
+
+
     in (holes,max_value,s2)"
 
 text {* If we had finfun_Ex we could do this better.
@@ -385,7 +384,7 @@ definition def_ExtEvtHandler_ReceiveCatchUpResponse :: "(inst \<Rightarrow>f 'v 
   "def_ExtEvtHandler_ReceiveCatchUpResponse d sr sp s \<equiv>  let 
     a=(id s); s1 =  s\<lparr>decided := (def_FinfunMerge d (decided s)), catch_up_requested := 0 \<rparr>;
     s2 = if (sr > 0) then 
-              (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp\<rparr>) 
+              (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp, last_committed:=sr, next_inst:=\<rparr>) 
            else 
               (s1)
   in
