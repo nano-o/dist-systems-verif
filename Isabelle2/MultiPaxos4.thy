@@ -28,7 +28,7 @@ datatype 'v cmd = Cmd (the_val: 'v) | NoOp
 type_synonym bal = nat
 type_synonym inst = nat
 type_synonym acc = nat
-type_synonym ss_pointer = nat (* Snapshot pointer: from Upper Layer which is a db reference point. *)
+type_synonym ss_pointer = nat (* Notional snapshot pointer: from Upper Layer which is a db reference point. *)
 
 datatype 'v msg =
   Phase1a (from_leader: acc) (ballot:bal) (inst: inst) 
@@ -78,9 +78,11 @@ record 'v acc_state =
   snapshot_reference :: "inst"
    -- {* The point strictly one less that the starting point for all the logs. The instance number at which the 
          database is caught up too. *}
-  snapshot_pointer :: "ss_pointer option"
+  snapshot_pointer :: "ss_pointer option" 
+   -- {* The point to the latest Snapshot from the upper layer. Is None if no Snapshot present. *}
+
   snapshot_proposal :: "(inst \<times> ss_pointer) list"
-   -- {* A list that contains requested points to conduct snapshot. *}
+   -- {* A list that contains requests from upper layer for Snapshot. Each entry contains the instance point and the DB Snapshot reference . *}
 
   catch_up_requested :: "nat"
    -- {* Zero if no catch up on going, else set to the leader that we are requesting a catch up from. *}
@@ -100,9 +102,6 @@ definition def_GetReplicaCount where
 definition def_LeaderOfBallot where
   "def_LeaderOfBallot s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
     (b mod (def_GetReplicaCount s))"
-
-(*START: To be depreciated. Directly called by utkarsh in code that should be removed *)
-(*END: To be depreciated. Directly called by utkarsh in code that should be removed *)
 
 text {* Finfun Filter/Merge for snapshots / catch ups *}
 
@@ -130,22 +129,22 @@ subsection {* State Manipulating Utility Functions *}
 definition def_ProposeInstance :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   " def_ProposeInstance v s \<equiv> let a = id s in
-    (if (def_LeaderOfBallot s (ballot s) = a \<and> leader s)
-      then 
-      let
-      a = id s;
-      inst = (next_inst s);
-      b = the (ballot s);
-      msg = Phase2a inst b (Cmd v) a;
-      new_state = s\<lparr>next_inst := (inst+1),
-        twobs := finfun_update_code (twobs s) inst ((K$ [])(b $:= [a])),
-        working_instances := (working_instances s)(inst $:=(Some (Cmd v)))
-       \<rparr>
-    in
-      (new_state, def_SendAll s a msg) 
-      else ( if (def_LeaderOfBallot s (ballot s) = a)
-        then (s,{||}) (* TODO: here we loose the proposal... *)
-        else (s, {|Packet a (def_LeaderOfBallot s (ballot s)) (Fwd v)|})) )"
+    (if (def_LeaderOfBallot s (ballot s) = a \<and> leader s) then 
+       let
+        a = id s;
+        inst = (next_inst s);
+        b = the (ballot s);
+        msg = Phase2a inst b (Cmd v) a;
+        new_state = s\<lparr>next_inst := (inst+1),
+          twobs := finfun_update_code (twobs s) inst ((K$ [])(b $:= [a])),
+          working_instances := (working_instances s)(inst $:=(Some (Cmd v)))
+          \<rparr>
+       in (new_state, def_SendAll s a msg) 
+      else ( 
+        if (def_LeaderOfBallot s (ballot s) = a) then 
+          (s,{||}) (* Unreachable state *)
+        else 
+          (s,{|Packet a (def_LeaderOfBallot s (ballot s)) (Fwd v)|})) )"
 
 subsection {* External Event handlers *}
 
@@ -194,19 +193,31 @@ definition def_Receive1b_UpdateOnebs ::
       pair_map = ($ (onebs s $ bal), last_vs $);
       at_bal = combiner o$ pair_map
     in s\<lparr>onebs := (onebs s)(bal $:= at_bal)\<rparr>"
-
+value "[1..<3]"
 definition def_Receive1b_UpdateDecidedandWorkingInstances :: 
-  "'v acc_state \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow> 'v acc_state" where
+  "'v acc_state \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow> (inst list \<times> 'v acc_state )" where
   -- {* Update self, based on the decided and working instances from the 1b message send by others *}
   " def_Receive1b_UpdateDecidedandWorkingInstances s nd nwi sr sp \<equiv>
     let
       a = id s;
+
+
       nd = def_FinfunFilterLTEQ nd (last_committed s); (* Get rid of anything that you might have committed between the initial 1a and receiving the 1b *)
       nwi = def_FinfunFilterLTEQ nwi (last_committed s); (* Get rid of anything that you might have committed between the initial 1a and receiving the 1b *)
+
+      max_nd = def_FinfunMaxInstDomain nd;
+      max_nwi = def_FinfunMaxInstDomain nwi;
+      max_value1 = (if max_nd \<le> max_nwi then max_nwi else max_nd);
+      max_value = (if the (highest_decided s) \<le> max_value1 then max_value1 else the (highest_decided s));
+
       nwi = (def_FinfunMergeClean nwi (working_instances s)); (* Merge the two working instance lists*)
       nwi =  def_FinfunDisjunctionDomain nwi nd; (* Get rid of anything from the working instances that you can now decide *)
       ncb = def_FinfunMergeClean nd (commit_buffer s); (* Add in new decisions to commit buffer. *)
       nd = def_FinfunMerge nd (decided s); (* Add in new decisions to decision log. *)
+
+      w = [((last_committed s)+1)..<(max_value+1)];
+      holes = fold (\<lambda> k l . if ((working_instances s $ k) = None \<and> (commit_buffer s $ k) = None ) then (k # l) else (l)) w [];
+
       s1 = s\<lparr> working_instances := nwi, 
               decided := nd, 
               commit_buffer := ncb,
@@ -216,15 +227,7 @@ definition def_Receive1b_UpdateDecidedandWorkingInstances ::
               (s1 \<lparr>snapshot_reference:=sr, snapshot_pointer:=sp\<rparr>) 
            else 
               (s1)
-    in s2"
-
-definition def_Receive1b_HighestVoted :: "(nat \<Rightarrow>f (acc \<times> ('v cmd \<times> nat) option) list) \<Rightarrow> (nat \<Rightarrow>f ('v cmd) option)" where
-  -- {* Makes sense only if no list in the map is empty. *}
-  "def_Receive1b_HighestVoted m \<equiv>
-    let
-        votes = (map snd) o$ m;
-        highest = (\<lambda> l . if (l = []) then None else (fold max l (l!0)) \<bind> (\<lambda> vb . Some (fst vb)))
-    in highest o$ votes"
+    in (holes,s2)"
 
 text {* If we had finfun_Ex we could do this better.
   Here we use instance 0 by default, but that's arbitrary. *}
@@ -244,23 +247,27 @@ text {*
 
   For now we propose values to all the instances ever started.
 *}
+
 definition def_ExtEvtHandler_Receive1b :: "(inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> (inst \<Rightarrow>f 'v cmd option) \<Rightarrow> inst \<Rightarrow> (ss_pointer option) \<Rightarrow>   'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
  "def_ExtEvtHandler_Receive1b last_vs bal a2 nd nwi sr sp s \<equiv> (let a = id s in (
     if (Some bal = ballot s)
     then
       (let s1 = def_Receive1b_UpdateOnebs s bal a2 last_vs; 
-           s1a = def_Receive1b_UpdateDecidedandWorkingInstances s1 nd nwi sr sp
-       in (if def_ExtEvtHandler_Receive1b_QuorumReceived bal s1a 
+           result = def_Receive1b_UpdateDecidedandWorkingInstances s1 nd nwi sr sp;
+           s2 = snd result;
+           holes = fst result
+       in (if def_ExtEvtHandler_Receive1b_QuorumReceived bal s2 
           then (let
-              h = def_Receive1b_HighestVoted (onebs s1a $ bal);
-              twoa_is = finfun_to_list (working_instances s1a);
-              s4 = fold (\<lambda> i s . s\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= [a]))\<rparr>) twoa_is s1a; 
-              msgs = map (\<lambda> i . case h $ i of 
-                  None \<Rightarrow> Phase2a i bal NoOp a
-                | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
-              pckts = map (\<lambda> m . def_SendAll s a m) msgs
-            in (s4, fold (op |\<union>|) pckts {||}) )
-          else (s1a, {||}) ) )
+                s3 = s2\<lparr>leader := if (def_LeaderOfBallot s (Some bal) = a) then (True) else (False)\<rparr>; 
+                working = finfun_to_list (working_instances s3);
+                s4 = fold (\<lambda> i s_local . s_local\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= [a]))\<rparr>) working s3; 
+                s5 = fold (\<lambda> i s_local . s_local\<lparr>twobs := finfun_update_code (twobs s) i ((twobs s $ i)(bal $:= [a]))\<rparr>) holes s4; 
+                msgsa = map (\<lambda> i . Phase2a i bal (the ((working_instances s5) $i)) a) working;
+                msgsb = map (\<lambda> i . Phase2a i bal NoOp a) holes;
+                msgs = msgsa @ msgsb;
+                pckts = map (\<lambda> m . def_SendAll s a m) msgs
+            in (s5, fold (op |\<union>|) pckts {||}) )
+          else (s2, {||}) ) )
     else (s, {||})) )"
 
 text {*  Method def_Receive2_SetDecided
