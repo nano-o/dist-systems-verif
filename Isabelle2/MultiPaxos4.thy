@@ -87,6 +87,9 @@ record 'v acc_state =
   catch_up_requested :: "nat"
    -- {* Zero if no catch up on going, else set to the leader that we are requesting a catch up from. *}
 
+  disparity :: "nat"
+  -- {* How far the highest decided is allowed to grow before a catch up is triggered . *}
+
 fun accs where
   "accs (0::nat) = {||}"
 | "accs (Suc n) = (accs n) |\<union>| {|n|}"
@@ -397,8 +400,8 @@ subsection {* Internal Handlers *}
  definition def_IntEvtHandler_FinfunDeserialize where
    "def_IntEvtHandler_FinfunDeserialize l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
 
-definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
-  "def_IntEvtHandler_InitializeReplicaState n a \<equiv> \<lparr>
+definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<Rightarrow> nat \<Rightarrow> 'v acc_state" where
+  "def_IntEvtHandler_InitializeReplicaState n a d \<equiv> \<lparr>
     id = a,
     leader = False,
     acc_state.acceptors = accs n,
@@ -420,8 +423,11 @@ definition def_IntEvtHandler_InitializeReplicaState :: "nat \<Rightarrow> acc \<
     snapshot_reference=0,
     snapshot_pointer = None,
     snapshot_proposal = [],
+    
+    catch_up_requested = 0,
 
-    catch_up_requested = 0
+    disparity = d
+    
    \<rparr>" 
 
 definition def_IntEvtHandler_GetBallot where "def_IntEvtHandler_GetBallot s \<equiv> ballot s"
@@ -516,10 +522,9 @@ in the receive 2a/b.
 definition def_IntEvtHandler_ProcessPeriodicCatchUp  ::  "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset) option" where 
  " def_IntEvtHandler_ProcessPeriodicCatchUp s \<equiv> 
  (let a = id s; 
-      disparity=500; (* How far the last decision can go wrt last committed before a catch up is triggered *)
       ld=(if ((highest_decided s) = None) then (0) else the (highest_decided s));
       retry_needed = ((catch_up_requested s) \<noteq> 0) \<and> the (ballot s) \<noteq> (catch_up_requested s); (* Retry if the leader changes *)
-      run = (((ld-(last_committed s)) >  disparity) \<and> ((catch_up_requested s) = 0))  \<or> (retry_needed) 
+      run = (((ld-(last_committed s)) >  (disparity s)) \<and> ((catch_up_requested s) = 0))  \<or> (retry_needed) 
      in ( if run then
             Some (
                 s\<lparr>catch_up_requested :=  the (ballot s)\<rparr>,  
@@ -606,7 +611,7 @@ assumes "a \<le> n" and "a > 0"
 shows "(init_nodes_state a n) $ a = def_IntEvtHandler_InitializeReplicaState n a" using assms
 by (induct a n arbitrary:n rule:init_nodes_state.induct, auto)
 
-
+(*
 definition mp_start where
   "mp_start \<equiv> \<lparr>node_states = (init_nodes_state nas nas), network = {||}\<rparr>"
 
@@ -615,7 +620,7 @@ definition update_state where
     s\<lparr>node_states := (node_states s)(a $:= a_s),
       network := network s |\<union>| packets\<rparr>"
 
-(*
+
 inductive mp_trans where
   "propose v (node_states s $ a) = (new_s, ps) \<Longrightarrow>
     mp_trans (s, Propose a (Cmd v), update_state a new_s ps s)"
