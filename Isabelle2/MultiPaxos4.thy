@@ -281,9 +281,12 @@ text {*  Method def_Receive2_SetDecided
     Deciding an already decided instance would result in an extra record in the commit buffer indefinitely.
 *}
 definition def_Receive2_SetDecided where 
-  "def_Receive2_SetDecided pvar_StartState pvar_Instance pvar_InstanceCommand \<equiv> pvar_StartState\<lparr>
+  "def_Receive2_SetDecided pvar_StartState pvar_Instance pvar_InstanceCommand \<equiv> 
+        let highestd = (if (highest_decided pvar_StartState = None) 
+        then (0) else (the (highest_decided pvar_StartState))) in 
+        pvar_StartState\<lparr>
         decided := finfun_update_code (decided pvar_StartState) pvar_Instance (Some pvar_InstanceCommand), 
-        highest_decided := (if (pvar_Instance > the (highest_decided pvar_StartState)) then (Some pvar_Instance) else (highest_decided pvar_StartState)),
+        highest_decided := (if (pvar_Instance > highestd) then (Some pvar_Instance) else (Some highestd)),
         commit_buffer := (commit_buffer pvar_StartState)(pvar_Instance $:= Some pvar_InstanceCommand)
 \<rparr>"
 
