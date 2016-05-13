@@ -223,8 +223,8 @@ definition def_Receive1b_UpdateDecidedandWorkingInstances ::
            else 
               (s1);
 
-      max_value = (if the (highest_decided s2) \<le> def_FinfunMaxInstDomain (commit_buffer s2) 
-                  then  def_FinfunMaxInstDomain (commit_buffer s2) else the (highest_decided s2));
+      max_value = (if the (highest_decided s2) \<le> def_FinfunMaxInstDomain (working_instances s2) 
+                  then  def_FinfunMaxInstDomain (working_instances s2) else the (highest_decided s2));
       w = [((last_committed s2)+1)..<(max_value+1)];
       holes = fold (\<lambda> k l . if ((working_instances s2 $ k) = None \<and> (commit_buffer s2 $ k) = None ) then (k # l) else (l)) w []
 
