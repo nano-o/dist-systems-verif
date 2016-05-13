@@ -366,7 +366,7 @@ definition def_ExtEvtHandler_ReceiveCatchUp :: "inst \<Rightarrow> inst \<Righta
   "def_ExtEvtHandler_ReceiveCatchUp i1 i2 from s \<equiv> let 
       a= (id s); 
       n1 = (def_FinfunFilterLTEQ (decided s) (i1-1));
-      needed=(def_FinfunFilterGTEQ (decided s) (i2+1));
+      needed=(def_FinfunFilterGTEQ (n1) (i2+1));
       snapr = (if ((snapshot_reference s) > (i1-1)) 
               then (* We need to send the snapshot along *)
                 (snapshot_reference s)
