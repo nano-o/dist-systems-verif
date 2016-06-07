@@ -311,99 +311,114 @@ value "largestprefix [(1,v1), (2,v2), (4,v4)]"
 
 section {* MultiPaxos IOA *}
 
-record ('v, 'a, 'b) mp_state_global = 
-  node_states :: "('v, 'a, 'b) mp_state"
-  network :: "('v cmd, 'a, 'b) packet set"
+record 'v mp_state = 
+  node_states :: "nat \<Rightarrow> 'v acc_state"
+  network :: "'v packet fset"
 
-locale Paxos = IOA +
-  fixes acceptors::"nat fset" and learners::"'l fset" and quorums::"nat fset fset"
-  assumes "acceptors \<noteq> {||}"
-    and "learners \<noteq> {||}"
-    and "\<And> q1 q2 . \<lbrakk>q1 |\<in>| quorums; q2 |\<in>| quorums\<rbrakk> \<Longrightarrow> q1 |\<inter>| q2 \<noteq> {||}"
-    and "\<And> q . q |\<in>| quorums \<Longrightarrow> q |\<subseteq>| acceptors"
-    and "quorums \<noteq> {||}"
-begin    
+datatype 'v mp_action =
+  Receive_fwd acc acc 'v
+| Propose acc "'v cmd"
+| Send_1as acc
+| Receive_1a_send_1b acc acc bal
+| Receive_1b acc acc "inst \<Rightarrow>f ('v cmd \<times> bal) option" bal
+| Receive_2a_send_2b acc acc inst bal "'v cmd"
+| Receive_2b acc acc inst bal "'v cmd"
+| Learn acc inst "'v cmd"
 
-definition p_asig where                                           
-  "p_asig \<equiv>
-    \<lparr> inputs = {a . \<exists>acc. \<exists> c . a = Propose acc c},
-      outputs = {},
-      internals = {a . \<exists> acc . acc |\<in>| acceptors \<and> a = Send_1a acc}
-        \<union> {a . \<exists> p. \<exists> acc . acc |\<in>| acceptors \<and> a = Respond_1a acc p}
-        \<union> {a . \<exists>vote_log. \<exists> b . \<exists> l. \<exists> acc . acc |\<in>| acceptors \<and> a = Respond_1b l vote_log acc b}
-        \<union> {a . \<exists>l. \<exists>inst. \<exists> b . \<exists> acc . \<exists> v. acc |\<in>| acceptors \<and> a = Send_2a acc inst b v l}
-        \<union> {a . \<exists> l. \<exists>inst. \<exists> b . \<exists> acc . \<exists> v. acc |\<in>| acceptors \<and> a = Respond_2b l inst b acc v}
-        \<union> {a . \<exists>acc. \<exists> v . acc |\<in>| acceptors \<and> a = FwdA acc v}\<rparr>"
+locale mp_ioa = IOA +
+  fixes nas :: nat
+    -- {* The number of acceptors *}
+begin
 
-definition p_start where
-  "p_start \<equiv> {\<lparr>node_states = (init_state acceptors), network = {}\<rparr>}"
+definition mp_asig where
+  "mp_asig \<equiv>
+    \<lparr> inputs = { Propose a c | a c . a |\<in>| accs nas},
+      outputs = { Learn l i v | i v l . l |\<in>| accs nas},
+      internals = {Receive_fwd a1 a2 v | a1 a2 v . a1 |\<in>| accs nas \<and> a2 |\<in>| accs nas}
+        \<union> {Send_1as a | a . a |\<in>| accs nas}
+        \<union> {Receive_1a_send_1b a1 a2 b | a1 a2 b . a1 |\<in>| accs nas \<and> a2 |\<in>| accs nas}
+        \<union> {Receive_1b a1 a2 f b | a1 a2 f b . a1 |\<in>| accs nas \<and> a2 |\<in>| accs nas}
+        \<union> {Receive_2a_send_2b a1 a2 i b c | a1 a2 i b c . a1 |\<in>| accs nas \<and> a2 |\<in>| accs nas}
+        \<union> {Receive_2b a1 a2 i b c | a1 a2 i b c. a1 |\<in>| accs nas \<and> a2 |\<in>| accs nas}
+        \<union> {Learn a i c | a i c . a |\<in>| accs nas}\<rparr>"
 
-definition Send1a where
-  "Send1a l s s' \<equiv> (
-    let (new_state, packets) = send_1a l (node_states s) in
-      s' = s\<lparr>network := (network s) \<union> packets\<rparr>)"
+fun init_nodes_state::"nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow>f 'a acc_state" where
+  "init_nodes_state (0::nat) n = (K$ init_acc_state n 0)"
+| "init_nodes_state (Suc i) n = 
+    (if Suc i > n then undefined else (init_nodes_state i n)(i $:= init_acc_state n (i)))"
 
-definition Receive1a where
-  "Receive1a a p s s' \<equiv> 
-    dst p = a \<and> p \<in> network s \<and>
-    (let (new_state, packets) = receive_1a a (msg p) (node_states s) in
-      s' = s\<lparr>network := (network s) \<union> packets\<rparr>)"
+(*fun init_nodes_state where
+  "init_nodes_state (0::nat) n = (K$ init_acc_state n 0)"
+| "init_nodes_state (Suc i) n = 
+    (if Suc i > n then undefined else (init_nodes_state i n)(Suc i $:= init_acc_state n (Suc i)))"*)
 
-definition Receive1b where
-  "Receive1b l last_vs new_bal acc s s' \<equiv>(
-    let new_state = receive_1b l (Phase1b last_vs new_bal acc) (node_states s) in
-      s' = s\<lparr>node_states := fst(new_state), network := (network s) \<union> snd(new_state)\<rparr>)"
+lemma init_acc: 
+assumes "a < n" and "a \<ge> 0"
+shows "(init_nodes_state (Suc a) n) $ a = init_acc_state n a" using assms
+by (induct a n arbitrary:n rule:init_nodes_state.induct, auto)
 
-definition Send2a where
-  "Send2a acc i b v l s s' \<equiv> (
-    let new_state = receive_2a acc (Phase2a i b v l) (node_states s) in
-      s' = s\<lparr>node_states := fst(new_state), network := (network s) \<union> snd(new_state)\<rparr>)"
 
-definition Receive2b where
-  "Receive2b l i b acc v s s' \<equiv> (
-    let new_state = receive_2b l (Phase2b i b acc v) (node_states s) in
-      s' = s\<lparr>node_states := fst(new_state), network := (network s) \<union> snd(new_state)\<rparr>)"
+definition mp_start where
+  "mp_start \<equiv> \<lparr>node_states = (init_nodes_state nas nas), network = {||}\<rparr>"
 
-definition ReceiveFwd where
-  "ReceiveFwd acc v s s' \<equiv> (if (leader (node_states s) (ballot (node_states s) acc) = acc) 
-    then let
-      stateS = (node_states s);
-      inst = highest_instance stateS acc + 1;
-      msg = Phase2a inst (the (ballot stateS acc)) v acc;
-      new_state = stateS\<lparr>highest_instance := (highest_instance stateS)(acc := inst),
-        pending := (pending stateS)(acc := (pending stateS acc)(inst := Some v))\<rparr>
-    in
-      s' = s\<lparr>node_states := new_state, network := (network s) \<union> (send_all stateS acc msg)\<rparr>
-    else s' = s)"
+definition update_state where 
+  "update_state a a_s packets s \<equiv>
+    s\<lparr>node_states := (node_states s)(a $:= a_s),
+      network := network s |\<union>| packets\<rparr>"
 
-definition ProposeV where
-  "ProposeV acc v s s' \<equiv> (
-    let stateS = (node_states s) in
-      (if (leader stateS (ballot stateS acc) = acc)
-        then (let
-          inst = highest_instance stateS acc + 1;
-          msg = Phase2a inst (the (ballot stateS acc)) v acc;
-          new_state = stateS\<lparr>highest_instance := (highest_instance stateS)(acc := inst),
-            pending := (pending stateS)(acc := (pending stateS acc)(inst := Some v))\<rparr>
-        in
-          s' = s\<lparr>node_states := new_state, network := (network s) \<union> (send_all stateS acc msg)\<rparr>)
-      else
-        s' = s\<lparr>network := (network s) \<union> {Packet acc (leader stateS (ballot stateS acc)) (Fwd v)}\<rparr>))"
+inductive mp_trans where
+  "propose v (node_states s $ a) = (new_s, ps) \<Longrightarrow>
+    mp_trans (s, Propose a (Cmd v), update_state a new_s ps s)"
+| "\<lbrakk>receive_fwd v (node_states s $ dest) = (new_s, ps); 
+    Packet src dest (Fwd v) |\<in>| network s\<rbrakk> \<Longrightarrow>
+      mp_trans (s, Receive_fwd src dest v, update_state a new_s ps s)"
+| "\<lbrakk>receive_1a l b (node_states s $ dest) = (new_s, ps);
+    Packet src dest (Phase1a l b) |\<in>| network s; l = src\<rbrakk> \<Longrightarrow>
+    mp_trans (s, Receive_1a_send_1b src dest b, update_state dest new_s ps s)"
+| "send_1a (node_states s $ l) = (new_s, ps) \<Longrightarrow>
+    mp_trans (s, Send_1as l, update_state l new_s ps s)"
+| "\<lbrakk>receive_1b vs b l (node_states s $ l) = (new_s, ps); 
+    Packet src l (Phase1b vs b a) |\<in>| network s; src = a\<rbrakk> \<Longrightarrow>
+      mp_trans (s, Receive_1b src l vs b, update_state l new_s ps s)"
+| "\<lbrakk>receive_2b i b l cm (node_states s $ l) = (new_s, ps);
+    Packet src l (Phase2b i b a cm) |\<in>| network s; src = a\<rbrakk> \<Longrightarrow>
+      mp_trans (s, Receive_2b a l i b cm, update_state l new_s ps s)"
+| "\<lbrakk>receive_2a i b cm dest (node_states s $ dest) = (new_s, ps);
+    Packet src dest (Phase2a i b cm l) |\<in>| network s; src = l\<rbrakk> \<Longrightarrow>
+      mp_trans (s, Receive_2a_send_2b l dest i b cm, update_state dest new_s ps s)"
+| "learn i v (node_states s $ a) = Some (new_s, ps) \<Longrightarrow>
+    mp_trans (s, Learn a i (Cmd v), update_state a new_s ps s)"
 
-fun p_trans_fun::"('v, nat, nat) mp_state_global \<Rightarrow> ('v, nat, nat) p_action \<Rightarrow> ('v, nat, nat) mp_state_global \<Rightarrow> bool"  where
-  "p_trans_fun s (Send_1a acc) s' = (Send1a acc s s')"|
-  "p_trans_fun s (Respond_1a acc p) s' = (Receive1a acc p s s')" (*|
-  "p_trans_fun s (Respond_1b l last_vs acc b) s' = (Receive1b l last_vs b acc s s')"|
-  "p_trans_fun s (Send_2a acc i b v l) s' = (Send2a acc i b v l s s')"|
-  "p_trans_fun s (Respond_2b l i b acc v) s' = (Receive2b l i b acc v s s')"|
-  "p_trans_fun s (FwdA acc v) s' = (ReceiveFwd acc v s s')"|
-  "p_trans_fun s (Propose acc v) s' = (ProposeV acc v s s')" *)
+fun mp_transit where
+  "mp_transit s (Receive_fwd src dest v) = (if Packet src dest (Fwd v) |\<in>| network s 
+    then (let (new_s, ps) = receive_fwd v (node_states s $ dest) in 
+      update_state dest new_s ps s)
+    else s)"
+|  "mp_transit s (Propose a (Cmd v)) = (let (new_s, ps) = propose v (node_states s $ a) in
+    update_state a new_s ps s)" 
+| "mp_transit s (Receive_1a_send_1b src dest b) = (if (Packet src dest (Phase1a src b) |\<in>| network s) 
+    then let (new_s, ps) = receive_1a src b (node_states s $ dest) in
+      update_state dest new_s ps s 
+    else s)"
+| "mp_transit s (Send_1as l) = (let (new_s, ps) = send_1a (node_states s $ l) in
+    update_state l new_s ps s)"
+| "mp_transit s (Receive_1b src l vs b) = (if (Packet src l (Phase1b vs b src) |\<in>| network s)
+    then let (new_s, ps) = receive_1b vs b src (node_states s $ l) in
+      update_state l new_s ps s 
+    else s)"
+| "mp_transit s (Receive_2b a l i b cm) = (if (Packet a l (Phase2b i b a cm) |\<in>| network s)
+    then let (new_s, ps) = receive_2b i b a cm (node_states s $ l) in
+      update_state l new_s ps s 
+    else s)"
+| "mp_transit s (Receive_2a_send_2b l dest i b cm) = (if (Packet l dest (Phase2a i b cm l) |\<in>| network s)
+    then (let (new_s, ps) = receive_2a i b cm l (node_states s $ dest) in
+        update_state dest new_s ps s)
+    else s)"
+| "mp_transit s (Learn a i (Cmd v)) = (case (learn i v (node_states s $ a)) of (Some st) \<Rightarrow> 
+  (let (new_s, ps) = st in update_state a new_s ps s)| None \<Rightarrow> s)"
 
-definition p_trans where
-  "p_trans \<equiv> { (r,a,r') . p_trans_fun r a r'}"
-
-definition p_ioa where
-  "p_ioa \<equiv> \<lparr>ioa.asig = p_asig, start = p_start, trans = p_trans\<rparr>"
+definition mp_ioa where
+  "mp_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = {mp_start}, trans = {(s,a,t) . mp_trans (s, a, t)}\<rparr>"
 
 end
 (*export_code send_1a receive_1a receive_1b init_state propose receive_2a receive_2b receive_fwd 
