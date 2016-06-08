@@ -8,13 +8,6 @@ subsection {* State and actions *}
 
 text {* The actions (labels on transitions) of the I/O-automaton *}
 
-datatype ('v,'a,'l) amp_action =
-  Propose 'v
-| Learn nat 'v 'l
-| Vote 'a "'a set" nat 'v
-  -- {* an acceptor votes in a ballot according to a quorum *}
-| JoinBallot 'a nat
-
 text {* The states of the I/O-automaton *}
 
 record ('v,'a) amp_state =
@@ -23,9 +16,16 @@ record ('v,'a) amp_state =
   vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
 
 locale amp_ioa = IOA + 
-  fixes acceptors::"'a set" and quorums::"'a set set"
+  fixes acceptors ::"'a set" and quorums::"'a set set"
   fixes learners::"'l set"
 begin
+
+datatype ('vv,'aa,'ll) amp_action =
+  Propose 'vv
+| Learn nat 'vv 'll
+| Vote 'aa "'aa set" nat 'vv
+  -- {* an acceptor votes in a ballot according to a quorum *}
+| JoinBallot 'aa nat
 
 definition amp_asig where
   "amp_asig \<equiv>
@@ -61,7 +61,6 @@ definition do_vote where
         \<and> q \<in> quorums
         \<and> (\<forall> a2 . a2 \<in> q \<longrightarrow> ballot s a2 \<ge> Some b)
         \<and> conservative_at s' i
-        \<and> vote s i a b = None
         \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>)"
 
 abbreviation chosen where 

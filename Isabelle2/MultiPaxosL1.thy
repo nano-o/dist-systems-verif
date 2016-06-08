@@ -1,14 +1,9 @@
+section {* A first refinement of AbstractMultiPaxos. *}
+
 theory MultiPaxosL1    
-imports "../../IO-Automata/IOA_Automation" BallotArrays3 Quorums2
+imports "../../IO-Automata/IOA_Automation" BallotArrays3
 begin                   
 
-datatype ('v,'a,'l) mp_action =
-  Propose 'v
-| Learn nat 'v 'l
-| Vote 'a "'a set" nat 'v
-  -- {* an acceptor votes in a ballot according to a quorum *}
-| JoinBallot 'a nat
-| Suggest 'a 'v nat nat "'a set"
 
 record ('v,'a) mp_state =
   propCmd :: "'v set"
@@ -16,11 +11,19 @@ record ('v,'a) mp_state =
   vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
   suggestion :: "nat \<Rightarrow> nat \<Rightarrow> 'v option"
 
-locale mp1 = IOA + quorums acceptors quorums for acceptors :: "'a set" and quorums + 
+locale mp1 = IOA + fixes acceptors :: "'a set" and quorums :: "'a set set"
   fixes learners :: "'l set"
   and is_leader :: "'a \<Rightarrow> nat \<Rightarrow> bool"
   assumes "\<And> i . \<exists>! a . is_leader a i"
 begin
+
+datatype ('vv,'aa,'ll) mp_action =
+  Propose 'vv
+| Learn nat 'vv 'll
+| Vote 'aa "'aa set" nat 'vv
+  -- {* an acceptor votes in a ballot according to a quorum *}
+| JoinBallot 'aa nat
+| Suggest 'aa 'vv nat nat "'aa set"
 
 definition mp_asig where
   "mp_asig \<equiv>
@@ -83,6 +86,7 @@ subsection {* The I/O-automaton *}
 
 definition mp_ioa where
   "mp_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = mp_start, trans = mp_trans\<rparr>"
-end
 
 end
+
+end 
