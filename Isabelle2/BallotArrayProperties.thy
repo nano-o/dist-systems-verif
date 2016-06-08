@@ -1,7 +1,7 @@
 section {* Properties of ballot arrays. *}
 
 theory BallotArrayProperties
-imports Main BallotArrays3
+imports Main BallotArrays3 Quorums2
 begin
 
 context ballot_array
@@ -10,7 +10,7 @@ begin
 subsection {* Properties of max_vote *}
 
 context begin
-  -- {* A nameless context to hide some lemmas *}
+  -- {* A context to hide some lemmas *}
 
 private lemma finite_voted_bals:"finite {b::nat . \<exists> a . a \<in> q \<and> b \<le> bound \<and> vote a b \<noteq> None}"
 proof -
@@ -94,7 +94,8 @@ subsection {* Correctness of the @{term proved_safe_at} computation *}
 locale ballot_array_props = ballot_array + quorums
 begin
 
-context begin
+context 
+begin 
 
 lemma "safe_at v (bot::nat)"
 by (auto simp add:safe_at_def)

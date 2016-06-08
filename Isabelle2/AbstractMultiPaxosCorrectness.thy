@@ -1,7 +1,8 @@
 section {* Proof of the agreement property of AbstractMultiPaxos. *}
 
 theory AbstractMultiPaxosCorrectness
-imports AbstractMultiPaxos7
+imports AbstractMultiPaxos7 "../../IO-Automata/Simulations" "../../IO-Automata/IOA_Automation" 
+  BallotArrayProperties
 begin
 
 locale amp_proof = IOA + quorums acceptors quorums + 
@@ -60,9 +61,8 @@ apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
     obtain b where 1:"a \<in> acceptors" and 2:"ballot s a = Some b" 
     and 3:"proved_safe_at s i q b v"
     and 6:"ballot_array.conservative_array  (vote t i) acceptors"
-    and 4:"vote s i a b = None" and 5:"t = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>"
-        apply (case_tac "ballot s a")
-          by (auto simp add:inv_proofs_defs)
+    and 5:"t = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>"
+        by (case_tac "ballot s a") (auto simp add:inv_proofs_defs)
     show "conservative_array t"
     proof (auto simp add: ballot_array.conservative_array_def)
       fix j b

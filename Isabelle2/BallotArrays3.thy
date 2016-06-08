@@ -1,7 +1,7 @@
 section {* Definition of ballot arrays *}
 
 theory BallotArrays3
-imports Main Quorums2 LinorderOption
+imports Main LinorderOption
 begin
 
 locale ballot_array =
