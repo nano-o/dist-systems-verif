@@ -87,6 +87,9 @@ subsection {* The I/O-automaton *}
 definition mp_ioa where
   "mp_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = mp_start, trans = mp_trans\<rparr>"
 
+lemmas simps = mp_ioa_def mp_asig_def mp_start_def mp_trans_def learn_def suggest_def 
+  join_ballot_def propose_def
+
 end
 
 end 

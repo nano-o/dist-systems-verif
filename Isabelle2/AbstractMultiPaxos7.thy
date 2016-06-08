@@ -85,6 +85,9 @@ subsection {* The I/O-automaton *}
 definition amp_ioa where
   "amp_ioa \<equiv> \<lparr>ioa.asig = amp_asig, start = amp_start, trans = amp_trans\<rparr>"
 
+lemmas simps = amp_ioa_def amp_asig_def amp_start_def amp_trans_def propose_def join_ballot_def 
+  do_vote_def learn_def
+
 end
 
 end
