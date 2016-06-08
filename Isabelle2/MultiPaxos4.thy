@@ -5,8 +5,6 @@ begin
 
 section {* An executable version of MultiPaxos, using finite functions (FinFun.thy) *}
 
-text {* TODO: implement checkpointing *}
-
 subsection {* Actions, messages, and state. *}
 
 datatype 'v cmd = Cmd (the_val: 'v) | NoOp
@@ -20,12 +18,10 @@ datatype 'v msg =
 | Phase1b (last_votes:"inst \<Rightarrow>f ('v cmd \<times> bal) option") (new_ballot: bal) (acceptor:acc)
 | Phase2a (inst: inst) (for_ballot:bal) (suggestion:"'v cmd") (leader: acc)
 | Phase2b (inst: inst) (ballot:bal) (acceptor: acc) (cmd: "'v cmd")
-| Vote (inst: inst) (cmd: "'v cmd")
-  -- {* Instructs a learner that a value has been decided. Not used for now... *}
 | Fwd (val: 'v)
   -- {* Forwards a proposal to another proposer (the leader) *}
 
-datatype 'v  packet =
+datatype 'v packet =
   -- {* A message with sender/destination information *}
   Packet (sender: acc) (dst: acc) (msg: "'v msg")
 
@@ -36,6 +32,8 @@ datatype 'v vote_info = voted "'v cmd" bal | not_voted
 
 datatype 'v inst_status = not_started | pending "'v cmd" | decided (decision:"'v cmd")
 
+text {* The local state of an acceptor. Contains the acceptors identifier @{text "acc_state.self"}) 
+  and the set of all acceptors @{text "acc_state.acceptors"} *}
 record 'v acc_state =
   self :: acc
   acceptors :: "acc fset"
@@ -52,20 +50,24 @@ record 'v acc_state =
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f acc fset"
     -- {* fset describing the 2b messages received, indexed by instance and ballot. *}
   next_inst :: "inst"
+    -- {* The next instane to use *}
   inst_status :: "inst \<Rightarrow>f 'v inst_status"
+    -- {* Status of the given instance *}
   leader :: "bool"
-  last_decision :: "nat option"
+    -- {* Does this acceptor believe itself to be the leader? *}
 
+text {* Why do we need this? Can't we use Abs_fst {0..<n} directly? *}
 fun accs where
+  -- {* A function to build a set of acceptors of a given size. *}
   "accs (0::nat) = {||}"
 | "accs (Suc n) = (accs n) |\<union>| {|n|}"
 
-value "accs 3"
+lemma "accs 3 = {|1,2,0|}" quickcheck oops
 
 lemma accs_def_2:"accs n = Abs_fset {0..<n}"
 proof (induct n)
   case 0 thus ?case
-    by (simp add: bot_fset_def) 
+    by (simp add: bot_fset_def)
 next
   case (Suc n) thus ?case by simp
     (metis atLeastLessThanSuc eq_onp_same_args finite_atLeastLessThan finsert.abs_eq le0)
@@ -82,8 +84,7 @@ definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" 
     twobs = K$ K$ {||},
     next_inst = 1, (* instances start at 1 *)
     inst_status = K$ not_started,
-    leader = False,
-    last_decision = None\<rparr>"
+    leader = False\<rparr>"
 
 definition nr where
   -- {* The number of replicas *}
@@ -100,10 +101,12 @@ definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat
   where "suc_bal a b N \<equiv> (b div N + 1) * N + a"
 
 fun nx_bal where
+  -- {* Function used by a replica to choose the next ballot to use when trying to become the leader. *}
   "nx_bal a None N = suc_bal a 0 N"
 | "nx_bal a (Some b) N = suc_bal a b N"
 
-definition send_all where "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (self s) a2 m)  (acceptors s |-| {|a|})"
+definition send_all where 
+  "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (self s) a2 m)  (acceptors s |-| {|a|})"
 
 definition do_2a where
   "do_2a s v \<equiv>
@@ -132,7 +135,8 @@ definition receive_fwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_
   "receive_fwd v s \<equiv> let a = self s in 
     (if (leader_of_bal s (ballot s) = a) then do_2a s (Cmd v) else (s, ({||})))"
 
-definition last_votes where 
+definition last_votes where
+  -- {* returns a finfun describing the last vote cast in each instance. *}
   "last_votes s \<equiv> let
     combiner = (\<lambda> (vo,bo) . vo \<bind> (\<lambda> v . bo \<bind> (\<lambda> b . Some (v,b))))
   in combiner o$ ($ vote s, last_ballot s $)"
@@ -148,7 +152,6 @@ definition send_1a :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v pack
    in
      (s, send_all s a msg_1a)"
 
-
 definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_1a l b s \<equiv>
     let bal = ballot s; a = self s in
@@ -162,7 +165,7 @@ definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rig
           (state, {|packet|}))
        else (s, {||}))"
 
-definition update_onebs :: 
+definition update_onebs ::
   "'v acc_state \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> 'v acc_state" where
   -- {* Update the map of highest voted values when receiving a 1b
     message from a2 for ballot bal containing @{term last_vs} *}
@@ -242,9 +245,6 @@ definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow>
       else
         (s, {||}) )"
 
-definition get_last_decision where 
-  "get_last_decision s \<equiv> decision (inst_status s $ (the (last_decision s)))"
-
 text {* output transition could return an option *}
 definition learn :: "inst \<Rightarrow> 'v  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset) option" where 
   "learn i v s \<equiv>
@@ -258,7 +258,6 @@ fun process_msg where
 | "process_msg (Phase1b lvs b a) s = receive_1b lvs b a s"
 | "process_msg (Phase2a i b cm l) s = receive_2a i b cm l s"
 | "process_msg (Phase2b i b a cm) s = receive_2b i b a cm s"
-| "process_msg (Vote i cm) s = undefined"
 | "process_msg (Fwd v) s = receive_fwd v s"
 
 text {* Serializing finfuns to lists *}
