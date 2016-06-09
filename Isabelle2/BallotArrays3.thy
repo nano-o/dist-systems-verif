@@ -15,7 +15,7 @@ begin
 definition conservative where
   "conservative b \<equiv> \<forall> a1 . \<forall> a2 . a1 \<in> acceptors \<and> a2 \<in> acceptors \<longrightarrow> (
     let v1 = vote a1 b; v2 = vote a2 b in 
-      (v1 \<noteq> None \<and> v2 \<noteq> None) \<longrightarrow> v1 = v2)"
+      case v1 of Some x \<Rightarrow> (case v2 of Some y \<Rightarrow> x = y | None \<Rightarrow> True) | None \<Rightarrow> True)"
 
 definition conservative_array where
   "conservative_array \<equiv> \<forall> b . conservative b"
@@ -64,8 +64,8 @@ definition safe where
     (let vote = (vote) a b in (case vote of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b))"
   
 definition well_formed where
-  "well_formed \<equiv> \<forall> a b . a \<in> acceptors \<and> ballot a < b  
-    \<longrightarrow> vote a (the b) = None"
+  "well_formed \<equiv> \<forall> a b . a \<in> acceptors \<and> ballot a < Some b  
+    \<longrightarrow> vote a b = None"
 
 end
 

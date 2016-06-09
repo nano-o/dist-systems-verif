@@ -17,19 +17,19 @@ locale mp1 = IOA + fixes acceptors :: "'a set" and quorums :: "'a set set"
   assumes "\<And> i . \<exists>! a . is_leader a i"
 begin
 
-datatype ('vv,'aa,'ll) mp_action =
-  Propose 'vv
-| Learn nat 'vv 'll
-| Vote 'aa "'aa set" nat 'vv
-  -- {* an acceptor votes in a ballot according to a quorum *}
+datatype ('v,'aa,'ll) mp_action =
+  Propose 'v
+| Learn nat 'v 'll
+| Vote 'aa nat 'v
+  -- {* an acceptor votes in an instance *}
 | JoinBallot 'aa nat
-| Suggest 'aa 'vv nat nat "'aa set"
+| Suggest 'aa 'v nat nat "'aa set"
 
 definition mp_asig where
   "mp_asig \<equiv>
     \<lparr> inputs = { Propose c | c . True},
       outputs = { Learn i v l | i v l . l \<in> learners},
-      internals = {Vote a i q b | a i b q . a \<in> acceptors} \<union> {JoinBallot a b | a b . a \<in> acceptors}
+      internals = {Vote a i b | a i b . a \<in> acceptors} \<union> {JoinBallot a b | a b . a \<in> acceptors}
         \<union> {Suggest a v i b q | a v i b q . a \<in> acceptors \<and> q \<in> quorums}\<rparr>"
 
 definition mp_start where
@@ -75,7 +75,7 @@ definition learn where
 fun mp_trans_rel  where
   "mp_trans_rel r (Propose c) r' = propose c r r'"
 | "mp_trans_rel r (JoinBallot a b) r' = join_ballot a b r r'"
-| "mp_trans_rel r (Vote a q i v) r' = do_vote a i v r r'"
+| "mp_trans_rel r (Vote a i v) r' = do_vote a i v r r'"
 | "mp_trans_rel r (Learn i v l) r' = learn l i v r r'"
 | "mp_trans_rel r (Suggest a v i b q) r' = suggest r r' a v i b q"
 
@@ -88,7 +88,7 @@ definition mp_ioa where
   "mp_ioa \<equiv> \<lparr>ioa.asig = mp_asig, start = mp_start, trans = mp_trans\<rparr>"
 
 lemmas simps = mp_ioa_def mp_asig_def mp_start_def mp_trans_def learn_def suggest_def 
-  join_ballot_def propose_def
+  join_ballot_def propose_def do_vote_def
 
 end
 

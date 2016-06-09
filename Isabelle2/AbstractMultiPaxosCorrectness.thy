@@ -14,7 +14,7 @@ begin
 
 subsection {* Automation setup and a few lemmas *}
 
-lemmas amp_ioa_defs =  
+lemmas amp_ioa_defs =
    is_trans_def actions_def amp_trans_def amp_start_def
    externals_def amp_ioa_def amp_asig_def
 

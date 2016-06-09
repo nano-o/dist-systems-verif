@@ -236,8 +236,8 @@ next
         case bb 
         text {* Here we need the fact that the array is conservative *}
         have 1:"vote a k = Some v" if "a \<in> acceptors" and " vote a k \<noteq> None"  for a using that assms(5) 
-          by (auto simp add:conservative_array_def conservative_def)
-            (metis a(1) a(2) assms(2) set_rev_mp option.inject quorums_axioms quorums_def)  
+          by (auto simp add:conservative_array_def conservative_def split add:option.split_asm)
+            (metis a(1) a(2) assms(2) quorums_axioms quorums_def subsetCE) 
         from that obtain q2 where 3:"q2 \<in> quorums" and 4:"\<And> a . a \<in> q2 \<Longrightarrow>
           (ballot a) > Some j \<Longrightarrow> (vote) a j = Some v'"
           by (auto simp add:choosable_def)
