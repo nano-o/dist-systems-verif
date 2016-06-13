@@ -1,0 +1,138 @@
+theory DistributedMultiPaxos
+imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
+  "~~/src/HOL/Library/FinFun_Syntax"
+begin
+
+type_synonym acc = nat
+type_synonym bal = nat
+type_synonym inst = nat
+
+datatype 'v cmd = Cmd (the_val: 'v) | NoOp
+
+datatype 'v msgs = 
+  Msg1a (ballot:bal)|
+  Msg1b (acceptor:acc) (insts:inst) (ballot:bal) (last_vs:"bal \<times> ('v cmd option)")|
+  Msg2a (insts:inst) (ballot:bal) (comm:"'v cmd")
+
+record 'v acc_state =
+  ballot :: "bal"
+  vote_h :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v cmd option"
+
+record 'v mp_state = 
+  acc_bal :: "'v acc_state list"
+  network :: "'v msgs set"
+  propCmds :: "'v cmd option set"
+
+primrec init_acc::"nat \<Rightarrow> 'v acc_state list"  where
+  "init_acc 0 = []"
+  |"init_acc (Suc n) = \<lparr>ballot = 0, vote_h = K$ K$ None\<rparr> #(init_acc n)"
+
+definition propose where
+  "propose c state \<equiv> state\<lparr>propCmds := propCmds state \<union> {c}\<rparr>"
+
+definition phase1a where
+  "phase1a b state \<equiv> state\<lparr>network := network state \<union> {Msg1a b}\<rparr>"
+
+definition init where
+  "init nas \<equiv> \<lparr>acc_bal = init_acc nas, network = {}, propCmds = {}\<rparr>"
+
+definition vote::"acc \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v cmd option \<Rightarrow> 'v mp_state \<Rightarrow> 'v mp_state" where
+  "vote a b i cmdv state \<equiv> (let 
+    a_state = ((acc_bal state)!a) in
+    if (ballot a_state = b) then
+      let ns = network state; 
+        m2amsgs = Set.filter (\<lambda>nm. case nm of (Msg2a i b _) \<Rightarrow> True| _ \<Rightarrow> False) ns; 
+        m2anum = card m2amsgs in
+      if (m2anum > 0) then
+      (
+        let a_state1 = a_state\<lparr>vote_h := (vote_h a_state)(i $:= ((vote_h a_state $ i)(b $:= cmdv)))\<rparr> in
+        state\<lparr>acc_bal := list_update (acc_bal state) a a_state1\<rparr>
+      )
+      else state
+    else state
+  )"
+
+definition maxAcceptorVote::"inst \<Rightarrow> (bal list) \<Rightarrow> 'v acc_state \<Rightarrow> (bal \<times> 'v cmd option)" where
+  "maxAcceptorVote i bals a_state \<equiv> 
+    let bals_flt = append (filter (\<lambda>b. (((vote_h a_state) $ i) $ b) \<noteq> None) bals) [0];
+    maxBal = (fold max bals_flt (bals_flt!0));
+    v = (if maxBal > 0 then (((vote_h a_state)$ i) $ maxBal) else None) in
+    (maxBal, v)"
+
+definition phase1b where
+  "phase1b a b v bals inss state \<equiv> (let a_state = (acc_bal state)!a; net_state = network state in
+    if (ballot a_state < b \<and> (Msg1a b) \<in> net_state) then
+      let a_state1 = a_state\<lparr>ballot := b\<rparr>;
+      messages = map (\<lambda>i. Msg1b a i b (maxAcceptorVote i bals a_state1)) inss in
+      state\<lparr>acc_bal := list_update (acc_bal state) a a_state1, network := net_state \<union> set messages\<rparr>
+    else state)"
+
+definition safe_at where
+  "safe_at m1bmsgs quonum \<equiv> (let 
+    m1bnum = card m1bmsgs in
+    if (m1bnum \<ge> quonum) then True
+    else False)"
+
+definition safeVote::"'v msgs set \<Rightarrow> 'v mp_state \<Rightarrow> 'v cmd option set" where
+  "safeVote m1bmsgs state \<equiv> let 
+      m1bpair = image (\<lambda>nm. case nm of (Msg1b _ _ _ vs) \<Rightarrow> vs) m1bmsgs;
+      maxBal = the_elem (Set.bind (Set.filter (\<lambda>le. \<forall>x \<in> m1bpair. fst x \<le> fst le) m1bpair)(\<lambda>x. {x}));
+      maxVal = snd maxBal in
+   if (maxVal \<noteq> None) then {maxVal} else propCmds state"
+
+definition phase2a where
+  "phase2a b i quonum v state \<equiv> (let ns = network state; 
+    m2amsgs = Set.filter (\<lambda>nm. case nm of (Msg2a i b _) \<Rightarrow> True| _ \<Rightarrow> False) ns; 
+    m2anum = card m2amsgs in
+  if (m2anum = 0) then
+    (let m1bmsgs = Set.filter (\<lambda>nm. case nm of (Msg1b _ i b _) \<Rightarrow> True| _ \<Rightarrow> False) ns in
+      if (safe_at m1bmsgs quonum) then
+        (let safeVal = safeVote m1bmsgs state in
+        if ((Some v) \<in> safeVal) then 
+          state\<lparr>network := (network state) \<union> {Msg2a i b v}\<rparr>
+        else state)
+      else state)
+  else state)"
+
+definition safe_inv::"acc set \<Rightarrow>'v mp_state \<Rightarrow> inst \<Rightarrow> nat \<Rightarrow> bool" where
+  "safe_inv accs s i nas \<equiv> (let acc_state = acc_bal s in
+    \<forall>acc\<^sub>1 \<in> accs. \<forall>acc\<^sub>2 \<in> accs. acc\<^sub>1 \<noteq> acc\<^sub>2 \<longrightarrow>
+    (let acc_state1 = (acc_state ! acc\<^sub>1); acc_state2 = (acc_state ! acc\<^sub>1);
+      bal1 = (ballot acc_state1); bal2 = (ballot acc_state2) in
+      case ((vote_h acc_state1) $ i $ bal1) of None \<Rightarrow> True |
+      Some cm \<Rightarrow> (
+        case ((vote_h acc_state2) $ i $ bal2) of None \<Rightarrow> True |
+          Some cs \<Rightarrow> (cm = cs))))"
+
+text {* We need to rename a few modules to let the Scala compiler resolve circular dependencies. *}
+code_identifier
+  code_module Code_Numeral \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Groups \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Rings \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Optiona \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module List \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module FinFun \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module FSet \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Cardinality \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Fun \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module HOL \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Product_Type \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Phantom_Type \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module String \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Orderings \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Num \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Finite_Set \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Set \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Nat \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module LinorderOption \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Divides \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Serialization  \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Conditionally_Complete_Lattices \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Complete_Lattices \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Complete_Partial_Order \<rightharpoonup> (Scala) MicroCheckerLib
+| code_module Lattices \<rightharpoonup> (Scala) MicroCheckerLib
+
+export_code init propose phase1a maxAcceptorVote phase1b safe_at safeVote phase2a vote safe_inv
+   in Scala file "DistributedMultiPaxos.scala"
+
+end
