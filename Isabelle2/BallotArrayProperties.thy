@@ -139,7 +139,7 @@ proof -
     assume 1:"chosen_at v\<^sub>1 b\<^sub>1" and 2:"chosen_at v\<^sub>2 b\<^sub>2"
     with this obtain q\<^sub>1 and q\<^sub>2 where 3:"\<And> a . a \<in> q\<^sub>1 \<Longrightarrow> (vote) a b\<^sub>1 = (Some v\<^sub>1)" 
     and 4:"\<And> a . a \<in> q\<^sub>2 \<Longrightarrow> (vote) a b\<^sub>2 = (Some v\<^sub>2)" and 5:"q\<^sub>1 \<in> quorums" and 6:"q\<^sub>2 \<in> quorums"
-    by (auto simp add:chosen_at_def)
+      by (auto simp add:chosen_at_def)
     have "v\<^sub>1 = v\<^sub>2" if "b\<^sub>1 < b\<^sub>2"
     proof -
       have 9:"choosable v\<^sub>1 b\<^sub>1" using 1 chosen_at_is_choosable by fast
@@ -153,15 +153,11 @@ proof -
       qed
       thus ?thesis using 9 10 assms(1) that by (metis safe_at_def)
     qed }
-  note main = this
-  obtain b\<^sub>1 and b\<^sub>2 where 1:"chosen_at v\<^sub>1 b\<^sub>1" and 2:"chosen_at v\<^sub>2 b\<^sub>2" using assms(2,3)
-  by (auto simp add:chosen_def)
-  have ?thesis if "b\<^sub>1 = b\<^sub>2" by (metis "1" "2" chosen_at_same that)
   moreover
-  have ?thesis if "b\<^sub>1 < b\<^sub>2" using main 1 2 that by blast
-  moreover 
-  have ?thesis if "b\<^sub>2 < b\<^sub>1" using main 1 2 that by blast
-  ultimately show ?thesis by fastforce
+  obtain b\<^sub>1 and b\<^sub>2 where 1:"chosen_at v\<^sub>1 b\<^sub>1" and 2:"chosen_at v\<^sub>2 b\<^sub>2" using assms(2,3)
+    by (auto simp add:chosen_def) 
+  ultimately
+  show ?thesis using chosen_at_same 1 2 by (metis linorder_neqE_nat)
 qed
 
 text {* The main lemma. Inspired by section 2.2.2 of the paper "Fast Paxos", by Leslie Lamport. *}
@@ -176,7 +172,11 @@ proof (cases "i = 0")
     by (metis not_less0 safe_at_def) 
 next
   case False
-  consider 
+  text {* There are two cases: 
+    (a) an acceptor a in the quorum q voted in round k < i, 
+    and k is the maximum round smaller than i in which an acceptor in q voted;
+    (b) no acceptor in the quorum q voted in any round k < i *}
+  consider
     (a) k a
       where "a \<in> q" and "vote a k = Some v" and "k < i"
       and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
@@ -196,6 +196,7 @@ next
     thus ?thesis using that by auto
   qed
   thus ?thesis
+  text {* now we prove the thesis by considering the cases (a) and (b) separately *}
   proof (cases)
     case b
     { fix j v
@@ -260,7 +261,37 @@ next
 qed
 
 end
-  
+
+end
+
+subsection {* Monotonicity *}
+
+locale ballot_array_prefix =
+  -- {* @{typ 'a} is the type of acceptors *}
+  fixes ballot1 :: "'a \<Rightarrow> nat option"
+  and vote1 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  and ballot2 :: "'a \<Rightarrow> nat option"
+  and vote2 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  and quorums :: "'a set set"
+  and acceptors :: "'a set"
+  fixes is_prefix
+  defines "is_prefix \<equiv> \<forall> a . ballot1 a \<le> ballot2 a \<and> (\<forall> b . Some b \<le> ballot1 a \<longrightarrow> vote1 a b = vote2 a b)"
+  assumes is_prefix
+begin
+
+interpretation ba_1:ballot_array ballot1 vote1 quorums acceptors .
+interpretation ba_2:ballot_array ballot2 vote2 quorums acceptors .
+
+lemma choosable_decreases:
+  assumes "ba_2.choosable v b"
+  shows "ba_1.choosable v b"
+  by (smt assms ballot_array.choosable_def ballot_array_prefix_axioms ballot_array_prefix_def less_le_trans order.strict_implies_order) 
+
+lemma safe_at_mono:
+  assumes "ba_1.safe_at v b"
+  shows "ba_2.safe_at v b"
+  by (metis assms ballot_array.safe_at_def choosable_decreases)
+
 end
 
 end
