@@ -1,6 +1,6 @@
 theory DistributedMultiPaxos
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
-  "~~/src/HOL/Library/FinFun_Syntax"
+  "~~/src/HOL/Library/FinFun_Syntax" LinorderOption
 begin
 
 type_synonym acc = nat
@@ -16,7 +16,7 @@ datatype 'v msgs =
 
 record 'v acc_state =
   ballot :: "bal"
-  vote_h :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v cmd option"
+  vote :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v cmd option"
 
 record 'v mp_state = 
   acc_bal :: "'v acc_state list"
@@ -25,7 +25,10 @@ record 'v mp_state =
 
 primrec init_acc::"nat \<Rightarrow> 'v acc_state list"  where
   "init_acc 0 = []"
-  |"init_acc (Suc n) = \<lparr>ballot = 0, vote_h = K$ K$ None\<rparr> #(init_acc n)"
+  |"init_acc (Suc n) = \<lparr>ballot = 0, vote = K$ K$ None\<rparr> #(init_acc n)"
+
+definition init where
+  "init nas \<equiv> \<lparr>acc_bal = init_acc nas, network = {}, propCmds = {}\<rparr>"
 
 definition propose where
   "propose c state \<equiv> state\<lparr>propCmds := propCmds state \<union> {c}\<rparr>"
@@ -33,34 +36,32 @@ definition propose where
 definition phase1a where
   "phase1a b state \<equiv> state\<lparr>network := network state \<union> {Msg1a b}\<rparr>"
 
-definition init where
-  "init nas \<equiv> \<lparr>acc_bal = init_acc nas, network = {}, propCmds = {}\<rparr>"
-
-definition vote::"acc \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v cmd option \<Rightarrow> 'v mp_state \<Rightarrow> 'v mp_state" where
-  "vote a b i cmdv state \<equiv> (let 
-    a_state = ((acc_bal state)!a) in
-    if (ballot a_state = b) then
-      let ns = network state; 
-        m2amsgs = Set.filter (\<lambda>nm. case nm of (Msg2a i b _) \<Rightarrow> True| _ \<Rightarrow> False) ns; 
+definition vote_cmd::"acc \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v cmd option \<Rightarrow> 'v mp_state \<Rightarrow> 'v mp_state" where
+  "vote_cmd avt bvt ivt cmdv state \<equiv> (let 
+    a_state = ((acc_bal state)!avt) in
+    if (ballot a_state = bvt) then
+      (let ns = network state; 
+        m2amsgs = Set.filter (\<lambda>nm. case nm of (Msg2a i b _) \<Rightarrow> (ivt = i \<and> bvt = b)| _ \<Rightarrow> False) ns; 
         m2anum = card m2amsgs in
       if (m2anum > 0) then
       (
-        let a_state1 = a_state\<lparr>vote_h := (vote_h a_state)(i $:= ((vote_h a_state $ i)(b $:= cmdv)))\<rparr> in
-        state\<lparr>acc_bal := list_update (acc_bal state) a a_state1\<rparr>
-      )
-      else state
-    else state
-  )"
+        let m2acmd = image (\<lambda>nm. case nm of (Msg2a i b cv) \<Rightarrow> (Some cv)) m2amsgs in
+        if (cmdv \<in> m2acmd) then
+          (let a_state1 = a_state\<lparr>vote := (vote a_state)(ivt $:= ((vote a_state $ ivt)(bvt $:= cmdv)))\<rparr> in
+          state\<lparr>acc_bal := list_update (acc_bal state) avt a_state1\<rparr>)
+        else state)
+      else state)
+    else state)"
 
 definition maxAcceptorVote::"inst \<Rightarrow> (bal list) \<Rightarrow> 'v acc_state \<Rightarrow> (bal \<times> 'v cmd option)" where
   "maxAcceptorVote i bals a_state \<equiv> 
-    let bals_flt = append (filter (\<lambda>b. (((vote_h a_state) $ i) $ b) \<noteq> None) bals) [0];
-    maxBal = (fold max bals_flt (bals_flt!0));
-    v = (if maxBal > 0 then (((vote_h a_state)$ i) $ maxBal) else None) in
+    let bals_flt = append (filter (\<lambda>b. (((vote a_state) $ i) $ b) \<noteq> None) bals) [0];
+      maxBal = (fold max bals_flt (bals_flt!0));
+      v = (if maxBal > 0 then (((vote a_state) $ i) $ maxBal) else None) in
     (maxBal, v)"
 
 definition phase1b where
-  "phase1b a b v bals inss state \<equiv> (let a_state = (acc_bal state)!a; net_state = network state in
+  "phase1b a b bals inss state \<equiv> (let a_state = (acc_bal state)!a; net_state = network state in
     if (ballot a_state < b \<and> (Msg1a b) \<in> net_state) then
       let a_state1 = a_state\<lparr>ballot := b\<rparr>;
       messages = map (\<lambda>i. Msg1b a i b (maxAcceptorVote i bals a_state1)) inss in
@@ -76,20 +77,21 @@ definition safe_at where
 definition safeVote::"'v msgs set \<Rightarrow> 'v mp_state \<Rightarrow> 'v cmd option set" where
   "safeVote m1bmsgs state \<equiv> let 
       m1bpair = image (\<lambda>nm. case nm of (Msg1b _ _ _ vs) \<Rightarrow> vs) m1bmsgs;
-      maxBal = the_elem (Set.bind (Set.filter (\<lambda>le. \<forall>x \<in> m1bpair. fst x \<le> fst le) m1bpair)(\<lambda>x. {x}));
-      maxVal = snd maxBal in
-   if (maxVal \<noteq> None) then {maxVal} else propCmds state"
+      m1bBal = image (\<lambda>x. fst x) m1bpair;
+      maxBal = the_elem (Set.bind (Set.filter (\<lambda>le. \<forall>x \<in> m1bBal. x \<le> le) m1bBal) (\<lambda>x. {x}));
+      maxVal = Set.bind (image (\<lambda>x. snd x) (Set.filter (\<lambda>le. fst le = maxBal) m1bpair)) (\<lambda>x. {x}) in
+   if (maxVal \<noteq> {None}) then maxVal else propCmds state"
 
 definition phase2a where
-  "phase2a b i quonum v state \<equiv> (let ns = network state; 
-    m2amsgs = Set.filter (\<lambda>nm. case nm of (Msg2a i b _) \<Rightarrow> True| _ \<Rightarrow> False) ns; 
+  "phase2a b2a i2a quonum v state \<equiv> (let ns = network state; 
+    m2amsgs = Set.filter (\<lambda>nm. case nm of Msg2a i b _ \<Rightarrow> (b2a = b \<and> i2a = i)| _ \<Rightarrow> False) ns; 
     m2anum = card m2amsgs in
   if (m2anum = 0) then
-    (let m1bmsgs = Set.filter (\<lambda>nm. case nm of (Msg1b _ i b _) \<Rightarrow> True| _ \<Rightarrow> False) ns in
+    (let m1bmsgs = Set.filter (\<lambda>nm. case nm of Msg1b _ i b _ \<Rightarrow> (b2a = b \<and> i2a = i)| _ \<Rightarrow> False) ns in
       if (safe_at m1bmsgs quonum) then
         (let safeVal = safeVote m1bmsgs state in
         if ((Some v) \<in> safeVal) then 
-          state\<lparr>network := (network state) \<union> {Msg2a i b v}\<rparr>
+          state\<lparr>network := (network state) \<union> {Msg2a i2a b2a v}\<rparr>
         else state)
       else state)
   else state)"
@@ -99,9 +101,9 @@ definition safe_inv::"acc set \<Rightarrow>'v mp_state \<Rightarrow> inst \<Righ
     \<forall>acc\<^sub>1 \<in> accs. \<forall>acc\<^sub>2 \<in> accs. acc\<^sub>1 \<noteq> acc\<^sub>2 \<longrightarrow>
     (let acc_state1 = (acc_state ! acc\<^sub>1); acc_state2 = (acc_state ! acc\<^sub>1);
       bal1 = (ballot acc_state1); bal2 = (ballot acc_state2) in
-      case ((vote_h acc_state1) $ i $ bal1) of None \<Rightarrow> True |
+      case ((vote acc_state1) $ i $ bal1) of None \<Rightarrow> True |
       Some cm \<Rightarrow> (
-        case ((vote_h acc_state2) $ i $ bal2) of None \<Rightarrow> True |
+        case ((vote acc_state2) $ i $ bal2) of None \<Rightarrow> True |
           Some cs \<Rightarrow> (cm = cs))))"
 
 text {* We need to rename a few modules to let the Scala compiler resolve circular dependencies. *}
@@ -132,7 +134,7 @@ code_identifier
 | code_module Complete_Partial_Order \<rightharpoonup> (Scala) MicroCheckerLib
 | code_module Lattices \<rightharpoonup> (Scala) MicroCheckerLib
 
-export_code init propose phase1a maxAcceptorVote phase1b safe_at safeVote phase2a vote safe_inv
+export_code init propose phase1a maxAcceptorVote phase1b safe_at safeVote phase2a vote_cmd safe_inv
    in Scala file "DistributedMultiPaxos.scala"
 
 end
