@@ -129,7 +129,7 @@ private lemma all_choosable_no_safe:
   by (metis assms(1) assms(2) assms(3) lessI safe_at_def)
 (*>*) 
 
-lemma safe_is_safe:
+lemma safe_imp_agreement:
   assumes "safe" and "chosen v\<^sub>1" and "chosen v\<^sub>2"
   shows "v\<^sub>1 = v\<^sub>2"
   -- {* This follows the proof of Proposition 1 from the paper "Generalized Consensus and Paxos" *}
@@ -162,8 +162,9 @@ qed
 
 text {* The main lemma. Inspired by section 2.2.2 of the paper "Fast Paxos", by Leslie Lamport. *}
 
-lemma proved_safe_is_safe:
-  assumes "safe" and "q \<in> quorums"
+lemma proved_safe_at_imp_safe_at:
+  assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j" 
+  and "q \<in> quorums"
   and "\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> Some i"
   and "proved_safe_at q i v" and "conservative_array"
   shows "safe_at v (i::nat)"
@@ -220,8 +221,7 @@ next
         case aa
         have "a \<in> acceptors"
           by (meson a(1) assms(2) set_rev_mp quorums_axioms quorums_def)
-        hence "safe_at v k" using  assms(1)
-          by (metis a(2) option.case_eq_if option.distinct(1) option.sel safe_def)
+        hence "safe_at v k" using  assms(1) a(2,3) by (metis less_or_eq_imp_le)
         with aa show ?thesis using that by (metis safe_at_def) 
       next
         case cc
@@ -260,11 +260,40 @@ next
   qed 
 qed
 
+lemma proved_safe_imp_safe:
+  assumes "\<And> b a v . vote a b = Some v \<Longrightarrow> \<exists> q \<in> quorums .
+    proved_safe_at q b v \<and>  (\<forall> a \<in> q . ballot a \<ge> Some b)"
+  and conservative_array
+  shows safe
+  nitpick[verbose, card 'a = 3, card 'b = 2, card nat = 3, card "'b option" = 2, card "nat option" = 4, expect=none]
+  proof (auto simp add: safe_def split add:option.split)
+    fix a b w
+    assume "vote a b = Some w"
+    thus "safe_at w b" 
+    by (induct b arbitrary:w a rule:nat_less_induct)
+      (metis (full_types) assms(1,2) proved_safe_at_imp_safe_at)
+  qed
+
+text {* The lemma @{thm proved_safe_imp_safe} says that as long as acceptors vote for things that 
+  are proven safe, and only a unique value can be vote for in a given ballot, 
+  then the ballot array is safe. }*}
+
 end
 
 end
 
 subsection {* Monotonicity *}
+
+text {* We define a prefix relation on ballot arrays and show that a value safe b remains 
+  safe at be when the ballot array grows *}
+
+context begin
+
+definition is_prefix where 
+  "is_prefix b1 b2 v1 v2 \<equiv> \<forall> a . b1 a \<le> b2 a 
+    \<and> (\<forall> b . (Some b < b1 a \<or> (Some b = b1 a \<and> v1 a b \<noteq> None)) \<longrightarrow> v1 a b = v2 a b)"
+
+end
 
 locale ballot_array_prefix =
   -- {* @{typ 'a} is the type of acceptors *}
@@ -274,9 +303,7 @@ locale ballot_array_prefix =
   and vote2 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   and quorums :: "'a set set"
   and acceptors :: "'a set"
-  fixes is_prefix
-  defines "is_prefix \<equiv> \<forall> a . ballot1 a \<le> ballot2 a \<and> (\<forall> b . Some b \<le> ballot1 a \<longrightarrow> vote1 a b = vote2 a b)"
-  assumes is_prefix
+  assumes "BallotArrayProperties.is_prefix ballot1 ballot2 vote1 vote2"
 begin
 
 interpretation ba_1:ballot_array ballot1 vote1 quorums acceptors .
@@ -285,12 +312,19 @@ interpretation ba_2:ballot_array ballot2 vote2 quorums acceptors .
 lemma choosable_decreases:
   assumes "ba_2.choosable v b"
   shows "ba_1.choosable v b"
-  by (smt assms ballot_array.choosable_def ballot_array_prefix_axioms ballot_array_prefix_def less_le_trans order.strict_implies_order) 
+  using assms ballot_array_prefix_axioms
+  nitpick[card 'v = 1, card 'a = 1, verbose, card nat = 2, card "'v option" = 2, card "nat option" = 3, expect=none]
+  by (auto simp add: BallotArrayProperties.is_prefix_def ballot_array.choosable_def  ballot_array_prefix_def)
+   (metis dual_order.strict_trans1)
 
 lemma safe_at_mono:
   assumes "ba_1.safe_at v b"
   shows "ba_2.safe_at v b"
   by (metis assms ballot_array.safe_at_def choosable_decreases)
+
+lemma safe_mono:
+  assumes "ba_2.safe" and "ba_2.well_formed" and "ba_1.well_formed"
+  shows "ba_1.safe" oops
 
 end
 

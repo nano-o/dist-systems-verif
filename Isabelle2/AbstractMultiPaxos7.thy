@@ -24,7 +24,7 @@ datatype ('vv,'aa,'ll) amp_action =
   Propose 'vv
 | Learn nat 'vv 'll
 | Vote 'aa "'aa set" nat 'vv
-  -- {* an acceptor votes in a ballot according to a quorum *}
+  -- {* an acceptor votes in an instance according to a quorum *}
 | JoinBallot 'aa nat
 
 definition amp_asig where
@@ -57,6 +57,7 @@ definition do_vote where
   "do_vote a i q v s s' \<equiv> a \<in> acceptors \<and> (case ballot s a of None \<Rightarrow> False
     | Some b \<Rightarrow>
           v \<in> propCmd s
+        \<and> vote s i a b = None
         \<and> proved_safe_at s i q b v
         \<and> q \<in> quorums
         \<and> (\<forall> a2 . a2 \<in> q \<longrightarrow> ballot s a2 \<ge> Some b)

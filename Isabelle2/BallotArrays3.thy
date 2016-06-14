@@ -38,10 +38,11 @@ definition max_vote where
 
 definition proved_safe_at where
   "proved_safe_at Q b v \<equiv>
-    case b of 0 \<Rightarrow> True
-  | Suc c \<Rightarrow> (case (max_vote Q c) of (* note that here c is b-1 *)
-      None \<Rightarrow> True
-    | Some v' \<Rightarrow> v = v')"
+    (case b of 0 \<Rightarrow> True
+    | Suc c \<Rightarrow> (\<forall> a \<in> Q . ballot a \<ge> Some b) \<and>
+      (case (max_vote Q c) of (* note that here c is b-1 *)
+        None \<Rightarrow> True
+      | Some v' \<Rightarrow> v = v'))"
 
 definition chosen_at where
   "chosen_at v b \<equiv> \<exists> q . q \<in> quorums \<and> (\<forall> a . a \<in> q \<longrightarrow> (vote) a b = (Some v))"
@@ -61,7 +62,7 @@ definition safe_at where
 
 definition safe where
   "safe \<equiv> \<forall> b . \<forall> a . a \<in> acceptors \<longrightarrow> 
-    (let vote = (vote) a b in (case vote of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b))"
+    (let vote = vote a b in (case vote of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b))"
   
 definition well_formed where
   "well_formed \<equiv> \<forall> a b . a \<in> acceptors \<and> ballot a < Some b  

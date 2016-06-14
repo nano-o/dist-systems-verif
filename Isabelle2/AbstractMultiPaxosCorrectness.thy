@@ -38,8 +38,7 @@ lemma vote_ballot_unch:
   shows "ballot s = ballot s'"
 using assms by (auto split add:option.split_asm)
 
-
-subsection {* @{term conservative_array}  is an inductive invariant*}
+subsection {* @{term conservative_array}  is an inductive invariant *}
 
 declare ballot_array.conservative_array_def[inv_proofs_defs]
 abbreviation conservative_array where 
@@ -49,59 +48,27 @@ lemma conservative_inductive:
   "invariant the_ioa conservative_array"
 apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
     apply (force simp add:ballot_array.conservative_def)
-  apply (case_tac a)
-        apply (force simp add:inv_proofs_defs)
-      apply (force simp add:inv_proofs_defs)
-    defer
-    apply (force simp add:inv_proofs_defs)
-  apply (match premises in R[thin]:"reachable ?ioa ?s" \<Rightarrow> \<open>-\<close>)
-  subgoal premises prems for s t act a q i v using prems
-  proof -
-    from prems(2,3)
-    obtain b where 1:"a \<in> acceptors" and 2:"ballot s a = Some b" 
-    and 3:"proved_safe_at s i q b v"
-    and 6:"ballot_array.conservative_array  (vote t i) acceptors"
-    and 5:"t = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>"
-        by (case_tac "ballot s a") (auto simp add:inv_proofs_defs)
-    show "conservative_array t"
-    proof (auto simp add: ballot_array.conservative_array_def)
-      fix j b
-      have "ballot_array.conservative (vote t j) acceptors b" if "i \<noteq> j"
-      proof -
-        have "ballot_array.conservative (vote s j) acceptors b" using prems(1)
-          by (auto simp add: ballot_array.conservative_array_def ballot_array.conservative_def)
-        thus ?thesis using that 5 by (auto simp add: ballot_array.conservative_def)
-      qed
-      moreover
-      have "ballot_array.conservative (vote t j) acceptors b" if "i = j"
-        using 6 that by auto (metis ballot_array.conservative_array_def)
-      ultimately show "ballot_array.conservative (vote t j) acceptors b" by auto
-    qed
-  qed 
+  apply (case_tac a) 
+  apply (auto simp add:inv_proofs_defs split add:option.split_asm)
 done
 declare conservative_inductive[invs]
-
 
 subsection {* @{term safe}  is an inductive invariant*}
 
 abbreviation safe_at where "safe_at s i \<equiv> ballot_array.safe_at (ballot s) (vote s i) quorums"
 
+lemma trans_imp_prefix_order:
+  assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t"
+  shows "is_prefix (ballot s) (ballot t) (vote s i) (vote t i)" using assms
+by (cases a) (auto simp add:is_prefix_def inv_proofs_defs split add:option.split_asm)
+    
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic *}
-  assumes "safe_at s i v b" and "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t"
-  shows "safe_at t i v b" using assms
-apply (cases a)
-         (* propose, learn *)
-        apply (auto simp add:inv_proofs_defs ballot_array.safe_at_def ballot_array.choosable_def)[2]
-    defer 
-    (* join_ballot *)
-    apply (simp add:inv_proofs_defs ballot_array.safe_at_def ballot_array.choosable_def)[1]
-    apply (metis less_def order.strict_trans)
-  (* vote *)
-  apply (simp add:inv_proofs_defs ballot_array.safe_at_def ballot_array.choosable_def split add:option.split_asm)
-  apply (metis neq_iff)
-done
-
+  assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "safe_at s i v b"
+  shows "safe_at t i v b" using assms 
+  by (drule_tac trans_imp_prefix_order)
+   (metis (full_types) assms(1) ballot_array_prefix.safe_at_mono ballot_array_prefix_def trans_imp_prefix_order)
+  
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe (ballot s) (vote s i) quorums acceptors"
 
 lemma safe_inv:
@@ -148,9 +115,9 @@ apply(rule invariantI)
           have "v = v\<^sub>2" using that True
             by (smt "2" "5" amp_state.ext_inject amp_state.surjective amp_state.update_convs(3) fun_upd_apply map_upd_Some_unfold)
           hence 9:"vote t j a\<^sub>2 b = Some v\<^sub>2" using 5 that by force
-          hence "safe_at s j v\<^sub>2 b\<^sub>2" 
-            using ballot_array_props.proved_safe_is_safe[of quorums acceptors "ballot s" "(vote s j)" q b\<^sub>2 v] 4 3 7 8 prems(1,3) that `v = v\<^sub>2`
-            by auto (metis ballot_array_props_def quorums_axioms)
+          hence "safe_at s j v\<^sub>2 b\<^sub>2" thm ballot_array_props.proved_safe_at_imp_safe_at
+            using ballot_array_props.proved_safe_at_imp_safe_at[of quorums acceptors  b\<^sub>2 "(vote s j)" "ballot s"  q v] 4 3 7 8 prems(1,3) that `v = v\<^sub>2`
+            apply auto 
           with safe_mono prems(2) that True show ?thesis by blast
         qed
         ultimately show ?thesis by auto
