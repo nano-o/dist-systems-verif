@@ -12,11 +12,11 @@ text {* The states of the I/O-automaton *}
 
 record ('v,'a) amp_state =
   propCmd :: "'v set"
-  ballot :: "'a \<Rightarrow> nat option"
+  ballot :: "'a \<Rightarrow> nat"
   vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
 
 locale amp_ioa = IOA + 
-  fixes acceptors ::"'a set" and quorums::"'a set set"
+  fixes quorums::"'a set set"
   fixes learners::"'l set"
 begin
 
@@ -31,11 +31,11 @@ definition amp_asig where
   "amp_asig \<equiv>
     \<lparr> inputs = { Propose c | c . True},
       outputs = { Learn i v l | i v l . l \<in> learners},
-      internals = {Vote a i q b | a i b q . a \<in> acceptors} \<union> {JoinBallot a b | a b . a \<in> acceptors}\<rparr>"
+      internals = {Vote a i q b | a i b q . True} \<union> {JoinBallot a b | a b . True}\<rparr>"
 
 definition amp_start where
   -- {* The initial state *}
-  "amp_start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . None), vote = (\<lambda> i a b . None) \<rparr>}"
+  "amp_start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> i a b . None) \<rparr>}"
 
 subsection {* The transitions *}
 
@@ -44,25 +44,23 @@ definition propose where
 
 definition join_ballot where
   "join_ballot a b s s' \<equiv> 
-    a \<in> acceptors \<and> Some b > (ballot s a) \<and> s' = s\<lparr>ballot := (ballot s)(a := Some b)\<rparr>"
+    b > (ballot s a) \<and> s' = s\<lparr>ballot := (ballot s)(a := b)\<rparr>"
 
 abbreviation proved_safe_at where 
   -- {* v is proved safe in instance i at ballot b by quorum q *}
-  "proved_safe_at s i q b v \<equiv> ballot_array.proved_safe_at  (vote s i) q b v"
+  "proved_safe_at s i q b v \<equiv> ballot_array.proved_safe_at (ballot s) (vote s i) quorums q b v"
 
-abbreviation conservative_at where 
-  "conservative_at s i \<equiv> ballot_array.conservative_array (vote s i) acceptors"
+abbreviation conservative_at where
+  "conservative_at s i \<equiv> ballot_array.conservative_array (vote s i)"
 
 definition do_vote where
-  "do_vote a i q v s s' \<equiv> a \<in> acceptors \<and> (case ballot s a of None \<Rightarrow> False
-    | Some b \<Rightarrow>
+  "do_vote a i q v s s' \<equiv> let b = ballot s a in
           v \<in> propCmd s
         \<and> vote s i a b = None
         \<and> proved_safe_at s i q b v
         \<and> q \<in> quorums
-        \<and> (\<forall> a2 . a2 \<in> q \<longrightarrow> ballot s a2 \<ge> Some b)
         \<and> conservative_at s' i
-        \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>)"
+        \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>"
 
 abbreviation chosen where 
   "chosen s i v \<equiv> ballot_array.chosen (vote s i) quorums v"

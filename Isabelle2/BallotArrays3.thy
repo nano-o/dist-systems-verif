@@ -9,7 +9,6 @@ locale ballot_array =
   fixes ballot :: "'a \<Rightarrow> nat"
   and vote :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   and quorums :: "'a set set"
-  and acceptors :: "'a set"
 begin
 
 definition conservative where
@@ -61,12 +60,10 @@ definition safe_at where
       ((b2 < b \<and> choosable v2 b2) \<longrightarrow> (v = v2)))"
 
 definition safe where
-  "safe \<equiv> \<forall> b . \<forall> a . a \<in> acceptors \<longrightarrow> 
-    (let vote = vote a b in (case vote of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b))"
+  "safe \<equiv> \<forall> b . \<forall> a . case vote a b of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b"
   
 definition well_formed where
-  "well_formed \<equiv> \<forall> a b . a \<in> acceptors \<and> ballot a < b  
-    \<longrightarrow> vote a b = None"
+  "well_formed \<equiv> \<forall> a b . ballot a < b \<longrightarrow> vote a b = None"
 
 end
 

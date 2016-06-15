@@ -147,7 +147,7 @@ proof -
       proof -
         obtain a where "a \<in> q\<^sub>2" using 6 by (metis quorum_inter_witness)
         with this assms(1) 4 6 have "safe_at (the (vote a b\<^sub>2)) b\<^sub>2"
-          by (metis set_rev_mp option.case_eq_if option.distinct(1) quorums_axioms quorums_def safe_def)
+          by (metis option.case_eq_if option.distinct(1) safe_def)
         moreover have "the (vote a b\<^sub>2) = v\<^sub>2" using `a \<in> q\<^sub>2` 4 by force
         ultimately show ?thesis by auto
       qed
@@ -297,12 +297,11 @@ locale ballot_array_prefix =
   and ballot2 :: "'a \<Rightarrow> nat"
   and vote2 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   and quorums :: "'a set set"
-  and acceptors :: "'a set"
   assumes "BallotArrayProperties.is_prefix ballot1 ballot2 vote1 vote2"
 begin
 
-interpretation ba_1:ballot_array ballot1 vote1 quorums acceptors .
-interpretation ba_2:ballot_array ballot2 vote2 quorums acceptors .
+interpretation ba_1:ballot_array ballot1 vote1 quorums  .
+interpretation ba_2:ballot_array ballot2 vote2 quorums  .
 
 lemma choosable_decreases:
   assumes "ba_2.choosable v b"
