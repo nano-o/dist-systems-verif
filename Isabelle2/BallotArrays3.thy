@@ -6,16 +6,16 @@ begin
 
 locale ballot_array =
   -- {* @{typ 'a} is the type of acceptors *}
-  fixes ballot :: "'a \<Rightarrow> nat option"
+  fixes ballot :: "'a \<Rightarrow> nat"
   and vote :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   and quorums :: "'a set set"
   and acceptors :: "'a set"
 begin
 
 definition conservative where
-  "conservative b \<equiv> \<forall> a1 . \<forall> a2 . a1 \<in> acceptors \<and> a2 \<in> acceptors \<longrightarrow> (
+  "conservative b \<equiv> \<forall> a1 . \<forall> a2 .
     let v1 = vote a1 b; v2 = vote a2 b in 
-      case v1 of Some x \<Rightarrow> (case v2 of Some y \<Rightarrow> x = y | None \<Rightarrow> True) | None \<Rightarrow> True)"
+      case v1 of Some x \<Rightarrow> (case v2 of Some y \<Rightarrow> x = y | None \<Rightarrow> True) | None \<Rightarrow> True"
 
 definition conservative_array where
   "conservative_array \<equiv> \<forall> b . conservative b"
@@ -39,7 +39,7 @@ definition max_vote where
 definition proved_safe_at where
   "proved_safe_at Q b v \<equiv>
     (case b of 0 \<Rightarrow> True
-    | Suc c \<Rightarrow> (\<forall> a \<in> Q . ballot a \<ge> Some b) \<and>
+    | Suc c \<Rightarrow> Q \<in> quorums \<and> (\<forall> a \<in> Q . ballot a \<ge> b) \<and>
       (case (max_vote Q c) of (* note that here c is b-1 *)
         None \<Rightarrow> True
       | Some v' \<Rightarrow> v = v'))"
@@ -53,7 +53,7 @@ definition chosen where
 definition choosable where
   "choosable v b \<equiv>
     \<exists> q . q \<in> quorums \<and> (\<forall> a . a \<in> q \<longrightarrow> (
-      ballot a > Some b \<longrightarrow> vote a b = Some v))"
+      ballot a > b \<longrightarrow> vote a b = Some v))"
 
 definition safe_at where
   "safe_at v b \<equiv>
@@ -65,7 +65,7 @@ definition safe where
     (let vote = vote a b in (case vote of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b))"
   
 definition well_formed where
-  "well_formed \<equiv> \<forall> a b . a \<in> acceptors \<and> ballot a < Some b  
+  "well_formed \<equiv> \<forall> a b . a \<in> acceptors \<and> ballot a < b  
     \<longrightarrow> vote a b = None"
 
 end

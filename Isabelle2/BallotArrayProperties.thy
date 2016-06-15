@@ -163,9 +163,7 @@ qed
 text {* The main lemma. Inspired by section 2.2.2 of the paper "Fast Paxos", by Leslie Lamport. *}
 
 lemma proved_safe_at_imp_safe_at:
-  assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j" 
-  and "q \<in> quorums"
-  and "\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> Some i"
+  assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"
   and "proved_safe_at q i v" and "conservative_array"
   shows "safe_at v (i::nat)"
 proof (cases "i = 0")
@@ -190,79 +188,76 @@ next
   next
     case (Some v') 
     with this obtain k a where "a \<in> q" and "vote a k = Some v" and "k < i"  
-      and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
-      using False assms(4)
-      by (simp add:proved_safe_at_def)
-      (smt False Nitpick.case_nat_unfold Some Suc_pred less_Suc_eq_le max_vote_some option.case_eq_if option.sel option.simps(3)) 
+    and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None" 
+      using False assms(2) by (simp add:proved_safe_at_def split add:option.splits nat.splits)
+        (metis less_Suc_eq_le max_vote_some)
     thus ?thesis using that by auto
   qed
   thus ?thesis
   text {* now we prove the thesis by considering the cases (a) and (b) separately *}
   proof (cases)
     case b
-    { fix j v
-      assume 1:"j < i"  and 2:"choosable v j"
-      from 2 obtain q2 where 3:"q2 \<in> quorums" and 4:"\<And> a . a \<in> q2 \<Longrightarrow>
-        (ballot a) > Some j \<Longrightarrow> (vote) a j = Some v"
-        by (auto simp add:choosable_def)
-      from 3 assms(2) obtain a where 5:"a \<in> q" and 6:"a \<in> q2"
-        using quorum_inter_witness by metis
-      have 9:"vote a j = Some v"
-        by (metis (no_types, hide_lams) "1" "4" "5" "6" assms(3) less_def less_o.simps(4) not_le order_trans) 
-      from b have False by (metis "1" "5" "9" option.distinct(1)) }
-    thus ?thesis by (auto simp add:safe_at_def)
+    text {* We prove that no value is choosable at any @{text "j < i"}; 
+      therefore, anything is safe at i *}
+    { fix j w
+      assume 1:"j < i"  and 2:"choosable w j"
+      from \<open>choosable w j\<close> obtain q2 where 3:"q2 \<in> quorums" and 4:"\<And> a . a \<in> q2 \<Longrightarrow>
+        (ballot a) > j \<Longrightarrow> vote a j = Some w" by (auto simp add:choosable_def)
+      from \<open>q2 \<in> quorums\<close> \<open>proved_safe_at q i v\<close> \<open>j < i\<close> quorum_inter_witness 
+      obtain a where 5:"a \<in> q" and 6:"a \<in> q2" and 7:"ballot a > j"
+        by (auto simp add:proved_safe_at_def split add:nat.splits option.splits)
+         (metis dual_order.strict_trans1, metis (full_types) dual_order.strict_trans1)
+      from \<open>ballot a > j\<close> \<open>a \<in> q\<close> b have "vote a j = None" by (metis "1" "5")
+      moreover from \<open>ballot a > j\<close> 4 \<open>a \<in> q2\<close>  have "vote a j = Some w" by metis 
+      ultimately have False by auto }
+    thus "safe_at v i" by (auto simp add:safe_at_def)
   next
     case a
     have "v' = v" if "choosable v' j" and "j < i" for j v'
     proof -
+      text {* First obtain an acceptor that has voted for v' in j *}
+      obtain a2 where "a2 \<in> q" and "vote a2 j = Some v'"
+      proof -
+        from \<open>proved_safe_at q i v\<close> `i \<noteq> 0` 
+        have "q \<in> quorums" and q_ballots:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" 
+          by (auto simp add:proved_safe_at_def split add:nat.splits)
+        from \<open>choosable v' j\<close> obtain q2 where "q2 \<in> quorums" and q2_votes:"\<And> a . a \<in> q2 \<Longrightarrow>
+          (ballot a) > j \<Longrightarrow> vote a j = Some v'" by (auto simp add:choosable_def)
+        from \<open>q2 \<in> quorums\<close> \<open>q \<in> quorums\<close> q_ballots quorum_inter_witness \<open>j < i\<close> 
+          obtain a2 where "a2 \<in> q" and "a2 \<in> q2" and "ballot a2 > j" by (metis dual_order.strict_trans1)
+        have "vote a2 j = Some v'" by (metis \<open>a2 \<in> q2\<close> \<open>j < ballot a2\<close> q2_votes) 
+        from that \<open>vote a2 j = Some v'\<close> \<open>a2 \<in> q\<close> show ?thesis by simp
+      qed
+      text {* We consider the following three cases. *}
       consider (aa) "j < k" | (bb) "j = k" | (cc) "k < j" by fastforce
-      hence ?thesis
+      thus ?thesis
       proof cases
         case aa
-        have "a \<in> acceptors"
-          by (meson a(1) assms(2) set_rev_mp quorums_axioms quorums_def)
-        hence "safe_at v k" using  assms(1) a(2,3) by (metis less_or_eq_imp_le)
-        with aa show ?thesis using that by (metis safe_at_def) 
+        text {* v' is choosable at j < k. Since there is a vote for v at k and the ballot array 
+          before i is safe by assumption, we get that v' = v *}
+        have "safe_at v k" using assms(1) \<open>vote a k = Some v\<close> \<open>k < i\<close> by metis
+        with aa show ?thesis using that by (metis safe_at_def)
       next
         case cc
-        from that obtain q2 where 3:"q2 \<in> quorums" and 4:"\<And> a . a \<in> q2 \<Longrightarrow>
-          (ballot a) > Some j \<Longrightarrow> (vote) a j = Some v'"
-          by (auto simp add:choosable_def)
-        from 3 assms(2) obtain a2 where 5:"a2 \<in> q" and 6:"a2 \<in> q2" 
-          using quorum_inter_witness by metis
-        have 8:"vote a2 j = Some v'" using 4 5 6 assms(3) that(2) 
-          by (metis dual_order.strict_trans1 less_def less_o.simps(4))
-        thus ?thesis by (metis "5" a(4) cc option.distinct(1) that(2)) 
+        text {* In this case we reach a contradiction because we can find a quorum which passed j 
+          and did note vote at j, thus no value can be choosable at j. *}
+        from cc and a(4) \<open>j < i\<close> \<open>a2 \<in> q\<close> have "vote a2 j = None" by metis
+        with \<open>vote a2 j = Some v'\<close> have False by auto
+        thus ?thesis by auto
       next
-        case bb 
-        text {* Here we need the fact that the array is conservative *}
-        have 1:"vote a k = Some v" if "a \<in> acceptors" and " vote a k \<noteq> None"  for a using that assms(5) 
-          by (auto simp add:conservative_array_def conservative_def split add:option.split_asm)
-            (metis a(1) a(2) assms(2) quorums_axioms quorums_def subsetCE) 
-        from that obtain q2 where 3:"q2 \<in> quorums" and 4:"\<And> a . a \<in> q2 \<Longrightarrow>
-          (ballot a) > Some j \<Longrightarrow> (vote) a j = Some v'"
-          by (auto simp add:choosable_def)
-        from 3 assms(2) obtain a2 where 5:"a2 \<in> q" and 6:"a2 \<in> q2" 
-          using quorum_inter_witness by metis
-        have 7:"ballot a2 \<ge> Some k"
-          by (metis "5" a(3) assms(3) less_eq_def less_eq_o.simps(3) less_imp_le order_trans)
-        have 8:"a2 \<in> acceptors"
-          by (metis (full_types) "3" "6" set_rev_mp quorums_axioms quorums_def)  
-        have 9:"vote a2 k = Some v"
-          by (metis "1" "4" "5" "6" "7" "8" assms(3) bb leD less_eq_def less_eq_o.simps(3) option.discI order.not_eq_order_implies_strict that(2))
-        show ?thesis
-          by (metis "4" "5" "6" "7" "9" antisym_conv2 assms(3) bb leD less_eq_def less_eq_o.simps(3) option.sel that(2)) 
+        case bb
+        with \<open>conservative_array\<close> \<open>vote a2 j = Some v'\<close> \<open>vote a k = Some v\<close> show ?thesis 
+          by (simp add:conservative_def conservative_array_def split add:option.splits)
       qed
-      thus ?thesis by (auto simp add:safe_at_def)
     qed
     thus ?thesis
       by (metis safe_at_def) 
-  qed 
+  qed
 qed
 
 lemma proved_safe_imp_safe:
   assumes "\<And> b a v . vote a b = Some v \<Longrightarrow> \<exists> q \<in> quorums .
-    proved_safe_at q b v \<and>  (\<forall> a \<in> q . ballot a \<ge> Some b)"
+    proved_safe_at q b v \<and>  (\<forall> a \<in> q . ballot a \<ge> b)"
   and conservative_array
   shows safe
   nitpick[verbose, card 'a = 3, card 'b = 2, card nat = 3, card "'b option" = 2, card "nat option" = 4, expect=none]
@@ -289,17 +284,17 @@ text {* We define a prefix relation on ballot arrays and show that a value safe 
 
 context begin
 
-definition is_prefix where 
+definition is_prefix where
   "is_prefix b1 b2 v1 v2 \<equiv> \<forall> a . b1 a \<le> b2 a 
-    \<and> (\<forall> b . (Some b < b1 a \<or> (Some b = b1 a \<and> v1 a b \<noteq> None)) \<longrightarrow> v1 a b = v2 a b)"
+    \<and> (\<forall> b . (b < b1 a \<or> (b = b1 a \<and> v1 a b \<noteq> None)) \<longrightarrow> v1 a b = v2 a b)"
 
 end
 
 locale ballot_array_prefix =
   -- {* @{typ 'a} is the type of acceptors *}
-  fixes ballot1 :: "'a \<Rightarrow> nat option"
+  fixes ballot1 :: "'a \<Rightarrow> nat"
   and vote1 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
-  and ballot2 :: "'a \<Rightarrow> nat option"
+  and ballot2 :: "'a \<Rightarrow> nat"
   and vote2 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   and quorums :: "'a set set"
   and acceptors :: "'a set"
@@ -314,13 +309,38 @@ lemma choosable_decreases:
   shows "ba_1.choosable v b"
   using assms ballot_array_prefix_axioms
   nitpick[card 'v = 1, card 'a = 1, verbose, card nat = 2, card "'v option" = 2, card "nat option" = 3, expect=none]
-  by (auto simp add: BallotArrayProperties.is_prefix_def ballot_array.choosable_def  ballot_array_prefix_def)
+  by (auto simp add: BallotArrayProperties.is_prefix_def ballot_array.choosable_def ballot_array_prefix_def)
    (metis dual_order.strict_trans1)
 
 lemma safe_at_mono:
   assumes "ba_1.safe_at v b"
   shows "ba_2.safe_at v b"
   by (metis assms ballot_array.safe_at_def choosable_decreases)
+
+lemma 
+  assumes "\<forall>a \<in> q. b < ballot1 a" 
+  shows "ba_1.max_vote q b = ba_2.max_vote q b" 
+  nitpick[verbose, card 'v = 3, card 'a = 4, card nat = 4, card "'v option" = 4,
+card "nat option" = 5]
+  apply (auto simp add:ballot_array.max_vote_def split add:option.splits) 
+oops
+
+lemma proved_safe_at_mono:
+  assumes "ba_1.proved_safe_at q b v"
+  shows "ba_2.proved_safe_at q b v"
+using assms ballot_array_prefix_axioms
+apply (auto simp add:ballot_array.proved_safe_at_def BallotArrayProperties.is_prefix_def ballot_array_prefix_def
+  split add:nat.splits option.splits)
+apply (meson order_trans)
+apply (meson leD less_le_trans not_le_imp_less)
+apply (metis ba_1.max_vote_none ba_2.max_vote_some dual_order.strict_trans1 dual_order.strict_trans2 lessI option.distinct(1))
+apply (meson order_trans)
+apply (meson dual_order.strict_trans1 not_le) (* TODO: Here we have to prove that max_vote is preserved 
+  when the ballot array grows *)
+nitpick[card 'v = 3, card 'a = 3, verbose,  card nat = 3, card "'v option" = 4,
+card "nat option" = 4]
+apply(insert ballot_array.max_vote_some ballot_array.max_vote_none) 
+oops
 
 lemma safe_mono:
   assumes "ba_2.safe" and "ba_2.well_formed" and "ba_1.well_formed"
