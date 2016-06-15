@@ -3,10 +3,8 @@ imports Main
 begin
 
 locale quorums =
-  fixes acceptors::"'a set" and quorums::"'a set set"
-  assumes "acceptors \<noteq> {}"
-    and "\<And> q1 q2 . \<lbrakk>q1 \<in> quorums; q2 \<in> quorums\<rbrakk> \<Longrightarrow> q1 \<inter> q2 \<noteq> {}"
-    and "\<And> q . q \<in> quorums \<Longrightarrow> q \<subseteq> acceptors"
+  fixes quorums::"'a set set"
+  assumes "\<And> q1 q2 . \<lbrakk>q1 \<in> quorums; q2 \<in> quorums\<rbrakk> \<Longrightarrow> q1 \<inter> q2 \<noteq> {}"
     and "quorums \<noteq> {}"
 begin
 
@@ -22,7 +20,6 @@ lemma quorums_value_same:
   and "\<And> a . a \<in> q2 \<Longrightarrow> f a = y"
   shows "x = y" using assms
 by (metis quorum_inter_witness) 
-
 
 end 
 
@@ -62,12 +59,10 @@ qed
 
 print_locale quorums
 
-sublocale quorums acceptors quorums
+sublocale quorums  quorums
 apply(unfold_locales)
-        apply (metis card_quorums_axioms card_quorums_def)
-      apply (metis inter)
-    apply (metis subset)
-  apply (metis not_e)
+  apply (metis inter)
+apply (metis not_e)
 done
 
 end
