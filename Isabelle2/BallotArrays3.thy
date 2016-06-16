@@ -27,37 +27,30 @@ definition max_voted_round_q where
     then Some (Max {b . \<exists> a . a \<in> q \<and> b \<le> bound \<and> vote a b \<noteq> None})
     else None"
  
-definition max_vote where 
-  "max_vote q bound \<equiv>
+definition is_safe where
+  "is_safe q bound v \<equiv>
     case max_voted_round_q q bound of
-      None \<Rightarrow> None
-    | Some b \<Rightarrow> 
-        let max_voter = (SOME a . a \<in> q \<and> vote a b \<noteq> None)
-        in vote max_voter b"
+      None \<Rightarrow> True
+    | Some b \<Rightarrow> \<exists> a . a \<in> q \<and> vote a b = Some v"
 
 definition proved_safe_at where
   "proved_safe_at Q b v \<equiv>
-    (case b of 0 \<Rightarrow> True
-    | Suc c \<Rightarrow> Q \<in> quorums \<and> (\<forall> a \<in> Q . ballot a \<ge> b) \<and>
-      (case (max_vote Q c) of (* note that here c is b-1 *)
-        None \<Rightarrow> True
-      | Some v' \<Rightarrow> v = v'))"
+    case b of 0 \<Rightarrow> True
+    | Suc c \<Rightarrow> Q \<in> quorums \<and> (\<forall> a \<in> Q . ballot a \<ge> b) \<and> is_safe Q c v"
 
 definition chosen_at where
-  "chosen_at v b \<equiv> \<exists> q . q \<in> quorums \<and> (\<forall> a . a \<in> q \<longrightarrow> (vote) a b = (Some v))"
+  "chosen_at v b \<equiv> \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . (vote) a b = (Some v))"
 
 definition chosen where
   "chosen v \<equiv> \<exists> b . chosen_at v b"
   
 definition choosable where
   "choosable v b \<equiv>
-    \<exists> q . q \<in> quorums \<and> (\<forall> a . a \<in> q \<longrightarrow> (
-      ballot a > b \<longrightarrow> vote a b = Some v))"
+    \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . ballot a > b \<longrightarrow> vote a b = Some v)"
 
 definition safe_at where
   "safe_at v b \<equiv>
-    (\<forall> b2 . \<forall> v2 .
-      ((b2 < b \<and> choosable v2 b2) \<longrightarrow> (v = v2)))"
+    \<forall> b2 . \<forall> v2 . ((b2 < b \<and> choosable v2 b2) \<longrightarrow> (v = v2))"
 
 definition safe where
   "safe \<equiv> \<forall> b . \<forall> a . case vote a b of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b"
