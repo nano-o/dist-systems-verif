@@ -1,5 +1,5 @@
 theory MultiPaxosCorrectness
-imports AbstractMultiPaxos MultiPaxosHist
+imports AbstractMultiPaxos MultiPaxos4
 begin
 
 definition pending_of_a where

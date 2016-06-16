@@ -7,25 +7,26 @@ type_synonym acc = nat
 type_synonym bal = nat
 type_synonym inst = nat
 
-datatype 'v cmd = Cmd (the_val: 'v) | NoOp
-
 datatype 'v msgs = 
   Msg1a (ballot:bal)|
-  Msg1b (acceptor:acc) (insts:inst) (ballot:bal) (last_vs:"bal \<times> ('v cmd option)")|
-  Msg2a (insts:inst) (ballot:bal) (comm:"'v cmd")
+  Msg1b (acceptor:acc) (insts:inst) (ballot:bal) (last_vs:"bal \<times> 'v option")|
+  Msg2a (insts:inst) (ballot:bal) (comm:"'v")
 
 record 'v acc_state =
   ballot :: "bal"
-  vote :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v cmd option"
+  vote :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
 
 record 'v mp_state = 
-  acc_bal :: "'v acc_state list"
+  acc_bal :: "acc \<Rightarrow>f 'v acc_state"
   network :: "'v msgs set"
-  propCmds :: "'v cmd option set"
+  propCmds :: "'v option set"
 
-primrec init_acc::"nat \<Rightarrow> 'v acc_state list"  where
-  "init_acc 0 = []"
-  |"init_acc (Suc n) = \<lparr>ballot = 0, vote = K$ K$ None\<rparr> #(init_acc n)"
+definition init_acc_state :: "'v acc_state" where
+  "init_acc_state \<equiv> \<lparr>ballot = 0, vote = K$ K$ None\<rparr>" 
+
+primrec init_acc::"nat \<Rightarrow> (acc \<Rightarrow>f 'v acc_state)"  where
+  "init_acc 0 = (K$ init_acc_state)"
+  |"init_acc (Suc n) = (init_acc n)(n $:= init_acc_state)"
 
 definition init where
   "init nas \<equiv> \<lparr>acc_bal = init_acc nas, network = {}, propCmds = {}\<rparr>"
@@ -36,36 +37,36 @@ definition propose where
 definition phase1a where
   "phase1a b state \<equiv> state\<lparr>network := network state \<union> {Msg1a b}\<rparr>"
 
-definition vote_cmd::"acc \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v cmd option \<Rightarrow> 'v mp_state \<Rightarrow> 'v mp_state" where
+definition vote_cmd::"acc \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v \<Rightarrow> 'v mp_state \<Rightarrow> 'v mp_state" where
   "vote_cmd avt bvt ivt cmdv state \<equiv> (let 
-    a_state = ((acc_bal state)!avt) in
+    a_state = ((acc_bal state) $ avt) in
     if (ballot a_state = bvt) then
       (let ns = network state; 
         m2amsgs = Set.filter (\<lambda>nm. case nm of (Msg2a i b _) \<Rightarrow> (ivt = i \<and> bvt = b)| _ \<Rightarrow> False) ns; 
         m2anum = card m2amsgs in
       if (m2anum > 0) then
       (
-        let m2acmd = image (\<lambda>nm. case nm of (Msg2a i b cv) \<Rightarrow> (Some cv)) m2amsgs in
+        let m2acmd = image (\<lambda>nm. case nm of (Msg2a i b cv) \<Rightarrow> cv) m2amsgs in
         if (cmdv \<in> m2acmd) then
-          (let a_state1 = a_state\<lparr>vote := (vote a_state)(ivt $:= ((vote a_state $ ivt)(bvt $:= cmdv)))\<rparr> in
-          state\<lparr>acc_bal := list_update (acc_bal state) avt a_state1\<rparr>)
+          (let a_state1 = a_state\<lparr>vote := (vote a_state)(ivt $:= ((vote a_state $ ivt)(bvt $:= Some cmdv)))\<rparr> in
+          state\<lparr>acc_bal := (acc_bal state)(avt $:= a_state1)\<rparr>)
         else state)
       else state)
     else state)"
 
-definition maxAcceptorVote::"inst \<Rightarrow> (bal list) \<Rightarrow> 'v acc_state \<Rightarrow> (bal \<times> 'v cmd option)" where
+definition maxAcceptorVote::"inst \<Rightarrow> (bal list) \<Rightarrow> 'v acc_state \<Rightarrow> (bal \<times> 'v option)" where
   "maxAcceptorVote i bals a_state \<equiv> 
-    let bals_flt = append (filter (\<lambda>b. (((vote a_state) $ i) $ b) \<noteq> None) bals) [0];
+    let bals_flt = (filter (\<lambda>b. (((vote a_state) $ i) $ b) \<noteq> None) bals) @ [0];
       maxBal = (fold max bals_flt (bals_flt!0));
       v = (if maxBal > 0 then (((vote a_state) $ i) $ maxBal) else None) in
     (maxBal, v)"
 
 definition phase1b where
-  "phase1b a b bals inss state \<equiv> (let a_state = (acc_bal state)!a; net_state = network state in
-    if (ballot a_state < b \<and> (Msg1a b) \<in> net_state) then
+  "phase1b a b bals inss state \<equiv> (let a_state = (acc_bal state)$a; ns = network state in
+    if (ballot a_state < b \<and> (Msg1a b) \<in> ns) then
       let a_state1 = a_state\<lparr>ballot := b\<rparr>;
       messages = map (\<lambda>i. Msg1b a i b (maxAcceptorVote i bals a_state1)) inss in
-      state\<lparr>acc_bal := list_update (acc_bal state) a a_state1, network := net_state \<union> set messages\<rparr>
+      state\<lparr>acc_bal := (acc_bal state)(a $:= a_state1), network := ns \<union> set messages\<rparr>
     else state)"
 
 definition safe_at where
@@ -74,7 +75,7 @@ definition safe_at where
     if (m1bnum \<ge> quonum) then True
     else False)"
 
-definition safeVote::"'v msgs set \<Rightarrow> 'v mp_state \<Rightarrow> 'v cmd option set" where
+definition safeVote::"'v msgs set \<Rightarrow> 'v mp_state \<Rightarrow> 'v option set" where
   "safeVote m1bmsgs state \<equiv> let 
       m1bpair = image (\<lambda>nm. case nm of (Msg1b _ _ _ vs) \<Rightarrow> vs) m1bmsgs;
       m1bBal = image (\<lambda>x. fst x) m1bpair;
@@ -90,7 +91,7 @@ definition phase2a where
     (let m1bmsgs = Set.filter (\<lambda>nm. case nm of Msg1b _ i b _ \<Rightarrow> (b2a = b \<and> i2a = i)| _ \<Rightarrow> False) ns in
       if (safe_at m1bmsgs quonum) then
         (let safeVal = safeVote m1bmsgs state in
-        if ((Some v) \<in> safeVal) then 
+        if (Some v \<in> safeVal) then 
           state\<lparr>network := (network state) \<union> {Msg2a i2a b2a v}\<rparr>
         else state)
       else state)
@@ -99,7 +100,7 @@ definition phase2a where
 definition safe_inv::"acc set \<Rightarrow>'v mp_state \<Rightarrow> inst \<Rightarrow> nat \<Rightarrow> bool" where
   "safe_inv accs s i nas \<equiv> (let acc_state = acc_bal s in
     \<forall>acc\<^sub>1 \<in> accs. \<forall>acc\<^sub>2 \<in> accs. acc\<^sub>1 \<noteq> acc\<^sub>2 \<longrightarrow>
-    (let acc_state1 = (acc_state ! acc\<^sub>1); acc_state2 = (acc_state ! acc\<^sub>1);
+    (let acc_state1 = (acc_state $ acc\<^sub>1); acc_state2 = (acc_state $ acc\<^sub>1);
       bal1 = (ballot acc_state1); bal2 = (ballot acc_state2) in
       case ((vote acc_state1) $ i $ bal1) of None \<Rightarrow> True |
       Some cm \<Rightarrow> (

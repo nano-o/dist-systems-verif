@@ -1,5 +1,5 @@
 theory Executions
-imports "/home/nano/Documents/IO-Automata/IOA" "~~/src/HOL/Library/Sublist"
+imports "../../IO-Automata/IOA" "~~/src/HOL/Library/Sublist"
 begin
 
 (* Author: Giuliano Losa. This theory is an adaptation of the one by Olaf Mueller found in 
@@ -40,11 +40,10 @@ proof -
     have ih:"reachable A (last_state ?e')"
     proof -
       from Cons.prems and Cons.hyps(2) have "is_exec_of A ?e'"
-        by (simp add:is_exec_of_def) (metis is_exec_frag_of.simps(1,3) list.exhaust prod.collapse)
+        by (metis IOA.IOA.cons_exec_def IOA.exec_frag_prefix IOA.is_exec_of_def fst_conv prod.collapse swap_simp)
       with Cons.hyps(1) show ?thesis by auto
     qed
     from Cons.prems and Cons.hyps(2) have "(last_state ?e')\<midarrow>(fst p)\<midarrow>A\<longrightarrow>(snd p)"
-      by (simp add:is_exec_of_def) (cases "(A,fst e,ps#p)" rule:is_exec_frag_of.cases, auto)
     with ih and Cons.hyps(2) show ?case
       by (metis Executions.IOA.last_state.simps(2) IOA.reachable_n prod.collapse) 
   qed
