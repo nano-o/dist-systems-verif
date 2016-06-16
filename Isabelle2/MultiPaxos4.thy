@@ -1,7 +1,7 @@
 theory MultiPaxos4
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
   LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
-  "../../IO-Automata/IOA" Serialization
+  "../../IO-Automata/IOA" 
 begin
 
 text {* A version of MultiPaxos using FinFuns *}
@@ -71,8 +71,8 @@ record 'v acc_state =
     -- {* 0: not started; 1: processing; 2: closed *}
   
 fun accs where
-  "accs (0::nat) = []"
-| "accs (Suc n) = (accs n) @ [n]"
+  "accs (0::nat) = {||}"
+| "accs (Suc n) = (accs n) |\<union>| {|n|}"
 
 definition nr where
   -- {* The number of replicas *}
@@ -124,7 +124,7 @@ definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat
 definition leader_of_bal::"nat \<Rightarrow> nat \<Rightarrow> nat" where
   "leader_of_bal b nas \<equiv> case b of 0 \<Rightarrow> 0 | bs \<Rightarrow> (bs mod nas)"
                                    
-definition send_all where "send_all state acc ms acceptors \<equiv> image (\<lambda> a2 . Packet acc a2 ms)  (acceptors - {acc})"
+definition send_all where "send_all acc ms acceptors \<equiv> fimage (\<lambda> a2 . Packet acc a2 ms)  (acceptors |-| {|acc|})"
 
 definition do_2a where
   "do_2a a s v acceptors \<equiv>
@@ -137,32 +137,32 @@ definition do_2a where
         working_instances := (working_instances s)(inst $:= 1) (* Added by ian to track working instances *)
        \<rparr>
     in
-      (new_state, send_all s a msg acceptors)"
+      (new_state, send_all a msg acceptors)"
 
-definition propose :: "acc \<Rightarrow> 'v \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc set \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
+definition propose :: "acc \<Rightarrow> 'v \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc fset \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "propose a v s nas acceptors \<equiv> let leader_bal = (leader_of_bal (ballot s) nas) 
     in
     (if (leader_bal = a \<and> leader s)
       then do_2a a s (Cmd v) acceptors
       else (if (leader_bal = a)
-        then (s,{}) (* TODO: here we loose the proposal... *)
-        else (s, {Packet a leader_bal (Fwd v)})))"
+        then (s,{||}) (* TODO: here we loose the proposal... *)
+        else (s, {|Packet a leader_bal (Fwd v)|})))"
  
 (* What if the target process is not the leader anymore? TODO: Then let's forward it again. *)
-definition receive_fwd  :: "acc \<Rightarrow> 'v \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc set \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
+definition receive_fwd  :: "acc \<Rightarrow> 'v \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc fset \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_fwd a v s nas acceptors \<equiv>
-    (if (leader_of_bal (ballot s) nas = a \<and> leader s) then do_2a a s (Cmd v) acceptors else (s, {}))"
+    (if (leader_of_bal (ballot s) nas = a \<and> leader s) then do_2a a s (Cmd v) acceptors else (s, {||}))"
 
-definition send_1a :: "acc \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc set \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
+definition send_1a :: "acc \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc fset \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   -- {* a tries to become the leader *}
   "send_1a a s nas acceptors \<equiv>
     (let
         b = suc_bal a (ballot s) nas;
         msg_1a = Phase1a a b in
-      (s\<lparr>ballot := b\<rparr>, send_all s a msg_1a acceptors))"
+      (s\<lparr>ballot := b\<rparr>, send_all a msg_1a acceptors))"
 
-definition receive_1a :: "acc \<Rightarrow> acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
+definition receive_1a :: "acc \<Rightarrow> acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_1a a l b s \<equiv>
     (let bal = ballot s in
       (if (bal < b)
@@ -174,8 +174,8 @@ definition receive_1a :: "acc \<Rightarrow> acc \<Rightarrow> bal \<Rightarrow> 
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := b, leader := False\<rparr>(*Modified*)
           in
-          (state, {packet}))
-       else (s, {})))"
+          (state, {|packet|}))
+       else (s, {||})))"
 
 definition update_onebs :: 
   "'v acc_state \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f (bal \<times> ('v cmd option))) \<Rightarrow> 'v acc_state" where
@@ -208,7 +208,7 @@ text {*
 
   For now we propose values to all the instances ever started.
 *}
-definition receive_1b :: "acc \<Rightarrow> (inst \<Rightarrow>f (bal \<times> ('v cmd option))) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc set \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
+definition receive_1b :: "acc \<Rightarrow> (inst \<Rightarrow>f (bal \<times> ('v cmd option))) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc fset \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
  "receive_1b a last_vs bal a2 s nas acceptors \<equiv> (
     if (bal = ballot s)
     then
@@ -228,10 +228,10 @@ definition receive_1b :: "acc \<Rightarrow> (inst \<Rightarrow>f (bal \<times> (
               msgs = map (\<lambda> i . case h i of 
                   None \<Rightarrow> Phase2a i bal NoOp a
                 | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
-              pckts = map (\<lambda> m . send_all s a m acceptors) msgs
-            in (s4, fold (op \<union>) pckts {}) )
-          else (s1, {}) ) )
-    else (s, {}))"
+              pckts = map (\<lambda> m . send_all a m acceptors) msgs
+            in (s4, fold (op |\<union>|) pckts {||}) )
+          else (s1, {||}) ) )
+    else (s, {||}))"
 
 definition is_decided where "is_decided s i \<equiv> decided s $ i \<noteq> None"
 
@@ -304,28 +304,28 @@ definition receive_2 :: "acc \<Rightarrow> inst \<Rightarrow> bal \<Rightarrow> 
           receive_2_first a i b v l s nas
      ))"
 
-definition receive_2a :: "acc \<Rightarrow> inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc set \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
+definition receive_2a :: "acc \<Rightarrow> inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> acc fset \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
   "receive_2a a i b v l s nas acceptors \<equiv> (
   if (ballot s \<le> b) then (* modified *)
-    (receive_2 a i b v l s nas, send_all s a (Phase2b i b a v) acceptors)
+    (receive_2 a i b v l s nas, send_all a (Phase2b i b a v) acceptors)
   else
-    (s, {}))"
+    (s, {||}))"
 
-definition receive_2b :: "acc \<Rightarrow> inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
-  "receive_2b a i b a2 v s nas \<equiv> (receive_2 a i b v a2 s nas, {})"
+definition receive_2b :: "acc \<Rightarrow> inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v acc_state \<Rightarrow> nat \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
+  "receive_2b a i b a2 v s nas \<equiv> (receive_2 a i b v a2 s nas, {||})"
 
 text {* output transition could return an option *}
-definition learn :: "inst \<Rightarrow> 'v  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set) option" where 
+definition learn :: "inst \<Rightarrow> 'v  \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset) option" where 
   "learn i v s \<equiv> 
     case (decided s $ i) of None \<Rightarrow> None |
       Some cm \<Rightarrow> (case cm of NoOp \<Rightarrow> None 
-        | Cmd c \<Rightarrow> (if v = c then Some (s, {}) else None))"
+        | Cmd c \<Rightarrow> (if v = c then Some (s, {||}) else None))"
 
 section {* The I/O-automata *}
 
 record 'v mp_state = 
   node_states :: "nat \<Rightarrow>f 'v acc_state"
-  network :: "'v packet set"
+  network :: "'v packet fset"
 
 datatype 'v mp_action =
   Receive_fwd acc acc 'v
@@ -337,8 +337,7 @@ datatype 'v mp_action =
 | Receive_2b acc acc inst bal "'v cmd"
 | Learn acc inst "'v cmd"
 
-definition mp_acclist where "mp_acclist n \<equiv>  (accs n)"
-definition mp_acceptors where "mp_acceptors n \<equiv> (set (mp_acclist n))"
+definition mp_acceptors where "mp_acceptors n \<equiv> (accs n)"
 
 locale mp_ioa = IOA +
   fixes nas :: nat
@@ -347,15 +346,15 @@ begin
 
 definition mp_asig where
   "mp_asig \<equiv>
-    \<lparr> inputs = { Propose a c | a c . a \<in> (mp_acceptors nas)},
-      outputs = { Learn l i v | i v l . l \<in> (mp_acceptors nas)},
-      internals = {Receive_fwd a1 a2 v | a1 a2 v . a1 \<in> (mp_acceptors nas) \<and> a2 \<in> (mp_acceptors nas)}
-        \<union> {Send_1as a | a . a \<in> (mp_acceptors nas)}
-        \<union> {Receive_1a_send_1b a1 a2 b | a1 a2 b . a1 \<in> (mp_acceptors nas) \<and> a2 \<in> (mp_acceptors nas)}
-        \<union> {Receive_1b a1 a2 f b | a1 a2 f b . a1 \<in> (mp_acceptors nas) \<and> a2 \<in> (mp_acceptors nas)}
-        \<union> {Receive_2a_send_2b a1 a2 i b c | a1 a2 i b c . a1 \<in> (mp_acceptors nas) \<and> a2 \<in> (mp_acceptors nas)}
-        \<union> {Receive_2b a1 a2 i b c | a1 a2 i b c. a1 \<in> (mp_acceptors nas) \<and> a2 \<in> (mp_acceptors nas)}
-        \<union> {Learn a i c | a i c . a \<in> (mp_acceptors nas)}\<rparr>"
+    \<lparr> inputs = { Propose a c | a c . a |\<in>| (mp_acceptors nas)},
+      outputs = { Learn l i v | i v l . l |\<in>| (mp_acceptors nas)},
+      internals = {Receive_fwd a1 a2 v | a1 a2 v . a1 |\<in>| (mp_acceptors nas) \<and> a2 |\<in>| (mp_acceptors nas)}
+        \<union> {Send_1as a | a . a |\<in>| (mp_acceptors nas)}
+        \<union> {Receive_1a_send_1b a1 a2 b | a1 a2 b . a1 |\<in>| (mp_acceptors nas) \<and> a2 |\<in>| (mp_acceptors nas)}
+        \<union> {Receive_1b a1 a2 f b | a1 a2 f b . a1 |\<in>| (mp_acceptors nas) \<and> a2 |\<in>| (mp_acceptors nas)}
+        \<union> {Receive_2a_send_2b a1 a2 i b c | a1 a2 i b c . a1 |\<in>| (mp_acceptors nas) \<and> a2 |\<in>| (mp_acceptors nas)}
+        \<union> {Receive_2b a1 a2 i b c | a1 a2 i b c. a1 |\<in>| (mp_acceptors nas) \<and> a2 |\<in>| (mp_acceptors nas)}
+        \<union> {Learn a i c | a i c . a |\<in>| (mp_acceptors nas)}\<rparr>"
 
 fun init_nodes_state::"nat \<Rightarrow> nat \<Rightarrow>f 'a acc_state" where
   "init_nodes_state (0::nat) = (K$ init_acc_state)"
@@ -372,35 +371,35 @@ shows "(init_nodes_state (Suc a)) $ a = init_acc_state" using assms
 by (induct a rule:init_nodes_state.induct, auto)
 
 definition mp_start where
-  "mp_start \<equiv> \<lparr>node_states = (init_nodes_state nas), network = {}\<rparr>"
+  "mp_start \<equiv> \<lparr>node_states = (init_nodes_state nas), network = {||}\<rparr>"
 
 definition update_state where 
   "update_state a a_s packets s \<equiv>
     s\<lparr>node_states := (node_states s)(a $:= a_s),
-      network := network s \<union> packets\<rparr>"
+      network := network s |\<union>| packets\<rparr>"
 
 fun mp_transit where
-  "mp_transit s (Receive_fwd src dest v) = (if Packet src dest (Fwd v) \<in> network s 
+  "mp_transit s (Receive_fwd src dest v) = (if Packet src dest (Fwd v) |\<in>| network s 
     then (let (new_s, ps) = receive_fwd dest v (node_states s $ dest) nas (mp_acceptors nas) in 
       update_state dest new_s ps s)
     else s)"
 |  "mp_transit s (Propose a (Cmd v)) = (let (new_s, ps) = propose a v (node_states s $ a) nas (mp_acceptors nas) in
     update_state a new_s ps s)" 
-| "mp_transit s (Receive_1a_send_1b src dest b) = (if (Packet src dest (Phase1a src b) \<in> network s) 
+| "mp_transit s (Receive_1a_send_1b src dest b) = (if (Packet src dest (Phase1a src b) |\<in>| network s) 
     then let (new_s, ps) = receive_1a dest src b (node_states s $ dest) in
       update_state dest new_s ps s 
     else s)"
 | "mp_transit s (Send_1as l) = (let (new_s, ps) = send_1a l (node_states s $ l) nas (mp_acceptors nas) in
     update_state l new_s ps s)"
-| "mp_transit s (Receive_1b src l vs b) = (if (Packet src l (Phase1b vs b src) \<in> network s)
+| "mp_transit s (Receive_1b src l vs b) = (if (Packet src l (Phase1b vs b src) |\<in>| network s)
     then let (new_s, ps) = receive_1b l vs b src (node_states s $ l) nas (mp_acceptors nas) in
       update_state l new_s ps s 
     else s)"
-| "mp_transit s (Receive_2b a l i b cm) = (if (Packet a l (Phase2b i b a cm) \<in> network s)
+| "mp_transit s (Receive_2b a l i b cm) = (if (Packet a l (Phase2b i b a cm) |\<in>| network s)
     then let (new_s, ps) = receive_2b l i b a cm (node_states s $ l) nas in
       update_state l new_s ps s 
     else s)"
-| "mp_transit s (Receive_2a_send_2b l dest i b cm) = (if (Packet l dest (Phase2a i b cm l) \<in> network s)
+| "mp_transit s (Receive_2a_send_2b l dest i b cm) = (if (Packet l dest (Phase2a i b cm l) |\<in>| network s)
     then (let (new_s, ps) = receive_2a dest i b cm l (node_states s $ dest) nas (mp_acceptors nas) in
         update_state dest new_s ps s)
     else s)"
@@ -413,9 +412,13 @@ global_interpretation mp_ioa_3:mp_ioa "3"
 defines mp_start = mp_ioa_3.mp_start and mp_transit = mp_ioa_3.mp_transit
 done
 
+primrec accset where
+  "accset 0 = {}"
+  |"accset (Suc n) = insert n (accset n)"
+
 definition safe_at::"'v mp_state \<Rightarrow> inst \<Rightarrow> nat \<Rightarrow> bool" where
-  "safe_at s i nas \<equiv> (let acceptors = mp_acceptors nas in
-    \<forall>acc\<^sub>1 \<in> acceptors. \<forall>acc\<^sub>2 \<in> acceptors. acc\<^sub>1 \<noteq> acc\<^sub>2 \<longrightarrow>
+  "safe_at s i nas \<equiv> (let acceptors = (accset nas) in
+    \<forall>acc\<^sub>1 \<in> acceptors. \<forall>acc\<^sub>2 \<in> acceptors. (acc\<^sub>1 \<noteq> acc\<^sub>2) \<longrightarrow>
     (case (decided ((node_states s) $ acc\<^sub>1) $ i) of None \<Rightarrow> True |
       Some cm \<Rightarrow> (
         case (decided ((node_states s) $ acc\<^sub>2) $ i) of None \<Rightarrow> True |
@@ -478,8 +481,7 @@ code_identifier
 | code_module Complete_Partial_Order \<rightharpoonup> (Scala) MicroCheckerLib
 | code_module Lattices \<rightharpoonup> (Scala) MicroCheckerLib
 
-export_code learn send_1a propose init_acc_state
-  serialize_finfun deserialize_finfun get_ballot is_leader get_leader
+export_code learn send_1a propose init_acc_state get_ballot is_leader get_leader
 mp_ioa_3.mp_start mp_ioa_3.mp_transit safe_at get_decided ballot_constraint inst_constraint
    in Scala file "MultiPaxos4.scala"
 

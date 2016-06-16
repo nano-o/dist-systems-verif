@@ -1,6 +1,6 @@
 theory DistributedMultiPaxos
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
-  "~~/src/HOL/Library/FinFun_Syntax" LinorderOption
+  "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet" LinorderOption
 begin
 
 type_synonym acc = nat
@@ -80,8 +80,9 @@ definition safeVote::"'v msgs set \<Rightarrow> 'v mp_state \<Rightarrow> 'v opt
       m1bpair = image (\<lambda>nm. case nm of (Msg1b _ _ _ vs) \<Rightarrow> vs) m1bmsgs;
       m1bBal = image (\<lambda>x. fst x) m1bpair;
       maxBal = the_elem (Set.bind (Set.filter (\<lambda>le. \<forall>x \<in> m1bBal. x \<le> le) m1bBal) (\<lambda>x. {x}));
-      maxVal = Set.bind (image (\<lambda>x. snd x) (Set.filter (\<lambda>le. fst le = maxBal) m1bpair)) (\<lambda>x. {x}) in
-   if (maxVal \<noteq> {None}) then maxVal else propCmds state"
+      maxVal = image (\<lambda>x. snd x) (Set.filter (\<lambda>le. fst le = maxBal) m1bpair);
+      safeVal = Set.remove None maxVal in
+   if (safeVal \<noteq> {}) then safeVal else propCmds state"
 
 definition phase2a where
   "phase2a b2a i2a quonum v state \<equiv> (let ns = network state; 

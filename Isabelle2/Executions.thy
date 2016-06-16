@@ -44,6 +44,7 @@ proof -
       with Cons.hyps(1) show ?thesis by auto
     qed
     from Cons.prems and Cons.hyps(2) have "(last_state ?e')\<midarrow>(fst p)\<midarrow>A\<longrightarrow>(snd p)"
+      by (simp add:is_exec_of_def) (cases "(A,fst e,ps#p)" rule:is_exec_frag_of.cases, auto)
     with ih and Cons.hyps(2) show ?case
       by (metis Executions.IOA.last_state.simps(2) IOA.reachable_n prod.collapse) 
   qed
