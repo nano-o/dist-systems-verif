@@ -1,7 +1,7 @@
 section {* Definition of ballot arrays *}
 
 theory BallotArrays3
-imports Main LinorderOption
+imports Main
 begin
 
 locale ballot_array =
@@ -37,6 +37,14 @@ definition proved_safe_at where
   "proved_safe_at Q b v \<equiv>
     case b of 0 \<Rightarrow> True
     | Suc c \<Rightarrow> Q \<in> quorums \<and> (\<forall> a \<in> Q . ballot a \<ge> b) \<and> is_safe Q c v"
+
+definition proved_safe_at_2 where
+  "proved_safe_at_2 q b v \<equiv>
+    q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
+    (if \<exists> a b\<^sub>2 . a \<in> q \<and> b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None
+    then \<exists> a b\<^sub>2 . a \<in> q \<and> b\<^sub>2 < b \<and> vote a b\<^sub>2 = Some v 
+      \<and> (\<forall> a\<^sub>2 b\<^sub>3 . a\<^sub>2 \<in> q \<and> b\<^sub>3 > b\<^sub>2 \<and> b\<^sub>3 < b \<longrightarrow> vote a\<^sub>2 b\<^sub>3 = None)
+    else True)"
 
 definition chosen_at where
   "chosen_at v b \<equiv> \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . (vote) a b = (Some v))"
