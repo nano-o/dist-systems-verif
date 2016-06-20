@@ -20,23 +20,6 @@ definition conservative_array where
   "conservative_array \<equiv> \<forall> b . conservative b"
 
 text {* Here the @{term Max} is the one from @{text Lattices_Big} *}
-    
-definition max_voted_round_q where
-  "max_voted_round_q q bound \<equiv> 
-    if \<exists> b a . a \<in> q \<and> b \<le> bound \<and> vote a b \<noteq> None
-    then Some (Max {b . \<exists> a . a \<in> q \<and> b \<le> bound \<and> vote a b \<noteq> None})
-    else None"
-
-definition is_safe where
-  "is_safe q bound v \<equiv>
-    case max_voted_round_q q bound of
-      None \<Rightarrow> True
-    | Some b \<Rightarrow> \<exists> a . a \<in> q \<and> vote a b = Some v"
-
-definition proved_safe_at where
-  "proved_safe_at Q b v \<equiv>
-    case b of 0 \<Rightarrow> Q \<in> quorums
-    | Suc c \<Rightarrow> Q \<in> quorums \<and> (\<forall> a \<in> Q . ballot a \<ge> b) \<and> is_safe Q c v"
 
 definition proved_safe_at_2 where
   "proved_safe_at_2 q b v \<equiv>
@@ -74,9 +57,9 @@ definition well_formed where
 
 subsection {* Computing safe values in a distributed implementation *}
 
-definition per_acc_max where
-  "per_acc_max b a \<equiv> if {b\<^sub>a . b\<^sub>a < b \<and>  vote a b\<^sub>a \<noteq> None} \<noteq> {}
-    then let b\<^sub>a_max = Max {b\<^sub>a . b\<^sub>a < b \<and> vote a b\<^sub>a \<noteq> None} in Some (b\<^sub>a_max, the (vote a b\<^sub>a_max))
+definition acc_max_bal where
+  "acc_max_bal b a \<equiv> if {b\<^sub>a . b\<^sub>a < b \<and>  vote a b\<^sub>a \<noteq> None} \<noteq> {}
+    then Some (Max {b\<^sub>a . b\<^sub>a < b \<and> vote a b\<^sub>a \<noteq> None})
     else None"
 
 (*
@@ -103,23 +86,12 @@ nitpick[verbose, card 'b = 3, card "'b option" = 4, expect=none]
 using Max_Max
 by (smt Max_eqI UnionE UnionI assms(1) assms(2) assms(3) finite_Union) *)
 
-abbreviation get_fst where "get_fst x \<equiv> x \<bind> Some o fst"
-
-definition per_acc_max_bal where "per_acc_max_bal b a \<equiv> get_fst (per_acc_max b a)"
-
-definition q_max_bal where "q_max_bal q b \<equiv> per_acc_max_bal b ` q"
+definition q_max_bal where "q_max_bal q b \<equiv> acc_max_bal b ` q"
 
 definition proved_safe_at_3 where 
   "proved_safe_at_3 q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
     (case Max (q_max_bal q b) of None \<Rightarrow> True
-    | Some b\<^sub>m \<Rightarrow> \<exists> a \<in> q . vote a b\<^sub>m = v)"
-
-lemma per_acc_max_bal:"per_acc_max_bal b a = (
-    if {b\<^sub>a . b\<^sub>a < b \<and>  vote a b\<^sub>a \<noteq> None} \<noteq> {}
-    then Some (Max {b\<^sub>a . b\<^sub>a < b \<and> vote a b\<^sub>a \<noteq> None})
-    else None)"
-by (auto simp add:per_acc_max_def Let_def per_acc_max_bal_def)
-
+    | Some b\<^sub>m \<Rightarrow> \<exists> a \<in> q . vote a b\<^sub>m = Some v)"
 
 lemma q_max_bal_finite:
   assumes "finite q" and "q \<noteq> {}"
@@ -130,6 +102,8 @@ lemma q_max_bal_ne:
   assumes "finite q" and "q \<noteq> {}"
   shows "q_max_bal q b \<noteq> {}"
 by (metis assms(2) image_is_empty q_max_bal_def)
+
+text {* The set of maximum ballots in quorum q. *}
 
 definition maxs where "maxs q b \<equiv> Max ` {{b\<^sub>a . b\<^sub>a < b \<and> vote a b\<^sub>a \<noteq> None} 
   | a . a \<in> q \<and> {b\<^sub>a . b\<^sub>a < b \<and>  vote a b\<^sub>a \<noteq> None} \<noteq> {}}"
@@ -153,7 +127,7 @@ qed
 
 lemma q_max_bal:"q_max_bal q b = (if (\<exists> a \<in> q . {b\<^sub>a . b\<^sub>a < b \<and>  vote a b\<^sub>a \<noteq> None} = {})
           then {None} \<union> (Some ` (maxs q b)) else (Some ` (maxs q b)))" 
-      apply (auto simp add:image_def Let_def per_acc_max_bal q_max_bal_def maxs_def)
+      apply (auto simp add:image_def Let_def acc_max_bal_def q_max_bal_def maxs_def)
       apply blast apply blast apply metis done
 
 lemma max_insert_none:
@@ -202,9 +176,18 @@ lemma q_max_none:
   assumes "finite q" and "q \<noteq> {}"
   shows "(q_max_bal q b = {None}) = (\<forall> a \<in> q . {b\<^sub>a . b\<^sub>a < b \<and>  vote a b\<^sub>a \<noteq> None} = {})" (is "?A = ?B")
 proof 
-  show "?A \<Longrightarrow> ?B" by (force simp add:q_max_bal_def image_def per_acc_max_bal)
-  show "?B \<Longrightarrow> ?A" using \<open>q \<noteq> {}\<close> by (auto simp add:per_acc_max_bal q_max_bal_def image_def)
+  show "?A \<Longrightarrow> ?B" by (force simp add:q_max_bal_def image_def acc_max_bal_def)
+  show "?B \<Longrightarrow> ?A" using \<open>q \<noteq> {}\<close> by (auto simp add:acc_max_bal_def q_max_bal_def image_def)
 qed 
+
+lemma "proved_safe_at_2 q b v = proved_safe_at_3 q b v" (is "?A = ?B")
+nitpick[verbose, card 'v = 1, card 'a = 1, card nat = 1, card "'v option" = 2,
+card "nat option" = 2, card "nat option option" = 3]
+proof 
+  show "?A \<Longrightarrow> ?B" 
+nitpick[verbose, card 'v = 1, card 'a = 1, card nat = 1, card "'v option" = 2,
+card "nat option" = 2, card "nat option option" = 3]
+  oops
 
 end
 
