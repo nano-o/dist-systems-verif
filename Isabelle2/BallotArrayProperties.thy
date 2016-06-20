@@ -75,7 +75,7 @@ proof -
     assume 1:"chosen_at v\<^sub>1 b\<^sub>1" and 2:"chosen_at v\<^sub>2 b\<^sub>2"
     with this obtain q\<^sub>1 and q\<^sub>2 where 3:"\<And> a . a \<in> q\<^sub>1 \<Longrightarrow> (vote) a b\<^sub>1 = (Some v\<^sub>1)" 
     and 4:"\<And> a . a \<in> q\<^sub>2 \<Longrightarrow> (vote) a b\<^sub>2 = (Some v\<^sub>2)" and 5:"q\<^sub>1 \<in> quorums" and 6:"q\<^sub>2 \<in> quorums"
-      by (auto simp add:chosen_at_def)
+      by (fastforce simp add:chosen_at_def)
     have "v\<^sub>1 = v\<^sub>2" if "b\<^sub>1 < b\<^sub>2"
     proof -
       have 9:"choosable v\<^sub>1 b\<^sub>1" using 1 chosen_at_is_choosable by fast
@@ -212,31 +212,32 @@ definition is_prefix where
 
 end
 
-locale ballot_array_prefix =
+locale ballot_array_prefix = quorums quorums for  quorums :: "'a set set" +
   -- {* @{typ 'a} is the type of acceptors *}
   fixes ballot1 :: "'a \<Rightarrow> nat"
   and vote1 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   and ballot2 :: "'a \<Rightarrow> nat"
   and vote2 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
-  and quorums :: "'a set set"
-  assumes "BallotArrayProperties.is_prefix ballot1 ballot2 vote1 vote2"
+  assumes "is_prefix ballot1 ballot2 vote1 vote2"
 begin
 
-interpretation ba_1:ballot_array ballot1 vote1 quorums  .
-interpretation ba_2:ballot_array ballot2 vote2 quorums  .
+interpretation ba_1:ballot_array quorums ballot1 vote1 
+using quorums_axioms by (unfold_locales)
+interpretation ba_2:ballot_array quorums ballot2 vote2
+using quorums_axioms by (unfold_locales)
 
 lemma choosable_decreases:
   assumes "ba_2.choosable v b"
   shows "ba_1.choosable v b"
   using assms ballot_array_prefix_axioms
   nitpick[card 'v = 1, card 'a = 1, verbose, card nat = 2, card "'v option" = 2, card "nat option" = 3, expect=none]
-  by (auto simp add: BallotArrayProperties.is_prefix_def ballot_array.choosable_def ballot_array_prefix_def)
-   (metis dual_order.strict_trans1)
+  by (auto simp add: is_prefix_def ba_2.choosable_def ba_1.choosable_def ballot_array_prefix_def ballot_array_prefix_axioms_def quorums_def)
+    (meson dual_order.strict_trans1)
 
 lemma safe_at_mono:
   assumes "ba_1.safe_at v b"
   shows "ba_2.safe_at v b"
-  by (metis assms ballot_array.safe_at_def choosable_decreases)
+  by (metis assms ba_1.safe_at_def ba_2.safe_at_def choosable_decreases)
 
 lemma proved_safe_at_mono:
   assumes "ba_1.proved_safe_at_2 q b v"
@@ -246,7 +247,6 @@ nitpick[card 'v = 3, card 'a = 3, verbose,  card nat = 3, card "'v option" = 4,
 card "nat option" = 4, expect=none]
 apply (auto simp add:ballot_array.proved_safe_at_2_def BallotArrayProperties.is_prefix_def ballot_array_prefix_def
   split add:nat.splits option.splits)
-apply (meson order_trans)
 (* TODO: Here we have to prove that max_vote is preserved when the ballot array grows *) 
 oops
 
