@@ -26,7 +26,7 @@ definition max_voted_round_q where
     if \<exists> b a . a \<in> q \<and> b \<le> bound \<and> vote a b \<noteq> None
     then Some (Max {b . \<exists> a . a \<in> q \<and> b \<le> bound \<and> vote a b \<noteq> None})
     else None"
- 
+
 definition is_safe where
   "is_safe q bound v \<equiv>
     case max_voted_round_q q bound of
@@ -42,17 +42,44 @@ definition proved_safe_at_2 where
   "proved_safe_at_2 q b v \<equiv>
     q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
     (if \<exists> a b\<^sub>2 . a \<in> q \<and> b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None
-    then \<exists> a b\<^sub>2 . a \<in> q \<and> b\<^sub>2 < b \<and> vote a b\<^sub>2 = Some v 
+    then \<exists> a b\<^sub>2 . a \<in> q \<and> b\<^sub>2 < b \<and> vote a b\<^sub>2 = Some v
       \<and> (\<forall> a\<^sub>2 b\<^sub>3 . a\<^sub>2 \<in> q \<and> b\<^sub>3 > b\<^sub>2 \<and> b\<^sub>3 < b \<longrightarrow> vote a\<^sub>2 b\<^sub>3 = None)
-    else True)" (* why not Max ...? *)
+    else True)" (* TODO: why not Max ...? *)
 
-declare bot_def[simp]
+definition voted_bal where
+  "voted_bal a v_bal b \<equiv> v_bal < b \<and> vote a v_bal \<noteq> None"
+
+lemma finite_voted_bal:"finite {b\<^sub>a. voted_bal a b\<^sub>a b}"
+by (metis ballot_array.voted_bal_def bounded_nat_set_is_finite mem_Collect_eq)
+
+definition chosen_at where
+  "chosen_at v b \<equiv> \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . (vote) a b = (Some v))"
+
+definition chosen where
+  "chosen v \<equiv> \<exists> b . chosen_at v b"
+  
+definition choosable where
+  "choosable v b \<equiv>
+    \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . ballot a > b \<longrightarrow> vote a b = Some v)"
+
+definition safe_at where
+  "safe_at v b \<equiv>
+    \<forall> b2 . \<forall> v2 . ((b2 < b \<and> choosable v2 b2) \<longrightarrow> (v = v2))"
+
+definition safe where
+  "safe \<equiv> \<forall> b . \<forall> a . case vote a b of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b"
+  
+definition well_formed where
+  "well_formed \<equiv> \<forall> a b . ballot a < b \<longrightarrow> vote a b = None"
+
+subsection {* Computing safe values in a distributed implementation *}
 
 definition per_acc_max where
   "per_acc_max b a \<equiv> if {b\<^sub>a . b\<^sub>a < b \<and>  vote a b\<^sub>a \<noteq> None} \<noteq> {}
     then let b\<^sub>a_max = Max {b\<^sub>a . b\<^sub>a < b \<and> vote a b\<^sub>a \<noteq> None} in Some (b\<^sub>a_max, the (vote a b\<^sub>a_max))
     else None"
 
+(*
 lemma Max_bot:"\<lbrakk>finite (S::'b::{linorder,order_bot} set); S \<noteq> {}; s \<in> S; Max S = bot\<rbrakk> \<Longrightarrow> s = bot"
 nitpick[verbose, card 'b = 3, card "'b option" = 4, expect=none]
 by (metis Max.coboundedI bot.extremum_uniqueI)
@@ -74,11 +101,18 @@ lemma Max_Max_2:
   shows "Max (Max ` Xs) = Max (Union Xs)" 
 nitpick[verbose, card 'b = 3, card "'b option" = 4, expect=none]
 using Max_Max
-by (smt Max_eqI UnionE UnionI assms(1) assms(2) assms(3) finite_Union)
+by (smt Max_eqI UnionE UnionI assms(1) assms(2) assms(3) finite_Union) *)
 
 abbreviation get_fst where "get_fst x \<equiv> x \<bind> Some o fst"
 
 definition per_acc_max_bal where "per_acc_max_bal b a \<equiv> get_fst (per_acc_max b a)"
+
+definition q_max_bal where "q_max_bal q b \<equiv> per_acc_max_bal b ` q"
+
+definition proved_safe_at_3 where 
+  "proved_safe_at_3 q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
+    (case Max (q_max_bal q b) of None \<Rightarrow> True
+    | Some b\<^sub>m \<Rightarrow> \<exists> a \<in> q . vote a b\<^sub>m = v)"
 
 lemma per_acc_max_bal:"per_acc_max_bal b a = (
     if {b\<^sub>a . b\<^sub>a < b \<and>  vote a b\<^sub>a \<noteq> None} \<noteq> {}
@@ -86,7 +120,6 @@ lemma per_acc_max_bal:"per_acc_max_bal b a = (
     else None)"
 by (auto simp add:per_acc_max_def Let_def per_acc_max_bal_def)
 
-definition q_max_bal where "q_max_bal q b \<equiv> per_acc_max_bal b ` q"
 
 lemma q_max_bal_finite:
   assumes "finite q" and "q \<noteq> {}"
@@ -172,32 +205,6 @@ proof
   show "?A \<Longrightarrow> ?B" by (force simp add:q_max_bal_def image_def per_acc_max_bal)
   show "?B \<Longrightarrow> ?A" using \<open>q \<noteq> {}\<close> by (auto simp add:per_acc_max_bal q_max_bal_def image_def)
 qed 
-
-definition voted_bal where
-  "voted_bal a v_bal b \<equiv> v_bal < b \<and> vote a v_bal \<noteq> None"
-
-lemma finite_voted_bal:"finite {b\<^sub>a. voted_bal a b\<^sub>a b}"
-by (metis ballot_array.voted_bal_def bounded_nat_set_is_finite mem_Collect_eq)
-
-definition chosen_at where
-  "chosen_at v b \<equiv> \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . (vote) a b = (Some v))"
-
-definition chosen where
-  "chosen v \<equiv> \<exists> b . chosen_at v b"
-  
-definition choosable where
-  "choosable v b \<equiv>
-    \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . ballot a > b \<longrightarrow> vote a b = Some v)"
-
-definition safe_at where
-  "safe_at v b \<equiv>
-    \<forall> b2 . \<forall> v2 . ((b2 < b \<and> choosable v2 b2) \<longrightarrow> (v = v2))"
-
-definition safe where
-  "safe \<equiv> \<forall> b . \<forall> a . case vote a b of None \<Rightarrow> True | Some v \<Rightarrow> safe_at v b"
-  
-definition well_formed where
-  "well_formed \<equiv> \<forall> a b . ballot a < b \<longrightarrow> vote a b = None"
 
 end
 
