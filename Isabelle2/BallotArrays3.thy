@@ -132,7 +132,7 @@ lemma in_voted_sets_ne[elim]:
   assumes "q \<in> quorums" and "vs \<in> voted_sets q b"
   shows "vs \<noteq> {}" using assms by (auto simp add:voted_sets_def)
 
-lemma voted_sets_finite[elim]: assumes "q \<in> quorums" shows "finite (voted_sets q b)" using assms 
+lemma voted_sets_finite[elim]: assumes "q \<in> quorums" shows "finite (voted_sets q b)" using assms
 proof -
   have "finite q" using assms by auto
   thus ?thesis by (auto simp add:voted_sets_def)

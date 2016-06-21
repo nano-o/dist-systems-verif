@@ -1,7 +1,7 @@
 section {* Properties of ballot arrays. *}
 
 theory BallotArrayProperties
-imports Main BallotArrays3 Quorums2
+imports Main BallotArrays3 Quorums2 
 begin
 
 context ballot_array
@@ -91,12 +91,110 @@ proof -
     qed }
   moreover
   obtain b\<^sub>1 and b\<^sub>2 where 1:"chosen_at v\<^sub>1 b\<^sub>1" and 2:"chosen_at v\<^sub>2 b\<^sub>2" using assms(2,3)
-    by (auto simp add:chosen_def) 
+    by (auto simp add:chosen_def)
   ultimately
   show ?thesis using chosen_at_same 1 2 by (metis linorder_neqE_nat)
 qed
 
 text {* The main lemma. Inspired by section 2.2.2 of the paper "Fast Paxos", by Leslie Lamport. *}
+
+lemma proved_safe_at_2_a_imp_safe_at:
+  assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"
+  and "proved_safe_at_2_a q i v" and "conservative_array"
+  shows "safe_at v (i::nat)"
+proof (cases "i = 0")
+  case True thus ?thesis
+    by (metis not_less0 safe_at_def)
+next
+  case False
+  have "q \<in> quorums" and ballot_q:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" using assms(2) by (auto simp add:proved_safe_at_2_a_def)
+  text {* There are two cases: 
+    (a) an acceptor a in the quorum q voted in round k < i, 
+    and k is the maximum round smaller than i in which an acceptor in q voted;
+    (b) no acceptor in the quorum q voted in any round k < i 
+    TODO: turn this into a lemma? *}
+  consider
+    (a) k a
+      where "a \<in> q" and "vote a k = Some v" and "k < i"
+      and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
+  | (b) "\<And> a k . \<lbrakk>a \<in> q; k < i\<rbrakk>  \<Longrightarrow> vote a k = None" 
+  proof (cases "\<exists> a \<in> q . \<exists> l . l < i \<and> vote a l \<noteq> None")
+    case False thus ?thesis using that by blast
+  next
+    case True
+    def votes \<equiv> "{l . \<exists> a \<in> q . l < i \<and> vote a l \<noteq> None }"
+    def k \<equiv> "Max votes"
+    from True assms(2) obtain a where "a \<in> q" and "vote a k = Some v"
+      by (auto simp add:proved_safe_at_2_a_def k_def votes_def)
+    moreover have "k < i" and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
+    proof -
+      have "k \<in> votes" and "\<And> x . x \<in> votes \<Longrightarrow> x \<le> k"
+      proof -
+        have "finite votes" and "votes \<noteq> {}" using True
+          using True votes_def finite_nat_set_iff_bounded votes_def by auto
+        thus "k \<in> votes" and "\<And> x . x \<in> votes \<Longrightarrow> x \<le> k" by (metis Max_in k_def, metis Max_ge k_def)
+      qed
+      thus "k < i" and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None" 
+        by (force simp add:votes_def)+
+    qed
+    ultimately show ?thesis using that by blast
+  qed
+  text {* now we prove the thesis by considering the cases (a) and (b) separately *}
+  thus ?thesis
+  proof (cases)
+    case b
+    text {* We prove that no value is choosable at any @{text "j < i"}; 
+      therefore, anything is safe at i *}
+    { fix j w
+      assume "j < i"  and "choosable w j"
+      from \<open>choosable w j\<close> obtain q2 where "q2 \<in> quorums" and q2_votes:"\<And> a . a \<in> q2 \<Longrightarrow>
+        (ballot a) > j \<Longrightarrow> vote a j = Some w" by (auto simp add:choosable_def)
+      from \<open>q2 \<in> quorums\<close> b \<open>j < i\<close> quorum_inter_witness \<open>q \<in> quorums\<close> ballot_q
+      obtain a where "a \<in> q" and "a \<in> q2" and "ballot a > j"
+        by (metis dual_order.strict_trans1)
+      from \<open>a \<in> q\<close> b \<open>j < i\<close> have "vote a j = None" by metis
+      moreover from \<open>ballot a > j\<close> q2_votes \<open>a \<in> q2\<close>  have "vote a j = Some w" by metis 
+      ultimately have False by auto }
+    thus "safe_at v i" by (auto simp add:safe_at_def)
+  next
+    case a
+    have "v' = v" if "choosable v' j" and "j < i" for j v'
+    proof -
+      text {* First obtain an acceptor that has voted for v' in j *}
+      obtain a2 where "a2 \<in> q" and "vote a2 j = Some v'"
+      proof -
+        from \<open>choosable v' j\<close> obtain q2 where "q2 \<in> quorums" and q2_votes:"\<And> a . a \<in> q2 \<Longrightarrow>
+          (ballot a) > j \<Longrightarrow> vote a j = Some v'" by (auto simp add:choosable_def)
+        from \<open>q2 \<in> quorums\<close> \<open>q \<in> quorums\<close> ballot_q quorum_inter_witness \<open>j < i\<close> 
+          obtain a2 where "a2 \<in> q" and "a2 \<in> q2" and "ballot a2 > j" by (metis dual_order.strict_trans1)
+        have "vote a2 j = Some v'" by (metis \<open>a2 \<in> q2\<close> \<open>j < ballot a2\<close> q2_votes) 
+        from that \<open>vote a2 j = Some v'\<close> \<open>a2 \<in> q\<close> show ?thesis by simp
+      qed
+      text {* We consider the following three cases. *}
+      consider (aa) "j < k" | (bb) "j = k" | (cc) "k < j" by fastforce
+      thus ?thesis
+      proof cases
+        case aa
+        text {* v' is choosable at j < k. Since there is a vote for v at k and the ballot array 
+          before i is safe by assumption, we get that v' = v *}
+        have "safe_at v k" using assms(1) \<open>vote a k = Some v\<close> \<open>k < i\<close> by metis
+        with aa show ?thesis using that by (metis safe_at_def)
+      next
+        case cc
+        text {* In this case we reach a contradiction because we can find a quorum which passed j 
+          and did note vote at j, thus no value can be choosable at j. *}
+        from cc and a(4) \<open>j < i\<close> \<open>a2 \<in> q\<close> have "vote a2 j = None" by metis
+        with \<open>vote a2 j = Some v'\<close> have False by auto
+        thus ?thesis by auto
+      next
+        case bb
+        with \<open>conservative_array\<close> \<open>vote a2 j = Some v'\<close> \<open>vote a k = Some v\<close> show ?thesis 
+          by (simp add:conservative_def conservative_array_def split add:option.splits)
+      qed
+    qed
+    thus ?thesis by (metis safe_at_def)
+  qed
+qed
 
 lemma proved_safe_at_2_imp_safe_at:
   assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"
@@ -171,11 +269,9 @@ next
           by (simp add:conservative_def conservative_array_def split add:option.splits)
       qed
     qed
-    thus ?thesis
-      by (metis safe_at_def) 
+    thus ?thesis by (metis safe_at_def)
   qed
 qed
-
 
 lemma proved_safe_imp_safe:
   assumes "\<And> b a v . vote a b = Some v \<Longrightarrow> \<exists> q \<in> quorums .
