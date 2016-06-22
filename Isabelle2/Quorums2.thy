@@ -5,10 +5,10 @@ begin
 locale quorums =
   fixes quorums::"'a set set"
   assumes "\<And> q1 q2 . \<lbrakk>q1 \<in> quorums; q2 \<in> quorums\<rbrakk> \<Longrightarrow> q1 \<inter> q2 \<noteq> {}"
-    and "quorums \<noteq> {}"
+    and "quorums \<noteq> {}" and "\<And> q . q \<in> quorums \<Longrightarrow> finite q"
 begin
 
-lemma quorum_inter_witness:
+lemma quorum_inter_witness[elim]:
   assumes "q1 \<in> quorums" and "q2 \<in> quorums"
   obtains a where "a \<in> q1" and "a \<in> q2"
   using assms quorums_axioms
@@ -19,9 +19,9 @@ lemma quorums_value_same:
   and "\<And> a . a \<in> q1 \<Longrightarrow> f a = x"
   and "\<And> a . a \<in> q2 \<Longrightarrow> f a = y"
   shows "x = y" using assms
-by (metis quorum_inter_witness) 
+by (metis quorum_inter_witness)
 
-end 
+end
 
 locale card_quorums = 
   fixes acceptors
@@ -59,10 +59,11 @@ qed
 
 print_locale quorums
 
-sublocale quorums  quorums
+sublocale quorums quorums
 apply(unfold_locales)
-  apply (metis inter)
-apply (metis not_e)
+    apply (metis inter)
+  apply (metis not_e)
+apply (metis card_quorums_axioms card_quorums_def infinite_super subset)
 done
 
 end

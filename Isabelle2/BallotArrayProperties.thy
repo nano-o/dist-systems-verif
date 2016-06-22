@@ -4,30 +4,9 @@ theory BallotArrayProperties
 imports Main BallotArrays3 Quorums2 
 begin
 
-context ballot_array
-begin
-
-subsection {* Properties of max_vote *}
-
-context begin
-  -- {* A context to hide some lemmas *}
-
-private lemma finite_voted_bals:"finite {b::nat . \<exists> a . a \<in> q \<and> b \<le> bound \<and> vote a b \<noteq> None}"
-proof -
-  have "{b . \<exists> a . a \<in> q \<and> b \<le> bound \<and> vote a b \<noteq> None} \<subseteq> {b . b \<le> bound}"
-    by auto
-  moreover have "finite {b::nat . b \<le> bound}" by simp
-  ultimately show ?thesis
-  by (metis (no_types, lifting) finite_subset)
-qed
-
-end
-
-end
-
 subsection {* Correctness of the @{term proved_safe_at} computation *}
 
-locale ballot_array_props = ballot_array + quorums
+locale ballot_array_props = ballot_array quorums + quorums quorums for quorums
 begin
 
 context 
@@ -300,13 +279,9 @@ subsection {* Monotonicity *}
 text {* We define a prefix relation on ballot arrays and show that a value safe b remains 
   safe at be when the ballot array grows *}
 
-context begin
-
 definition is_prefix where
   "is_prefix b1 b2 v1 v2 \<equiv> \<forall> a . b1 a \<le> b2 a 
     \<and> (\<forall> b . (b < b1 a \<or> (b = b1 a \<and> v1 a b \<noteq> None)) \<longrightarrow> v1 a b = v2 a b)"
-
-end
 
 locale ballot_array_prefix = quorums quorums for  quorums :: "'a set set" +
   -- {* @{typ 'a} is the type of acceptors *}
@@ -343,7 +318,7 @@ nitpick[card 'v = 3, card 'a = 3, verbose,  card nat = 3, card "'v option" = 4,
 card "nat option" = 4, expect=none]
 apply (auto simp add:ballot_array.proved_safe_at_2_def BallotArrayProperties.is_prefix_def ballot_array_prefix_def
   split add:nat.splits option.splits)
-(* TODO: Here we have to prove that max_vote is preserved when the ballot array grows *) 
+(* TODO: Here we have to prove that max_vote is preserved when the ballot array grows *)
 oops
 
 (* A wrong lemma *)

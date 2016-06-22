@@ -1,52 +1,15 @@
 section {* Definition of ballot arrays *}
 
 theory BallotArrays3 
-imports Main "~~/src/HOL/Library/Monad_Syntax" LinorderOption Quorums2
+imports Main "~~/src/HOL/Library/Monad_Syntax" LinorderOption Quorums2 Max_Properties
 begin
 
-lemma Max_Max:
-  assumes "finite Xs" and "Union Xs \<noteq> {}" and "\<And> X . X \<in> Xs \<Longrightarrow> X \<noteq> {} \<and> finite X"
-  shows "Max (Max ` Xs) = Max (Union Xs)" (is "?A = ?B")
-nitpick[verbose, card 'a = 2, card "'a option" = 3, expect=none]
-proof -
-  have 0:"finite (Union Xs)" using assms(1,3) by auto
-  hence 1:"?B \<in> Union Xs"
-    by (metis Max_in assms(2))
-  have "finite (Max ` Xs)" by (metis assms(1) finite_imageI)
-  moreover have "Max ` Xs \<noteq> {}" using assms(2) by (metis Sup_empty image_is_empty) 
-  ultimately have 3:"?A \<in> (Max ` Xs)" and "\<And> x . x \<in> Max ` Xs \<Longrightarrow> x \<le> ?A"
-    by (metis Max_in, metis Max_ge \<open>finite (Max ` Xs)\<close>)
-  show ?thesis by (smt 1 3 Max_ge Max_mono Sup_upper UnionE 0 antisym assms(1,3) finite_imageI image_iff) 
-qed
+subsection {* The definitions *}
 
-lemma Max_bot:"\<lbrakk>finite (S::'b::{linorder,order_bot} set); S \<noteq> {}; s \<in> S; Max S = bot\<rbrakk> \<Longrightarrow> s = bot"
-by (metis Max.coboundedI bot.extremum_uniqueI)
-
-lemma max_insert_none:
-  fixes S :: "'b::linorder option set"
-  assumes "S \<noteq> {}" and "finite S"
-  shows "Max (insert None S) = Max S"
-using bot_def Max_insert assms bot.extremum max_def by metis
-
-lemma Some_Max_commute:
-  fixes S::"'b::linorder set" assumes "S \<noteq> {}" and "finite S"
-  shows "Max (Some ` S) = Some (Max S)"
-proof -
-  have "mono (Some::('b::linorder \<Rightarrow> 'b option))" 
-  proof (auto simp add:mono_def)
-    fix x y :: "'b::linorder"
-    assume "x \<le> y"
-    thus "Some x \<le> Some y"
-      by (metis less_eq_def less_eq_o.simps(3)) 
-  qed
-  thus ?thesis
-  by (metis assms(1) assms(2) mono_Max_commute) 
-qed
-
-locale ballot_array = quorums quorums for quorums::"'a set set" +
-  -- {* @{typ 'a} is the type of acceptors *}
-  fixes ballot :: "'a \<Rightarrow> nat"
-  and vote :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+locale ballot_array = 
+  fixes quorums :: "'a set set"
+  and ballot :: "'a \<Rightarrow> nat"
+  and vote :: "'a \<Rightarrow> nat \<rightharpoonup> 'v"
 begin
 
 definition conservative where
@@ -105,7 +68,12 @@ definition safe where
 definition well_formed where
   "well_formed \<equiv> \<forall> a b . ballot a < b \<longrightarrow> vote a b = None"
 
+end
+
 subsection {* Computing safe values in a distributed implementation *}
+
+locale safe_val_lemmas = ballot_array quorums + quorums quorums for quorums
+begin
 
 context begin
 

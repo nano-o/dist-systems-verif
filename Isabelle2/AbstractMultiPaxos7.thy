@@ -15,7 +15,7 @@ record ('v,'a) amp_state =
   ballot :: "'a \<Rightarrow> nat"
   vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
 
-locale amp_ioa = IOA + 
+locale amp_ioa = IOA +
   fixes quorums::"'a set set"
   fixes learners::"'l set"
 begin
@@ -48,7 +48,7 @@ definition join_ballot where
 
 abbreviation proved_safe_at where 
   -- {* v is proved safe in instance i at ballot b by quorum q *}
-  "proved_safe_at s i q b v \<equiv> ballot_array.proved_safe_at (ballot s) (vote s i) quorums q b v"
+  "proved_safe_at s i q b v \<equiv> ballot_array.proved_safe_at_2 quorums (ballot s) (vote s i) q b v"
 
 abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (vote s i)"
@@ -63,13 +63,11 @@ definition do_vote where
         \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>"
 
 abbreviation chosen where 
-  "chosen s i v \<equiv> ballot_array.chosen (vote s i) quorums v"
+  "chosen s i v \<equiv> ballot_array.chosen quorums (vote s i) v"
 
 definition learn where
   "learn l i v s s' \<equiv> chosen s i v \<and> s = s'"
 
-(* Here it's better to have all existentially quantified parameters in the action itself, in
-  order to avoid annoying quantifiers. *)
 fun amp_trans_rel  where
   "amp_trans_rel r (Propose c) r' = propose c r r'"
 | "amp_trans_rel r (JoinBallot a b) r' = join_ballot a b r r'"
