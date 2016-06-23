@@ -1,182 +1,266 @@
 theory MultiPaxos4
-imports "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
-  LinorderOption  "../../IO-Automata/IOA" "FinFun_Supplemental" Pair_order
+imports "~~/src/HOL/Library/Monad_Syntax"
+  "../../IO-Automata/IOA" Pair_order LinorderOption
 begin
 
-section {* An executable version of MultiPaxos, using finite functions (FinFun.thy) *}
-
 subsection {* Actions, messages, and state. *}
-
-datatype 'v cmd = Cmd (the_val: 'v) | NoOp
 
 type_synonym bal = nat
 type_synonym inst = nat
 type_synonym acc = nat
 
-datatype 'v msg =
-  Phase1a (from_leader: acc) (ballot:bal)
-| Phase1b (last_votes:"inst \<Rightarrow>f ('v cmd \<times> bal) option") (new_ballot: bal) (acceptor:acc)
-| Phase2a (inst: inst) (for_ballot:bal) (suggestion:"'v cmd") (leader: acc)
-| Phase2b (inst: inst) (ballot:bal) (acceptor: acc) (cmd: "'v cmd")
-| Fwd (val: 'v)
+datatype 'c msg =
+  Phase1a acc bal
+| Phase1b "inst \<rightharpoonup> ('c \<times> bal)" bal acc
+| Phase2a inst bal 'c acc
+| Phase2b inst bal acc 'c
+| Fwd (val: 'c)
   -- {* Forwards a proposal to another proposer (the leader) *}
 
-datatype 'v packet =
+datatype 'c packet =
   -- {* A message with sender/destination information *}
-  Packet (sender: acc) (dst: acc) (msg: "'v msg")
+  Packet (sender: acc) (dst: acc) (msg: "'c msg")
 
-(*<*)
-(* TODO: use that? *)
-datatype 'v vote_info = voted "'v cmd" bal | not_voted
-(*>*)
-
-datatype 'v inst_status = not_started | pending "'v cmd" | decided (decision:"'v cmd")
+datatype 'c inst_status = not_started | pending 'c | decided (decision:'c)
 
 text {* The local state of an acceptor. Contains the acceptors identifier @{text "acc_state.self"}) 
   and the set of all acceptors @{text "acc_state.acceptors"} *}
-record 'v acc_state =
+record 'c acc_state =
   self :: acc
-  acceptors :: "acc fset"
+  acceptors :: "acc set"
     -- {* The set of all acceptors *}
-  ballot :: "bal option"
+  ballot :: "bal"
     -- {* the highest ballot in which an acceptor participated *}
-  vote :: "inst \<Rightarrow>f 'v cmd option"
+  vote :: "inst \<rightharpoonup> 'c"
     -- {* The last vote cast by an acceptor, for each instance *}
-  last_ballot :: "inst \<Rightarrow>f bal option"
+  last_ballot :: "inst \<rightharpoonup> bal"
     -- {* For an acceptor a, this is the ballot in which "vote a" was cast, for each instance *}
-  onebs :: "bal \<Rightarrow>f acc \<Rightarrow>f inst \<Rightarrow>f ('v cmd \<times> bal) option option"
+  onebs :: "bal \<Rightarrow> (acc \<times> (nat \<rightharpoonup> ('c \<times> bal))) set"
     -- {* For a ballot b, an acceptor a, and an instance i,
       this is the 1b information received from a in ballot b about instance i. *}
-  twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f acc fset"
+  twobs :: "inst \<Rightarrow> bal \<Rightarrow> acc set"
     -- {* fset describing the 2b messages received, indexed by instance and ballot. *}
   next_inst :: "inst"
     -- {* The next instane to use *}
-  inst_status :: "inst \<Rightarrow>f 'v inst_status"
+  inst_status :: "inst \<Rightarrow> 'c inst_status"
     -- {* Status of the given instance *}
   leader :: "bool"
     -- {* Does this acceptor believe itself to be the leader? *}
 
-text {* Why do we need this? Can't we use Abs_fst {0..<n} directly? *}
-fun accs where
-  -- {* A function to build a set of acceptors of a given size. *}
-  "accs (0::nat) = {||}"
-| "accs (Suc n) = (accs n) |\<union>| {|n|}"
-
-lemma "accs 3 = {|1,2,0|}" quickcheck oops
-
-lemma accs_def_2:"accs n = Abs_fset {0..<n}"
-proof (induct n)
-  case 0 thus ?case
-    by (simp add: bot_fset_def)
-next
-  case (Suc n) thus ?case by simp
-    (metis atLeastLessThanSuc eq_onp_same_args finite_atLeastLessThan finsert.abs_eq le0)
-qed
-
 definition init_acc_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v acc_state" where
   "init_acc_state n a \<equiv> \<lparr>
     self = a,
-    acc_state.acceptors = accs n,
-    ballot = None,
-    vote = K$ None,
-    last_ballot = K$ None,
-    onebs = K$ K$ K$ None,
-    twobs = K$ K$ {||},
+    acc_state.acceptors = {1..n},
+    ballot = 0,
+    vote = \<lambda> i . None,
+    last_ballot = \<lambda> i . None,
+    onebs = \<lambda> b . {},
+    twobs = \<lambda> i b . {},
     next_inst = 1, (* instances start at 1 *)
-    inst_status = K$ not_started,
+    inst_status = \<lambda> i . not_started,
     leader = False\<rparr>"
 
 definition nr where
   -- {* The number of replicas *}
-  "nr s \<equiv> fcard (acceptors s)"
+  "nr s \<equiv> card (acceptors s)"
 
 subsection {* Event handlers *}
 
+text {* Every ballot has a unique leader *}
 definition leader_of_bal where
-  "leader_of_bal s b \<equiv> case b of None \<Rightarrow> 0 | Some b \<Rightarrow>
-    (b mod (nr s))"
+  "leader_of_bal s b \<equiv> b mod (nr s)"
 
 definition suc_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat"
-  -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
+  -- {* The smallest ballot belonging to replica a and greater than ballot b, 
+    when there are N replicas *}
   where "suc_bal a b N \<equiv> (b div N + 1) * N + a"
 
-fun nx_bal where
-  -- {* Function used by a replica to choose the next ballot to use when trying to become the leader. *}
-  "nx_bal a None N = suc_bal a 0 N"
-| "nx_bal a (Some b) N = suc_bal a b N"
-
-definition send_all where 
-  "send_all s a m \<equiv> fimage (\<lambda> a2 . Packet (self s) a2 m)  (acceptors s |-| {|a|})"
+definition send_all where
+  "send_all s a m \<equiv> (\<lambda> a2 . Packet (self s) a2 m) ` (acceptors s - {a})"
 
 definition do_2a where
   "do_2a s v \<equiv>
     let
       a = self s;
       inst = (next_inst s);
-      b = the (ballot s);
+      b = ballot s;
       msg = Phase2a inst b v a;
       new_state = s\<lparr>next_inst := (inst+1),
-        inst_status := finfun_update_code (inst_status s) inst (pending v),
-        twobs := finfun_update_code (twobs s) inst ((K$ {||})(b $:= {|a|}))\<rparr>
+        inst_status := (inst_status s)(inst := (pending v)),
+        twobs := (twobs s)(inst := ((\<lambda> b . {})(b := {a})))\<rparr>
     in
       (new_state, send_all s a msg)"
 
-definition propose :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
+definition propose :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "propose v s \<equiv> let a = self s in
     (if (leader_of_bal s (ballot s) = a \<and> leader s)
-      then do_2a s (Cmd v)
+      then do_2a s v
       else ( if (leader_of_bal s (ballot s) = a)
-        then (s,{||}) (* TODO: here we loose the proposal... *)
-        else (s, {|Packet a (leader_of_bal s (ballot s)) (Fwd v)|})) )"
+        then (s,{}) (* TODO: here we loose the proposal... *)
+        else (s, {Packet a (leader_of_bal s (ballot s)) (Fwd v)})) )"
  
 (* What if the target process is not the leader anymore? TODO: Then let's forward it again. *)
-definition receive_fwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
+definition receive_fwd  :: "'v \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
   "receive_fwd v s \<equiv> let a = self s in 
-    (if (leader_of_bal s (ballot s) = a) then do_2a s (Cmd v) else (s, ({||})))"
+    (if (leader_of_bal s (ballot s) = a) then do_2a s v else (s, ({})))"
 
 definition last_votes where
-  -- {* returns a finfun describing the last vote cast in each instance. *}
   "last_votes s \<equiv> let
     combiner = (\<lambda> (vo,bo) . vo \<bind> (\<lambda> v . bo \<bind> (\<lambda> b . Some (v,b))))
-  in combiner o$ ($ vote s, last_ballot s $)"
+  in combiner o (\<lambda> i . (vote s i, last_ballot s i))"
 
-definition send_1a :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
+definition update_onebs where
+  "update_onebs s b a last_vs \<equiv>
+    s\<lparr>onebs := (onebs s)( b := {(a, last_vs)})\<rparr>"
+
+definition send_1a :: "'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
   -- {* a tries to become the leader. *}
   "send_1a s \<equiv> let
       a = self s;
-      b = nx_bal a (ballot s) (nr s);
+      b = suc_bal a (ballot s) (nr s);
       msg_1a = Phase1a a b;
-      s = s\<lparr>ballot := Some b, 
-        onebs := (onebs s)(b $:= (onebs s $ b)(a $:= (\<lambda> x . Some x) o$ last_votes s))\<rparr>
+      s = update_onebs (s\<lparr>ballot := b\<rparr>) b a (last_votes s)
    in
      (s, send_all s a msg_1a)"
 
-definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet fset)" where
+definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
   "receive_1a l b s \<equiv>
     let bal = ballot s; a = self s in
-      (if bal < Some b
-       then
-          (let
-            msg_1b = Phase1b (last_votes s) b a;
-            packet = Packet a l msg_1b;
-            state = s\<lparr>ballot := Some b\<rparr>
-          in
-          (state, {|packet|}))
-       else (s, {||}))"
+      (if bal < b
+       then (let
+         msg_1b = Phase1b (last_votes s) b a;
+         packet = Packet a l msg_1b;
+         state = s\<lparr>ballot := b\<rparr>
+       in
+        (state, {packet}))
+       else (s, {}))"
 
-definition update_onebs ::
-  "'v acc_state \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f ('v cmd \<times> bal) option) \<Rightarrow> 'v acc_state" where
-  -- {* Update the map of highest voted values when receiving a 1b
-    message from a2 for ballot bal containing @{term last_vs} *}
-  "update_onebs s bal a2 last_vs \<equiv> let
-      onebs_bal_a2 = (\<lambda> x . Some x) o$ last_vs
-    in s\<lparr>onebs := (onebs s)(bal $:= (onebs s $ bal)(a2 $:= onebs_bal_a2))\<rparr>"
+definition one_b_quorum where
+  "one_b_quorum b s \<equiv> 2 * card (onebs s b) > nr s"
 
-definition one_b_quorum_received where
-  "one_b_quorum_received b s \<equiv> 
-    let at_b = onebs s $ b
-    in 2 * fcard (finfun_fset_dom at_b) > nr s"
+text {* 
+Given an instance i and a ballot b, the maximum vote for instance i received in 1b messages
+for ballot b 
+*}
+
+definition inst_votes :: "(acc \<times> (inst \<rightharpoonup> ('c \<times> bal))) set \<Rightarrow> inst \<Rightarrow> (('c \<times> bal) option set)"
+  where "inst_votes one_bs \<equiv> \<lambda> i . (\<lambda> vs . vs i) ` snd ` one_bs"
+
+export_code inst_votes in SML
+
+definition max_inst_bal :: "('c \<times> bal) option set \<Rightarrow> bal option"
+  where "max_inst_bal vs \<equiv> 
+    if (\<exists> e \<in> vs . e \<noteq> None)
+    then Some (Max (snd ` Option.these vs)) (* {b2 . \<exists> v . Some (v,b2) \<in> vs} *)
+    else None"
+
+lemma finite_these:"finite s \<Longrightarrow> finite (Option.these s)"
+proof -
+  assume "finite s"
+  then have "\<And>f p. finite (f ` {z \<in> s. p z}::'a set)"
+    by (metis Collect_mem_eq finite_Collect_conjI finite_imageI)
+  then show ?thesis
+    by (metis Option.these_def)
+qed
+
+lemma max_None[simp]: "max None = id" 
+by (auto simp add:fun_eq_iff) (metis LinorderOption.less_eq_def less_eq_o.simps(1) max_def) 
+lemma max_None_2[simp]: "max x None = x"
+by (metis LinorderOption.less_eq_def less_eq_o.elims(2) max_def option.distinct(1))
+
+lemma "fold (max \<circ> map_option snd) xs y = max y (fold (max \<circ> map_option snd) xs None)"
+apply (rule ssubst[OF fold_map[of max "map_option snd", symmetric]])
+oops 
+
+interpretation comp_fun_commute "\<lambda> (x::'a::linorder) y . max x y"
+apply (unfold_locales)
+apply (simp add:fun_eq_iff, auto)
+by (metis max.left_commute)
+
+lemma max_inst_bal_code[code]: "max_inst_bal (set vs) = fold (max o (map_option snd)) vs None"
+proof (induct vs)
+  case Nil thus ?case by (simp add:max_inst_bal_def)
+next
+  case (Cons x xs)
+  show ?case
+  proof (cases "\<exists> y \<in> set xs . y \<noteq> None")
+    case False
+    show ?thesis
+    proof (cases x)
+      case None
+      with False have "max_inst_bal (set (x # xs)) = None" by (simp add:max_inst_bal_def)
+      moreover have "fold (max \<circ> map_option snd) (x # xs) None = None" using False None
+        by auto (metis Cons.hyps max_inst_bal_def old.prod.exhaust option.exhaust)
+      ultimately show ?thesis by metis
+    next
+      case (Some y)
+      with False have "max_inst_bal (set (x # xs)) = Some (snd y)" 
+        by (simp add:max_inst_bal_def) (metis (no_types, lifting) List.finite_set Max_insert2 finite_imageI finite_these imageE in_these_eq prod.collapse) 
+      moreover have "fold (max \<circ> map_option snd) (x # xs) None = Some (snd y)" using Some False Cons.hyps
+        apply auto by (metis (no_types, lifting) False comp_eq_dest_lhs fold_Nil fold_id fold_simps(1) max_None option.simps(8))
+      ultimately show ?thesis by metis
+    qed
+  next
+    case True
+    hence 1:"max_inst_bal (set (x # xs)) = Some (Max (snd ` Option.these (set (x # xs))))" by (simp add:max_inst_bal_def)
+    show ?thesis
+    proof (cases x)
+      case None 
+      with 1 have "max_inst_bal (set (x # xs)) = Some (Max (snd ` Option.these (set xs)))" by simp
+      moreover have "fold (max \<circ> map_option snd) (x # xs) None = fold (max \<circ> map_option snd) xs None" using None
+        by (metis (mono_tags, lifting) comp_def fold_simps(2) max_None_2 option.simps(8))
+      ultimately show ?thesis by (metis Cons.hyps True max_inst_bal_def) 
+    next
+      case (Some y)
+      have "fold (max \<circ> map_option snd) (x # xs) None = max (map_option snd x) (fold (max o map_option snd) xs None)"
+        by (smt comp_eq_dest_lhs comp_fun_commute fold_commute_apply fold_simps(2))
+      moreover have "Some (Max (snd ` Option.these (set (x # xs)))) = max (map_option snd x) (max_inst_bal (set xs))"
+      proof -
+        have "Max (snd ` Option.these (set (x # xs))) = max (snd y) (Max (snd ` Option.these (set xs)))"
+          using Some True apply auto by (metis List.finite_set Max_insert empty_iff finite_imageI finite_these image_is_empty insert_iff option.distinct(1) these_empty_eq) 
+        moreover
+        have "max_inst_bal (set xs) = Some (Max (snd ` Option.these (set xs)))" using True
+          by (metis max_inst_bal_def) 
+        moreover
+        have "\<And> x y . Some (max (x::'z::linorder) y) = max (Some x) (Some y)"
+          by (metis LinorderOption.less_eq_def less_eq_o.simps(3) less_imp_le max.absorb1 max.absorb2 not_le)
+        ultimately show ?thesis
+          by (smt Some option.simps(9)) 
+      qed
+      ultimately  show ?thesis apply auto by (metis (mono_tags, lifting) "1" Cons.hyps List.fold_cong comp_eq_dest_lhs list.simps(15))
+    qed
+  qed
+qed
+
+export_code max_inst_bal in SML
+
+(* TODO: a code equation for max_inst_bal, in terms of fold on lists? *)
+
+definition max_votes :: "(acc \<times> (inst \<rightharpoonup> ('c \<times> bal))) set \<Rightarrow> (inst \<rightharpoonup> 'c)" where
+  "max_votes one_bs \<equiv> (\<lambda> vs . max_inst_bal vs \<bind> (\<lambda> b . Some (SOME v . Some (v,b) \<in> vs))) 
+    o (inst_votes one_bs)"
+
+(* TODO: a code equation for that too. *)
+
+definition two_a_msgs where
+  "two_a_msgs \<equiv> True"
+
+definition process_1b_quorum where
+  "process_1b_quorum s b \<equiv> 
+    let max_votes = max_vote ` onebs s b
+    in max_votes"
+
+definition receive_1b :: "bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow> ('v \<times> bal) option) \<Rightarrow> 'v acc_state \<Rightarrow> ('v acc_state \<times> 'v packet set)" where
+  "receive_1b b from last_vs s \<equiv> 
+    if (ballot s = b) 
+      then (let
+        s2 = update_onebs s b from last_vs
+      in (if one_b_quorum b s2
+        then (s2, {})
+        else (s2, {}))) 
+    else (s, {})"
+
 
 text {* 
   When a quorum of 1b messages is received, we complete all started instances by sending 2b messages containing a safe value.
