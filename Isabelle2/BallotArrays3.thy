@@ -1,12 +1,12 @@
 section {* Definition of ballot arrays *}
 
-theory BallotArrays3 
+theory BallotArrays3
 imports Main "~~/src/HOL/Library/Monad_Syntax" LinorderOption Quorums2 Max_Properties
 begin
 
 subsection {* The definitions *}
 
-locale ballot_array = 
+locale ballot_array =
   fixes quorums :: "'a set set"
   and ballot :: "'a \<Rightarrow> nat"
   and vote :: "'a \<Rightarrow> nat \<rightharpoonup> 'v"
@@ -14,7 +14,7 @@ begin
 
 definition conservative where
   "conservative b \<equiv> \<forall> a1 . \<forall> a2 .
-    let v1 = vote a1 b; v2 = vote a2 b in 
+    let v1 = vote a1 b; v2 = vote a2 b in
       case v1 of Some x \<Rightarrow> (case v2 of Some y \<Rightarrow> x = y | None \<Rightarrow> True) | None \<Rightarrow> True"
 
 definition conservative_array where
@@ -49,7 +49,7 @@ lemma finite_voted_bal:"finite {b\<^sub>a. voted_bal a b\<^sub>a b}"
 by (simp add: voted_bal_def)
 
 definition chosen_at where
-  "chosen_at v b \<equiv> \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . (vote) a b = (Some v))"
+  "chosen_at v b \<equiv> \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . vote a b = (Some v))"
 
 definition chosen where
   "chosen v \<equiv> \<exists> b . chosen_at v b"
@@ -89,7 +89,7 @@ subsubsection {* A first high-level version *}
 
 text {* The set of maximum ballots in quorum q. *}
 
-definition voted_sets where "voted_sets q b \<equiv> {{b\<^sub>a . b\<^sub>a < b \<and> vote a b\<^sub>a \<noteq> None} 
+definition voted_sets where "voted_sets q b \<equiv> {{b\<^sub>a . b\<^sub>a < b \<and> vote a b\<^sub>a \<noteq> None}
   | a . a \<in> q \<and> {b\<^sub>a . b\<^sub>a < b \<and>  vote a b\<^sub>a \<noteq> None} \<noteq> {}}"
 
 lemma in_voted_sets_finite[elim]: 
@@ -244,6 +244,27 @@ proof (simp add:proved_safe_at_3_def, cases "Max (q_max_bals q b)", simp_all)
     by (auto simp add:proved_safe_at_2_a_def)
 next
   oops
+
+subsubsection {* Another attempt *}
+
+definition acc_max where
+  -- {* @{term acc_max} represents what is computed locally by an acceptor. *}
+  "acc_max a bound \<equiv> 
+    if (\<exists> b < bound . vote a b \<noteq> None)
+    then Some (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd)
+    else None"
+
+definition proved_safe_at where
+  "proved_safe_at q b v \<equiv>
+    let acc_maxs = {(v,b_max) . Some (v,b_max) \<in> (\<lambda> a . acc_max a b) ` q}
+    in 
+      if acc_maxs = {} then True
+      else fst (max_by_key acc_maxs snd) = v"
+
+lemma assumes "q \<in> quorums" shows "proved_safe_at q b v \<Longrightarrow> proved_safe_at_2_a q b v"
+
+nitpick[verbose, card 'a = 2, card nat = 2, card 'b = 1, card "nat option" = 3, card "'b option" = 3, card "('b \<times> nat) option" = 5,
+  card "'b \<times> nat" = 4, expect=none, eval=v]
 
 end
 
