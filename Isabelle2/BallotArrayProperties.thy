@@ -310,6 +310,28 @@ lemma safe_at_mono:
   shows "ba_2.safe_at v b"
   by (metis assms ba_1.safe_at_def ba_2.safe_at_def choosable_decreases)
 
+lemma safe_votes: 
+  assumes ba_1.safe
+  and "ballot1 = ballot2" and "\<And> b a v . \<lbrakk>vote1 a b = None; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b"
+  and "\<And> b a . b > ballot1 a \<Longrightarrow> vote1 a b = vote2 a b"
+  shows ba_2.safe
+proof (auto simp add:ballot_array.safe_def split add:option.splits)
+  fix a b v
+  assume "vote2 a b = Some v"
+  show "ba_2.safe_at v b"
+  proof (cases "vote1 a b = Some v")
+    case True
+    with assms(1) and safe_at_mono show ?thesis by (metis ba_1.safe_def option.simps(5)) 
+  next
+    case False
+    with ballot_array_prefix_axioms assms(3) have "vote1 a b = None" 
+      apply (auto simp add:ballot_array_prefix_def ballot_array_prefix_axioms_def is_prefix_def)
+      by (metis \<open>vote2 a b = Some v\<close> assms(1) assms(4) ba_1.safe_def case_optionE linorder_cases) 
+    with assms(3) have "ba_1.safe_at v b" using \<open>vote2 a b = Some v\<close> by blast 
+    thus ?thesis using safe_at_mono by blast
+  qed
+qed
+
 lemma proved_safe_at_mono:
   assumes "ba_1.proved_safe_at_2 q b v"
   shows "ba_2.proved_safe_at_2 q b v"

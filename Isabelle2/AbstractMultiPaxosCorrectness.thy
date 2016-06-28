@@ -1,11 +1,11 @@
 section {* Proof of the agreement property of AbstractMultiPaxos. *}
 
 theory AbstractMultiPaxosCorrectness
-imports AbstractMultiPaxos7 "../../IO-Automata/Simulations" "../../IO-Automata/IOA_Automation" 
+imports AbstractMultiPaxos7 "../../IO-Automata/Simulations" "../../IO-Automata/IOA_Automation"
   BallotArrayProperties
 begin
 
-locale amp_proof = IOA + quorums quorums + amp_ioa quorums learners for 
+locale amp_proof = IOA + quorums quorums + amp_ioa quorums learners for
      quorums :: "'a set set" and learners :: "'l set" +
   fixes the_ioa :: "(('v,'a)amp_state, ('v,'a,'l)amp_action) ioa"
   defines "the_ioa \<equiv> amp_ioa"
@@ -57,17 +57,17 @@ lemma trans_imp_prefix_order:
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t"
   shows "is_prefix (ballot s) (ballot t) (vote s i) (vote t i)" using assms
 by (cases a) (auto simp add:is_prefix_def inv_proofs_defs split add:option.split_asm)
-    
+
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic. *}
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "safe_at s i v b"
-  shows "safe_at t i v b" using assms 
-  by (drule_tac trans_imp_prefix_order)
-    (meson assms(1) ballot_array_prefix.safe_at_mono ballot_array_prefix_axioms_def ballot_array_prefix_def quorums_axioms trans_imp_prefix_order)
+  shows "safe_at t i v b" using assms ballot_array_prefix.safe_at_mono
+by (metis ballot_array_prefix_axioms.intro ballot_array_prefix_def quorums_axioms trans_imp_prefix_order)
 
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
 
-text {* TODO: make this proof generic to all algorithms in which the ballot array grows with safe_at values *}
+text {* TODO: make this proof generic to all algorithms in which the ballot array grows with safe_at values,
+  using @{thm ballot_array_prefix.safe_votes} *}
 lemma safe_inv:
   "invariant the_ioa safe"
 apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs ballot_array.safe_def invs:invs)
