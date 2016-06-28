@@ -75,6 +75,81 @@ subsection {* Computing safe values in a distributed implementation *}
 locale safe_val_lemmas = ballot_array quorums + quorums quorums for quorums
 begin
 
+subsubsection {* Another attempt *}
+
+definition acc_max where
+  -- {* @{term acc_max} represents what is computed locally by an acceptor. *}
+  "acc_max a bound \<equiv> 
+    if (\<exists> b < bound . vote a b \<noteq> None)
+    then Some (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd)
+    else None"
+
+definition proved_safe_at where
+  "proved_safe_at q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
+    (let acc_maxs = Union ((\<lambda> a . case acc_max a b of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q)
+    in 
+      if acc_maxs = {} then True
+      else fst (max_by_key acc_maxs snd) = v)"
+                                                            
+lemma assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_2_a q b v"
+nitpick[verbose, card 'a = 3, card nat = 2, card 'b = 3, card "nat option" = 3, card "'b option" = 4, card "('b \<times> nat) option" = 7,
+  card "'b \<times> nat" = 6, expect=none]
+proof -
+  from assms have "q \<in> quorums" and bals:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> b" using proved_safe_at_def by auto
+  have "if \<exists> a \<in> q . \<exists> b\<^sub>2 . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None
+    then \<exists> a \<in> q . vote a (Max {b\<^sub>2 . \<exists> a \<in> q . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None}) = Some v
+    else True" (is "if ?cond then ?true else ?false")
+  proof (cases "?cond")
+    case True
+    with this obtain a b\<^sub>a where "a \<in> q" and "vote a b\<^sub>a \<noteq> None" and "b\<^sub>a < b" by (auto simp add:acc_max_def)
+    hence "acc_max a b \<noteq> None" by (auto simp add:acc_max_def)
+    let ?acc_maxs_set = "(\<lambda> a . case acc_max a b of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q"
+    let ?acc_maxs = "Union ?acc_maxs_set"
+    have 1:"?acc_maxs \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> apply (auto split add:option.splits) by (metis \<open>a \<in> q\<close>)
+    have 2:"fst (max_by_key ?acc_maxs snd) = v" using 1 assms(1) by (auto simp add:proved_safe_at_def)   
+    let ?Ss = "{{(v,b\<^sub>a) . b\<^sub>a < b \<and> vote a b\<^sub>a = Some v} | a . a \<in> q}" 
+    have 8:"finite ?Ss" 
+    proof -
+      have "finite q" by (metis \<open>q \<in> quorums\<close> quorums_axioms quorums_def) 
+      thus ?thesis by simp
+    qed
+    have 9:"\<And> S . S \<in> ?Ss \<Longrightarrow> finite S"
+    proof -
+      fix S assume "S \<in> ?Ss"
+      obtain a where "S = {(v,b\<^sub>a) . b\<^sub>a < b \<and> vote a b\<^sub>a = Some v}" by (smt \<open>S \<in> {{(v, b\<^sub>a). b\<^sub>a < b \<and> vote a b\<^sub>a = Some v} | a. a \<in> q}\<close> mem_Collect_eq) 
+      show "finite S" sorry
+    qed
+    let ?S = "{(v,b\<^sub>a) . b\<^sub>a < b \<and> vote a b\<^sub>a = Some v}"
+    have 5:"?S \<in> ?Ss" using \<open>a \<in> q\<close> by blast
+    have 6:"?S \<noteq> {}" using \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close> by blast
+    have 7:"?acc_maxs = {max_by_key S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}"
+      apply (auto simp add: acc_max_def split add:option.splits split_if_asm)
+      apply (smt Collect_empty_eq case_prodI) by (metis (mono_tags) option.simps(3))
+    have 10:"\<And> x y . \<lbrakk>x \<in> Union ?Ss; y \<in> Union ?Ss; snd x = snd y\<rbrakk> \<Longrightarrow> x = y" 
+      using assms(2) by (auto simp add:conservative_array_def conservative_def split add:option.splits)
+    have "max_by_key (Union ?Ss) snd = max_by_key ?acc_maxs snd" using max_by_key_subsets[of ?Ss ?S snd]
+      by (metis (no_types, lifting) "10" "5" "6" "7" "8" "9")
+    hence 12:"proved_safe_at q b v = (fst (max_by_key (Union ?Ss) snd) = v)" by (metis "2" assms(1)) 
+
+    text {* now we prove that this is the same as Max... *}
+    have 11:"finite (Union ?Ss)" by (metis (no_types, lifting) "8" "9" finite_Union) 
+    let ?m = "max_by_key (Union ?Ss) snd"  let ?b\<^sub>m = "snd ?m"
+    have 13:"v = fst ?m" by (metis 12 assms(1)) 
+    have "(v,?b\<^sub>m) \<in> Union ?Ss" and "\<And> x . x \<in> Union ?Ss \<Longrightarrow> snd x \<le> ?b\<^sub>m"
+      apply (metis (no_types, lifting) "5" "6" Collect_cong UnionI 11 13 empty_def max_by_key_in_and_ge(2) mem_Collect_eq prod.collapse)
+      by (metis (no_types, lifting) \<open>finite (\<Union>{{(v, b\<^sub>a). b\<^sub>a < b \<and> vote a b\<^sub>a = Some v} | a. a \<in> q})\<close> max_by_key_in_and_ge(1))
+    moreover have "{b\<^sub>2 . \<exists> a \<in> q . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None} = snd ` (Union ?Ss)" apply auto sorry
+      
+    have 14:"\<exists>a\<in>q. vote a (Max {b\<^sub>2. \<exists>a\<in>q. b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None}) = Some v" sorry
+    show ?thesis
+      by (metis (no_types, lifting) 14)
+  next
+    case False
+    thus ?thesis by auto
+  qed
+  show ?thesis apply (simp add:proved_safe_at_2_a_def) 
+qed
+
 context begin
 
 private
@@ -245,26 +320,7 @@ proof (simp add:proved_safe_at_3_def, cases "Max (q_max_bals q b)", simp_all)
 next
   oops
 
-subsubsection {* Another attempt *}
-
-definition acc_max where
-  -- {* @{term acc_max} represents what is computed locally by an acceptor. *}
-  "acc_max a bound \<equiv> 
-    if (\<exists> b < bound . vote a b \<noteq> None)
-    then Some (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd)
-    else None"
-
-definition proved_safe_at where
-  "proved_safe_at q b v \<equiv>
-    let acc_maxs = {(v,b_max) . Some (v,b_max) \<in> (\<lambda> a . acc_max a b) ` q}
-    in 
-      if acc_maxs = {} then True
-      else fst (max_by_key acc_maxs snd) = v"
-
-lemma assumes "q \<in> quorums" shows "proved_safe_at q b v \<Longrightarrow> proved_safe_at_2_a q b v"
-
-nitpick[verbose, card 'a = 2, card nat = 2, card 'b = 1, card "nat option" = 3, card "'b option" = 3, card "('b \<times> nat) option" = 5,
-  card "'b \<times> nat" = 4, expect=none, eval=v]
+  
 
 end
 
