@@ -23,16 +23,6 @@ declare the_ioa_def[inv_proofs_defs]
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp]
   learn_def[simp] Let_def[simp] split_if[split] split_if_asm[split]
 
-lemma vote_one_inst_only:
-  assumes "do_vote a i q v s s'" and "i \<noteq> j"
-  shows "vote s j a = vote s' j a "
-using assms by auto
-
-lemma vote_ballot_unch:
-  assumes "do_vote a i q v s s'"
-  shows "ballot s = ballot s'"
-using assms by (auto split add:option.split_asm)
-
 subsection {* @{term conservative_array}  is an inductive invariant *}
 
 declare ballot_array.conservative_array_def[inv_proofs_defs]
@@ -49,7 +39,13 @@ apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
 done
 declare conservative_inductive[invs]
 
-subsection {* @{term safe}  is an inductive invariant *}
+subsection {* @{term safe}  is inductive relative to @{term conservative_array}} *}
+
+text {* 
+We first prove that when the algorithm takes a step, the old state is a prefix
+of the new state. With this fact, we obtain that (1) a safe value remains safe after a step using the lemma @{thm ballot_array_prefix.safe_at_mono }.
+Then we prove that (2) when a vote is cast at a ballot b from a safe state, then the voted value is safe at b.
+Given those two facts, the inductiveness of safe follows.  *}
 
 abbreviation safe_at where "safe_at s i \<equiv> ballot_array.safe_at  quorums (ballot s) (vote s i)"
 
@@ -66,8 +62,20 @@ by (metis ballot_array_prefix_axioms.intro ballot_array_prefix_def quorums_axiom
 
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
 
-text {* TODO: make this proof generic to all algorithms in which the ballot array grows with safe_at values,
-  using @{thm ballot_array_prefix.safe_votes} *}
+lemma safe_votes:
+  assumes "s \<midarrow>aa\<midarrow>the_ioa\<longrightarrow> t" and "vote s i a b  \<noteq> vote t i a b" and "vote t i a b = Some v"
+  and "conservative_array s" and "safe s"
+  shows "safe_at t i v b" 
+using assms
+apply (cases aa)
+apply (auto simp add:inv_proofs_defs)
+subgoal premises prems for a2
+  proof -
+    have "safe_at s i v (ballot s a)" by (smt assms(4) ballot_array.safe_def ballot_array_props.intro ballot_array_props.proved_safe_at_2_imp_safe_at option.case_eq_if option.distinct(1) option.sel prems(2) prems(6) quorums_axioms) 
+    thus ?thesis by (metis amp_state.select_convs(2) amp_state.select_convs(3) amp_state.surjective amp_state.update_convs(3) assms(1) fun_upd_apply prems(9) safe_mono) 
+  qed
+done
+
 lemma safe_inv:
   "invariant the_ioa safe"
 apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs ballot_array.safe_def invs:invs)
@@ -76,30 +84,18 @@ proof (auto simp add:ballot_array.safe_def split add:option.splits)
   fix i b a v
   assume "vote t i a b = Some v"
   show "safe_at t i v b"
-  proof (cases "vote s i a b = Some v")
+  proof (cases "vote s i a b = vote t i a b")
     case True
-    hence "safe_at s i v b" using prems(1) by (metis ballot_array.safe_def option.simps(5))
-    thus "safe_at t i v b" using prems(2) safe_mono by simp
+    hence "safe_at s i v b" using prems(1) by (metis \<open>vote t i a b = Some v\<close> ballot_array.safe_def option.simps(5))
+    thus ?thesis using prems(2) safe_mono by simp
   next
-    case False
-    with prems(2) \<open>vote t i a b = Some v\<close> obtain q where "do_vote a i q v s t" and "ballot s a = b"
-      apply(simp add:is_trans_def the_ioa_def amp_ioa_def amp_trans_def del:do_vote_def)
-      apply(elim amp_trans_rel.elims)
-      apply simp apply simp defer apply simp
-      apply (smt amp_ioa.do_vote_def amp_state.iffs amp_state.surjective amp_state.update_convs(3) fun_upd_apply option.sel)
-      done
-    hence "proved_safe_at s i q (ballot s a) v" and "q \<in> quorums" and "\<forall> a2 \<in> q . ballot s a \<le> ballot s a2" 
-      by (auto simp add:ballot_array.proved_safe_at_2_def split add:nat.splits)
-    hence "safe_at s i v b" using quorums_axioms prems(1) prems(3) `ballot s a = b`
-      ballot_array_props.proved_safe_at_2_imp_safe_at[of quorums "ballot s a" "vote s i" "ballot s" q v]
-      by (auto simp add:ballot_array.safe_def ballot_array_props_def split add:option.splits)
-    thus "safe_at t i v b" using prems(2) safe_mono by simp
+    case False thus ?thesis using safe_votes by (metis \<open>vote t i a b = Some v\<close> prems(1) prems(2) prems(3))
   qed
 qed
 done
 declare safe_inv[invs]
 
-subsection {* Finally, the proof that agreement holds. *}
+subsection {* Finally, the proof that agreement holds (trivial, follows immediately from safe).*}
 
 definition agreement where 
   "agreement s \<equiv> \<forall> v w i . chosen s i v \<and> chosen s i w \<longrightarrow> v = w"
