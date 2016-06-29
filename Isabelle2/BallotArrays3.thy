@@ -108,15 +108,21 @@ proof -
     from True obtain a b\<^sub>a where "a \<in> q" and "vote a b\<^sub>a \<noteq> None" and "b\<^sub>a < b" by (auto simp add:acc_max_def)
     hence "acc_max a b \<noteq> None" by (auto simp add:acc_max_def)
 
-    text {* Using lemma @{thm max_by_key_subsets}*}
+    text {* Using lemma @{thm max_by_key_subsets} *}
     let ?Ss = "{{(v,b\<^sub>a) . b\<^sub>a < b \<and> vote a b\<^sub>a = Some v} | a . a \<in> q}"
     let ?S = "{(v,b\<^sub>a) . b\<^sub>a < b \<and> vote a b\<^sub>a = Some v}"
     have 8:"finite ?Ss" using \<open>finite q\<close> by simp
     have 9:"\<And> S . S \<in> ?Ss \<Longrightarrow> finite S"
     proof -
+      { fix S f g
+        assume "finite (f ` S)" and "\<And> x . x \<in> S \<Longrightarrow> x = (g o f) x"
+        hence "finite S" by (metis finite_imageI finite_subset image_comp image_eqI subsetI) }
+      note 1 = this
       fix S assume "S \<in> ?Ss"
-      obtain a where "S = {(v,b\<^sub>a) . b\<^sub>a < b \<and> vote a b\<^sub>a = Some v}" by (smt \<open>S \<in> ?Ss\<close> mem_Collect_eq) 
-      show "finite S" sorry
+      obtain a where 2:"S = {(v,b\<^sub>a) . b\<^sub>a < b \<and> vote a b\<^sub>a = Some v}" by (smt \<open>S \<in> ?Ss\<close> mem_Collect_eq)
+      moreover with this have "\<And> x . x \<in> S \<Longrightarrow> x = (the (vote a (snd x)), snd x)" by (metis (mono_tags, lifting) Product_Type.Collect_case_prodD option.sel prod.collapse) 
+      moreover have "finite (snd ` S)" using 2 by (auto simp add:image_def)
+      ultimately show "finite S" using 1[of snd S "\<lambda> b . (the (vote a b), b)"] by (metis comp_def)
     qed
     have 5:"?S \<in> ?Ss" using \<open>a \<in> q\<close> by blast
     have 6:"?S \<noteq> {}" using \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close> by blast
@@ -165,7 +171,7 @@ proof -
           apply (metis (mono_tags, lifting) "17" "18" mem_Collect_eq option.simps(3))
           apply auto apply (insert 19) by (metis (no_types, lifting)) 
       qed
-      moreover have "finite ?bals" sorry
+      moreover have "finite ?bals" by fastforce
       moreover have "?bals \<noteq> {}"
         by (metis (mono_tags, lifting) Collect_empty_eq \<open>a \<in> q\<close> \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close>) 
       ultimately show "?b\<^sub>m = Max ?bals" by (metis (no_types, lifting) Max_eqI)
