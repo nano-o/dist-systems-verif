@@ -193,8 +193,8 @@ definition highest_voted :: "(inst \<Rightarrow>f (acc \<times> bal \<times> ('v
   "highest_voted onebs_bal \<equiv>
     let
         onebs_i = (\<lambda>i. (image (\<lambda>s. snd s) (onebs_bal $ i)));
-        (*votes = (map snd) o$ m;*)
-        (*highest = (\<lambda> l . if (l = []) then None else (fold max l (l!0)) \<bind> (\<lambda> vb . Some (fst vb)))*)
+        (*votes = (map snd) o$ m;
+        highest = (\<lambda> l . if (l = []) then None else (fold max l (l!0)) \<bind> (\<lambda> vb . Some (fst vb)))*)
         highest = (\<lambda>l. if (l = {}) then None else snd (the_elem (Set.bind (Set.filter (\<lambda>le. \<forall>x \<in> l. fst x \<le> fst le) l) (\<lambda>x. {x}))))
     in highest o onebs_i"
 
@@ -359,11 +359,6 @@ definition mp_asig where
 fun init_nodes_state::"nat \<Rightarrow> nat \<Rightarrow>f 'a acc_state" where
   "init_nodes_state (0::nat) = (K$ init_acc_state)"
 | "init_nodes_state (Suc i) = (init_nodes_state i)(i $:= init_acc_state)"
-
-(*fun init_nodes_state where
-  "init_nodes_state (0::nat) n = (K$ init_acc_state n 0)"
-| "init_nodes_state (Suc i) n = 
-    (if Suc i > n then undefined else (init_nodes_state i n)(Suc i $:= init_acc_state n (Suc i)))"*)
 
 lemma init_acc: 
 assumes "a \<ge> 0"

@@ -1,6 +1,7 @@
 theory DistributedMultiPaxos
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
   "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet" LinorderOption
+  "../../IO-Automata/IOA" BallotArrays
 begin
 
 type_synonym acc = nat

@@ -12,7 +12,7 @@ datatype ('v,'a,'l) amp_action =
 | JoinBallot 'a nat
 
 record ('v,'a) amp_state =
-  propCmd :: "'v fset"
+  propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> nat option"
   vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
 
@@ -29,10 +29,10 @@ definition amp_asig where
       internals = {Vote a i q b | a i b q . a |\<in>| acceptors} \<union> {JoinBallot a b | a b . a |\<in>| acceptors}\<rparr>"
 
 definition amp_start where
-  "amp_start \<equiv> {\<lparr>propCmd = {||}, ballot = (\<lambda> a . None), vote = (\<lambda> i a b . None) \<rparr>}"
+  "amp_start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . None), vote = (\<lambda> i a b . None) \<rparr>}"
 
 definition propose where
-  "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) |\<union>| {|c|}\<rparr>)"
+  "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
 
 definition join_ballot where
   "join_ballot a b s s' \<equiv> 
