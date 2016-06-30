@@ -69,16 +69,16 @@ lemma safe_votes:
 using assms
 apply (cases aa)
 apply (auto simp add:inv_proofs_defs)
-subgoal premises prems for a2
+subgoal premises prems
   proof -
-    have "safe_at s i v (ballot s a)" by (smt assms(4) ballot_array.safe_def ballot_array_props.intro ballot_array_props.proved_safe_at_2_imp_safe_at option.case_eq_if option.distinct(1) option.sel prems(2) prems(6) quorums_axioms) 
+    have "safe_at s i v (ballot s a)" by (smt assms(4) ballot_array.safe_def ballot_array_props.intro ballot_array_props.proved_safe_at_2_a_imp_safe_at option.case_eq_if option.distinct(1) option.sel prems(2) prems(6) quorums_axioms) 
     thus ?thesis by (metis amp_state.select_convs(2) amp_state.select_convs(3) amp_state.surjective amp_state.update_convs(3) assms(1) fun_upd_apply prems(9) safe_mono) 
   qed
 done
 
 lemma safe_inv:
   "invariant the_ioa safe"
-apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs ballot_array.safe_def invs:invs)
+apply (try_solve_inv2 case_thm:trans_cases inv_proofs_defs:inv_proofs_defs ballot_array.safe_def invs:invs)
 subgoal premises prems for s t act
 proof (auto simp add:ballot_array.safe_def split add:option.splits)
   fix i b a v
