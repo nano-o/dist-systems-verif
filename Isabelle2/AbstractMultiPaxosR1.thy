@@ -2,6 +2,10 @@ theory AbstractMultiPaxosR1
 imports  "../../IO-Automata/IOA" BallotArrays3 DistributedSafeAt
 begin
 
+text {* 
+1) added a suggestions that acceptors then vote for, and used the distributed implementation of the safe-at computation.
+*}
+
 record ('v,'a) amp_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> nat"
@@ -72,8 +76,8 @@ fun amp_trans_rel where
     \<or> (\<exists> i b v q . suggest i b v q r r'))"
 | "amp_trans_rel r (Learn i v l) r' = learn i v r r'"
 
-
-lemma trans_cases: assumes "amp_trans_rel r a r'"
+lemma trans_cases[consumes 1]: 
+  assumes "amp_trans_rel r a r'"
   obtains 
   (propose) c where "propose c r r'"
 | (learn) i v where "learn i v r r'"

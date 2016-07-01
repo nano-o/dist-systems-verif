@@ -175,6 +175,7 @@ next
   qed
 qed
 
+private
 lemma proved_safe_at_2_imp_safe_at:
   assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"
   and "proved_safe_at_2 q i v" and "conservative_array"
@@ -252,6 +253,7 @@ next
   qed
 qed
 
+private
 lemma proved_safe_imp_safe:
   assumes "\<And> b a v . vote a b = Some v \<Longrightarrow> \<exists> q \<in> quorums .
     proved_safe_at_2 q b v \<and>  (\<forall> a \<in> q . ballot a \<ge> b)"

@@ -1,5 +1,5 @@
 theory DistributedSafeAt
-imports BallotArrays3
+imports BallotArrays3 BallotArrayProperties
 begin
 
 subsection {* Computing safe values in a distributed implementation *}
@@ -21,8 +21,11 @@ definition proved_safe_at where
     in 
       if acc_maxs = {} then True
       else fst (max_by_key acc_maxs snd) = v)"
-                                                            
-lemma assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_2_a q b v"
+          
+context begin
+
+private                                                  
+lemma l1: assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_2_a q b v"
 nitpick[verbose, card 'a = 3, card nat = 2, card 'b = 3, card "nat option" = 3, card "'b option" = 4, card "('b \<times> nat) option" = 7,
   card "'b \<times> nat" = 6, expect=none]
 proof -
@@ -124,6 +127,14 @@ proof -
   qed
   thus ?thesis using \<open>q \<in> quorums\<close> bals by (auto simp add:proved_safe_at_2_a_def)
 qed
+
+lemma proved_safe_at_imp_safe_at:
+  assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"
+  and "proved_safe_at q i v" and "conservative_array"
+  shows "safe_at v (i::nat)" using l1 ballot_array_props.proved_safe_at_2_a_imp_safe_at
+by (metis assms(1) assms(2) assms(3) ballot_array_props.intro quorums_axioms) 
+
+end
 
 end
 

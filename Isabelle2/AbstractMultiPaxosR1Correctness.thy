@@ -1,7 +1,7 @@
 section {* Proof of the agreement property of AbstractMultiPaxos. *}
 
 theory AbstractMultiPaxosR1Correctness
-imports AbstractMultiPaxosR1 "../../IO-Automata/Simulations" "../../IO-Automata/IOA_Automation"
+imports AbstractMultiPaxosR1 "../../IO-Automata/IOA_Automation"
   BallotArrayProperties
 begin
 
@@ -89,68 +89,43 @@ definition inv2 where
   -- {* a suggestion is safe. *}
   inv2_def[inv_proofs_defs]:"inv2 s \<equiv> \<forall> i b . case suggestion s i b of Some v \<Rightarrow> safe_at s i v b | None \<Rightarrow> True"
 
-lemma inv2:
-  "invariant the_ioa inv2"
-apply (rule invariantI)
-apply (force simp add:inv_proofs_defs invs)
-apply (rm_reachable)
-subgoal premises prems for s t a
-proof -
-  from prems and safe_mono have 1:"\<And> i v b . safe_at s i v b \<Longrightarrow> safe_at t i v b"
-    by (simp add:inv2_def)
-  with prems show ?thesis
-  apply (unfold_to_trans_rel)
-  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
-  apply (auto simp add:inv_proofs_defs split add:option.splits)[3]
-  apply (fastforce simp add:inv_proofs_defs split add:option.splits)
-  (* TODO: here we need "conservative" *)
-  apply (cases s, auto simp add:inv2_def split add:option.splits) oops
-
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
+declare ballot_array.safe_def[inv_proofs_defs]
 
-lemma safe_votes:
-  assumes "s \<midarrow>aa\<midarrow>the_ioa\<longrightarrow> t" and "vote s i a b  \<noteq> vote t i a b" and "vote t i a b = Some v"
-  and "conservative_array s" and "safe s"
-  shows "safe_at t i v b"
-using assms
-apply (auto simp add:inv_proofs_defs)
-apply (induct rule:trans_cases)
-apply (auto simp add:inv_proofs_defs split add:option.splits)
-subgoal premises prems
+lemma inv2_and_safe:
+  "invariant the_ioa (\<lambda> s . inv2 s \<and> safe s)"
+apply (rule invariantI)
+    apply (force simp add:inv_proofs_defs invs)
+  apply instantiate_invs_2
+  subgoal premises prems for s t a
   proof -
-    have "safe_at s i v (ballot s a)"  
+    from prems and safe_mono have 1:"\<And> i v b . safe_at s i v b \<Longrightarrow> safe_at t i v b"
+      by (simp add:inv2_def)
+    with prems show ?thesis
+    apply (unfold_to_trans_rel)
+    apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
+              apply (auto simp add:inv_proofs_defs split add:option.splits)[3]
+        apply (fastforce simp add:inv_proofs_defs split add:option.splits)
+      apply auto
+      subgoal premises prems for i b v q
+      proof -
+        from prems(5,8,2) have "safe_at s i v b"
+          by (smt ballot_array.safe_def distributed_safe_at.intro distributed_safe_at.proved_safe_at_imp_safe_at option.case_eq_if option.distinct(1) option.sel quorums_axioms) 
+        thus ?thesis using prems(4,9) 1 by (simp add:inv2_def split add:option.splits)
+      qed
+    done
   qed
 done
-
-lemma safe_inv:
-  "invariant the_ioa safe" oops
-apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs ballot_array.safe_def invs:invs)
-subgoal premises prems for s t act
-proof (auto simp add:ballot_array.safe_def split add:option.splits)
-  fix i b a v
-  assume "vote t i a b = Some v"
-  show "safe_at t i v b"
-  proof (cases "vote s i a b = vote t i a b")
-    case True
-    hence "safe_at s i v b" using prems(1) by (metis \<open>vote t i a b = Some v\<close> ballot_array.safe_def option.simps(5))
-    thus ?thesis using prems(2) safe_mono by simp
-  next
-    case False thus ?thesis using safe_votes by (metis \<open>vote t i a b = Some v\<close> prems(1) prems(2) prems(3))
-  qed
-qed
-done
-declare safe_inv[invs]
 
 subsection {* Finally, the proof that agreement holds (trivial, follows immediately from safe). *}
 
 definition agreement where 
   "agreement s \<equiv> \<forall> v w i . chosen s i v \<and> chosen s i w \<longrightarrow> v = w"
 
-lemma agreement:"invariant the_ioa agreement"
+lemma agreement:"invariant the_ioa agreement" 
 apply(rule invariantI)
-    apply(auto simp add: inv_proofs_defs agreement_def ballot_array.chosen_def ballot_array.chosen_at_def)[1]
-  apply (metis (mono_tags, lifting) IOA.invariant_def IOA.reachable_n agreement_def amp_proof.safe_inv amp_proof_axioms ballot_array_props.intro ballot_array_props.safe_imp_agreement quorums_axioms the_ioa_def)
-done
+apply(auto simp add: inv_proofs_defs agreement_def ballot_array.chosen_def ballot_array.chosen_at_def)[1]
+by (metis (mono_tags, lifting) IOA.reach_and_inv_imp_p IOA.reachable_n agreement_def ballot_array_props.intro ballot_array_props.safe_imp_agreement inv2_and_safe quorums_axioms)
 
 end
 
