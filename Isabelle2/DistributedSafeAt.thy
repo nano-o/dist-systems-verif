@@ -4,7 +4,7 @@ begin
 
 subsection {* Computing safe values in a distributed implementation *}
 
-locale distributed_safe_at = ballot_array quorums + quorums quorums for quorums
+locale distributed_safe_at = ballot_array 
 begin
 
 definition acc_max where
@@ -14,14 +14,27 @@ definition acc_max where
     then Some (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd)
     else None"
 
+definition max_pair where
+  "max_pair q a_max \<equiv> 
+    let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q)
+    in
+      if acc_maxs = {} then None
+      else Some (max_by_key acc_maxs snd)"
+
 definition proved_safe_at where
   -- {* @{term proved_safe_at} can be computed locally by a leader *}
   "proved_safe_at q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
-    (let acc_maxs = Union ((\<lambda> a . case acc_max a b of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q)
-    in 
-      if acc_maxs = {} then True
-      else fst (max_by_key acc_maxs snd) = v)"
+    (case max_pair q (\<lambda> a . acc_max a b) of None \<Rightarrow> True
+    | Some (v',b) \<Rightarrow> v = v')"
           
+end
+
+print_locale distributed_safe_at
+print_locale quorums
+
+locale dsa_properties = quorums quorums + distributed_safe_at quorums for quorums
+begin
+
 context begin
 
 private                                                  
@@ -66,7 +79,8 @@ proof -
       let ?acc_maxs_set = "(\<lambda> a . case acc_max a b of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q"
       let ?acc_maxs = "Union ?acc_maxs_set"
       have 1:"?acc_maxs \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> apply (auto split add:option.splits) by (metis \<open>a \<in> q\<close>)
-      hence 2:"fst (max_by_key ?acc_maxs snd) = v" by (metis (no_types, lifting) assms(1) proved_safe_at_def)
+      hence 2:"fst (max_by_key ?acc_maxs snd) = v" using assms(1) proved_safe_at_def 
+        apply (auto simp add:max_pair_def split add:option.splits) apply (metis option.simps(3)) by (metis (no_types, lifting) fst_conv option.inject) 
       moreover
       have 7:"?acc_maxs = {max_by_key S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}"
         apply (auto simp add: acc_max_def split add:option.splits split_if_asm)
@@ -136,6 +150,6 @@ by (metis assms(1) assms(2) assms(3) ballot_array_props.intro quorums_axioms)
 
 end
 
-end
+end 
 
 end
