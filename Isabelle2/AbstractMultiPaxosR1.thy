@@ -5,22 +5,23 @@ begin
 text {* 
 1) Acceptors vote for a suggestion, and leaders use the distributed implementation of the safe-at computation.
 2) Explicit 1b messages.
+3) Explicit learning.
 *}
 
 type_synonym bal = nat
 type_synonym inst = nat
-text {* TODO: how to use and real type and the transfer package? *}
+text {* TODO: how to use real types, and the transfer package? *}
 
-record ('v,'a) amp_state =
+record ('v,'a,'l) amp_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
   vote :: "inst \<Rightarrow> 'a \<Rightarrow> bal \<rightharpoonup> 'v"
   suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> ('v\<times>bal))"
+  learned :: "'l \<Rightarrow> inst \<rightharpoonup> 'v"
 
 locale amp_ioa = IOA +
   fixes quorums::"'a set set"
-  fixes learners::"'l set"
 begin
 
 datatype ('vv,'aa,'ll) amp_action =
@@ -31,13 +32,13 @@ datatype ('vv,'aa,'ll) amp_action =
 definition amp_asig where
   "amp_asig \<equiv>
     \<lparr> inputs = { Propose c | c . True},
-      outputs = { Learn i v l | i v l . l \<in> learners},
+      outputs = { Learn i v l | i v l . True},
       internals = {Internal}\<rparr>"
 
 definition amp_start where
   -- {* The initial state *}
   "amp_start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> i a . Map.empty), 
-    suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty \<rparr>}"
+    suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty, learned = \<lambda> l . Map.empty \<rparr>}"
 
 subsection {* The transitions *}
 
@@ -71,7 +72,7 @@ abbreviation chosen where
   "chosen s i v \<equiv> ballot_array.chosen quorums (vote s i) v"
 
 definition learn where
-  "learn i v s s' \<equiv> chosen s i v \<and> s = s'"
+  "learn l i v s s' \<equiv> chosen s i v \<and> s' = s\<lparr>learned := (learned s)(l := (learned s l)(i := Some v))\<rparr>"
 
 fun amp_trans_rel where
   "amp_trans_rel r (Propose c) r' = propose c r r'"
@@ -79,13 +80,13 @@ fun amp_trans_rel where
     (\<exists> a b . join_ballot a b r r')
     \<or> (\<exists> a i v . do_vote a i v r r')
     \<or> (\<exists> i b v q . suggest i b v q r r'))"
-| "amp_trans_rel r (Learn i v l) r' = learn i v r r'"
+| "amp_trans_rel r (Learn i v l) r' = learn l i v r r'"
 
 lemma trans_cases[consumes 1]:
   assumes "amp_trans_rel r a r'"
   obtains 
   (propose) c where "propose c r r'"
-| (learn) i v where "learn i v r r'"
+| (learn) l i v where "learn l i v r r'"
 | (join_ballot) a b where "join_ballot a b r r'"
 | (do_vote) a i v where "do_vote a i v r r'"
 | (suggest) i b v q where "suggest i b v q r r'"
@@ -103,6 +104,5 @@ lemmas simps = amp_ioa_def amp_asig_def amp_start_def amp_trans_def propose_def 
   do_vote_def learn_def
 
 end
-
 
 end

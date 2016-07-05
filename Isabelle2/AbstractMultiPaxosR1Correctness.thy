@@ -5,13 +5,13 @@ imports AbstractMultiPaxosR1 "../../IO-Automata/IOA_Automation"
   BallotArrayProperties
 begin
 
-locale amp_proof = IOA + quorums quorums + amp_ioa quorums learners for
-     quorums :: "'a set set" and learners :: "'l set" +
-  fixes the_ioa :: "(('v,'a)amp_state, ('v,'a,'l)amp_action) ioa"
+locale amp_proof = IOA + quorums quorums + amp_ioa quorums for
+     quorums :: "'a set set" +
+  fixes the_ioa :: "(('v,'a,'l)amp_state, ('v,'a,'l)amp_action) ioa"
   defines "the_ioa \<equiv> amp_ioa"
 begin
 
-subsection {* Automation setup and a few lemmas *}
+subsection {* Automation setup *}
 
 lemmas amp_ioa_defs =
    is_trans_def actions_def amp_trans_def amp_start_def
@@ -31,6 +31,8 @@ method rm_trans_rel_assm =
   (match premises in P[thin]:"amp_trans_rel ?x ?y ?z" \<Rightarrow> \<open>-\<close>)
 method unfold_to_trans_rel = 
   (simp add:is_trans_def the_ioa_def amp_ioa_def amp_trans_def)
+
+subsection {* Auxiliary invariants *}
 
 definition inv1 where
   -- {* acceptors only vote for the suggestion. *}
@@ -178,16 +180,60 @@ apply (rule invariantI)
     done
   qed
 done
+declare inv2_and_safe[invs]
 
-subsection {* Finally, the proof that agreement holds (trivial, follows immediately from safe). *}
+definition inv5 where
+  inv5_def[inv_proofs_defs]:"inv5 s \<equiv> \<forall> i a b . ballot s a < b \<longrightarrow> vote s i a b = None"
+
+lemma  inv5:"invariant the_ioa inv5"
+apply (rule invariantI)
+apply (force simp add:inv_proofs_defs)
+apply instantiate_invs_2
+apply (unfold_to_trans_rel)
+apply (induct_tac rule:trans_cases, simp)
+apply (auto simp add:inv_proofs_defs split add:option.splits)
+done
+declare inv5[invs]
+
+lemma chosen_mono: assumes "chosen s i v" and "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "inv5 s"
+  shows "chosen t i v" using assms
+apply (unfold_to_trans_rel)
+apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
+apply (auto simp add:inv_proofs_defs split add:option.splits)[3] defer
+apply (auto simp add:inv_proofs_defs split add:option.splits)[1]
+apply (cases s, cases t, auto simp add:inv_proofs_defs ballot_array.chosen_def ballot_array.chosen_at_def split add:option.splits)
+by (metis option.distinct(1))
+(* nitpick[no_assms, show_consts, verbose,expect=none unknown, card 'a = 3, card 'v = 2, card 'l = 1, card 'v option = 3, card nat = 2, card nat option = 3,
+  card "(nat \<Rightarrow> ('v \<times> nat) option) option" = 10, card "('v \<times> nat) option" = 5] *)
+
+definition inv4 where 
+  inv4_def[inv_proofs_defs]:"inv4 s \<equiv> \<forall> i l . case learned s l i of Some v \<Rightarrow> chosen s i v | None \<Rightarrow> True"
+
+lemma  inv4:"invariant the_ioa inv4"
+apply (rule invariantI)
+apply (force simp add:inv_proofs_defs)
+apply instantiate_invs_2
+apply (unfold_to_trans_rel)
+apply (induct_tac rule:trans_cases, simp)
+apply (auto simp add:inv_proofs_defs split add:option.splits)[3] defer
+apply (auto simp add:inv_proofs_defs split add:option.splits)[1]
+apply (insert chosen_mono[simplified inv_proofs_defs])
+apply (auto simp add:inv4_def inv5_def  split add:option.splits)
+by (metis (mono_tags) amp_state.select_convs(3) amp_state.surjective amp_state.update_convs(3) fun_upd_same)
+declare inv4[invs]
+
+subsection {* Finally, the proof of agreement. *}
 
 definition agreement where 
-  "agreement s \<equiv> \<forall> v w i . chosen s i v \<and> chosen s i w \<longrightarrow> v = w"
+  "agreement s \<equiv> \<forall> i l1 l2 . let v = learned s l1 i; w = learned s l2 i 
+    in v \<noteq> None \<and> w \<noteq> None \<longrightarrow> v = w"
 
-lemma agreement:"invariant the_ioa agreement" 
+lemma agreement:"invariant the_ioa agreement"
 apply(rule invariantI)
-apply(auto simp add: inv_proofs_defs agreement_def ballot_array.chosen_def ballot_array.chosen_at_def)[1]
-by (metis (mono_tags, lifting) IOA.reach_and_inv_imp_p IOA.reachable_n agreement_def ballot_array_props.intro ballot_array_props.safe_imp_agreement inv2_and_safe quorums_axioms)
+    apply(auto simp add: inv_proofs_defs agreement_def ballot_array.chosen_def ballot_array.chosen_at_def)[1]
+  apply instantiate_invs_2 
+  apply (auto simp add:inv4_def agreement_def split add:option.splits)
+  by (metis ballot_array_props.intro ballot_array_props.safe_imp_agreement quorums_axioms)
 
 end
 
