@@ -1,4 +1,5 @@
-theory AbstractMultiPaxosR1
+theory 
+AbstractMultiPaxosR1
 imports  "../../IO-Automata/IOA" BallotArrays3 DistributedSafeAt
 begin
 
@@ -6,6 +7,7 @@ text {*
 1) Acceptors vote for a suggestion, and leaders use the distributed implementation of the safe-at computation.
 2) Explicit 1b messages.
 3) Explicit learning.
+4) Catch-up.
 *}
 
 type_synonym bal = nat
@@ -74,12 +76,17 @@ abbreviation chosen where
 definition learn where
   "learn l i v s s' \<equiv> chosen s i v \<and> s' = s\<lparr>learned := (learned s)(l := (learned s l)(i := Some v))\<rparr>"
 
+definition catch_up where
+  "catch_up l1 l2 i v s s' \<equiv> learned s l2 i = Some v 
+    \<and> s' = s\<lparr>learned := (learned s)(l1 := (learned s l1)(i := Some v))\<rparr>"
+
 fun amp_trans_rel where
   "amp_trans_rel r (Propose c) r' = propose c r r'"
 | "amp_trans_rel r Internal r' = (
     (\<exists> a b . join_ballot a b r r')
     \<or> (\<exists> a i v . do_vote a i v r r')
-    \<or> (\<exists> i b v q . suggest i b v q r r'))"
+    \<or> (\<exists> i b v q . suggest i b v q r r')
+    \<or> (\<exists> l1 l2 i v . catch_up l1 l2 i v r r'))"
 | "amp_trans_rel r (Learn i v l) r' = learn l i v r r'"
 
 lemma trans_cases[consumes 1]:
@@ -90,7 +97,8 @@ lemma trans_cases[consumes 1]:
 | (join_ballot) a b where "join_ballot a b r r'"
 | (do_vote) a i v where "do_vote a i v r r'"
 | (suggest) i b v q where "suggest i b v q r r'"
-using assms apply induct apply auto done
+| (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'"
+using assms by induct auto
 
 definition amp_trans where
   "amp_trans \<equiv> { (r,a,r') . amp_trans_rel r a r'}"

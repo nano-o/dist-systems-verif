@@ -21,7 +21,7 @@ declare amp_ioa_defs[inv_proofs_defs]
 declare the_ioa_def[inv_proofs_defs]
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp] suggest_def[simp]
-  learn_def[simp] Let_def[simp] split_if[split] split_if_asm[split]
+  learn_def[simp] Let_def[simp] split_if[split] split_if_asm[split] catch_up_def[simp]
 
 (*  Nitpick config:
 nitpick[no_assms, show_consts, verbose, card 'a = 3, card 'v = 2, card nat = 2, card "'v option" = 3, card "nat option" = 3,
@@ -47,7 +47,8 @@ apply (unfold_to_trans_rel)
 apply (rm_reachable)
 apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
 apply (simp_all add:inv1_def)
-by (metis option.simps(3))
+apply (metis option.simps(3))
+done
 declare inv1[invs]
 
 declare
@@ -65,9 +66,9 @@ apply instantiate_invs_2
 apply (unfold_to_trans_rel)
 apply (induct_tac rule:trans_cases, simp)
 apply (auto simp add:ballot_array.conservative_def)[3]
-defer
-apply (auto simp add:ballot_array.conservative_def)[1]
-subgoal premises prems using prems(1,3,5)  apply (simp add:inv_proofs_defs split add:option.splits) by metis
+subgoal premises prems using prems(1,3,5) apply (simp add:inv_proofs_defs split add:option.splits) by metis
+apply force
+apply (force simp add:ballot_array.conservative_def)
 done
 declare conservative[invs]
 
@@ -101,7 +102,7 @@ apply instantiate_invs_2
 apply (unfold_to_trans_rel)
 apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
           apply (auto simp add:inv_proofs_defs  split add:option.splits)[2]
-      defer defer apply (auto simp add:inv_proofs_defs  split add:option.splits)[2]
+      defer defer apply (auto simp add:inv_proofs_defs  split add:option.splits)[3]
       apply (metis dual_order.trans nat_less_le)
   subgoal premises prems for s t act a i v
   proof -
@@ -177,6 +178,7 @@ apply (rule invariantI)
         qed
         ultimately show ?thesis by auto
       qed
+      apply (auto simp add:inv_proofs_defs split add:option.splits)
     done
   qed
 done
