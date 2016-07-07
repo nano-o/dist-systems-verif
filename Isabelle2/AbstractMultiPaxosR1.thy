@@ -1,5 +1,4 @@
-theory 
-AbstractMultiPaxosR1
+theory AbstractMultiPaxosR1
 imports  "../../IO-Automata/IOA" BallotArrays3 DistributedSafeAt
 begin
 
@@ -68,7 +67,7 @@ definition acquire_leadership where
     \<and> \<not> amp_state.leader s a 
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
     \<and> s' = s\<lparr>leader := (amp_state.leader s)(a := True), 
-        suggestion := \<lambda> i . (suggestion s i)(b := 
+        suggestion := \<lambda> i . (suggestion s i)(b :=
           let m = distributed_safe_at.max_pair q (\<lambda> a . the (onebs s a b) i) in
             map_option fst m)\<rparr>"
 

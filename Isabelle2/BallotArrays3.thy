@@ -22,25 +22,12 @@ definition conservative_array where
 
 text {* Here the @{term Max} is the one from @{text Lattices_Big} *}
 
-definition proved_safe_at_2 where
-  "proved_safe_at_2 q b v \<equiv>
-    q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
-    (if \<exists> a b\<^sub>2 . a \<in> q \<and> b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None
-    then \<exists> a b\<^sub>2 . a \<in> q \<and> b\<^sub>2 < b \<and> vote a b\<^sub>2 = Some v
-      \<and> (\<forall> a\<^sub>2 b\<^sub>3 . a\<^sub>2 \<in> q \<and> b\<^sub>3 > b\<^sub>2 \<and> b\<^sub>3 < b \<longrightarrow> vote a\<^sub>2 b\<^sub>3 = None)
-    else True)" (* TODO: why not Max ...? *)
-
 definition proved_safe_at_2_a where
   "proved_safe_at_2_a q b v \<equiv>
     q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
     (if \<exists> a \<in> q . \<exists> b\<^sub>2 . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None
     then \<exists> a \<in> q . vote a (Max {b\<^sub>2 . \<exists> a \<in> q . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None}) = Some v
     else True)"
-
-lemma "proved_safe_at_2_a q b v = proved_safe_at_2 q b v"
-nitpick[verbose, card 'v = 2, card 'a = 3, card nat = 2, card "'v option" = 3,
-card "nat option" = 3, card "nat option option" = 4, expect=none]
-oops
 
 definition voted_bal where
   "voted_bal a v_bal b \<equiv> v_bal < b \<and> vote a v_bal \<noteq> None"
