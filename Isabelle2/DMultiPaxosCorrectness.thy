@@ -15,10 +15,6 @@ datatype msgs =
   Msg1b acc inst bal "bal \<times> cmd option"|
   Msg2a inst bal cmd
 
-record acc_state =
-  ballot :: "bal"
-  vote :: "inst \<Rightarrow>f bal \<Rightarrow>f cmd option"
-
 record mp_state = 
   ballot :: "acc \<Rightarrow>f bal"
   vote ::"acc \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f cmd option"
@@ -43,7 +39,7 @@ definition safeVote::"msgs set \<Rightarrow> mp_state \<Rightarrow> cmd option s
   "safeVote m1bmsgs state \<equiv> let 
       m1bpair = image (\<lambda>nm. case nm of (Msg1b _ _ _ vs) \<Rightarrow> vs) m1bmsgs;
       m1bBal = image (\<lambda>x. fst x) m1bpair;
-      maxBal = the_elem (Set.bind (Set.filter (\<lambda>le. \<forall>x \<in> m1bBal. x \<le> le) m1bBal) (\<lambda>x. {x}));
+      maxBal = the_elem (Set.filter (\<lambda>le. \<forall>x \<in> m1bBal. x \<le> le) m1bBal);
       maxVal = image (\<lambda>x. snd x) (Set.filter (\<lambda>le. fst le = maxBal) m1bpair);
       safeVal = Set.remove None maxVal in
    if (safeVal \<noteq> {}) then safeVal else propCmds state"
@@ -57,13 +53,12 @@ init:
   "\<lbrakk> s \<in> reach; c \<notin> propCmds s \<rbrakk> \<Longrightarrow>
     s\<lparr> propCmds := (propCmds s) \<union> {c} \<rparr> \<in> reach"
 | phase1a:
-  "\<lbrakk> s \<in> reach; b > 0; Msg1a b \<notin> network s \<rbrakk> \<Longrightarrow>
+  "\<lbrakk> s \<in> reach; Msg1a b \<notin> network s \<rbrakk> \<Longrightarrow>
     s\<lparr> network := (network s) \<union> {Msg1a b} \<rparr> \<in> reach"
 | phase1b:
   "\<lbrakk> s \<in> reach; Msg1a b \<in> network s; a \<in> accs; 
-    (ballot s) $ a < b; s1 = s\<lparr>ballot := (ballot s)(a $:= b)\<rparr>;
-    (maxBal, v) = (maxAcceptorVote a i s1); Msg1b a i b (maxBal, v) \<notin> network s \<rbrakk> \<Longrightarrow>
-    s1\<lparr> network := (network s) \<union> {Msg1b a i b (maxBal,v)} \<rparr> \<in> reach"
+    (ballot s) $ a < b; (maxBal, v) = (maxAcceptorVote a i s); Msg1b a i b (maxBal, v) \<notin> network s \<rbrakk> \<Longrightarrow>
+    s\<lparr> ballot := (ballot s)(a $:= b), network := (network s) \<union> {Msg1b a i b (maxBal,v)} \<rparr> \<in> reach"
 | phase2a:
   "\<lbrakk> s \<in> reach; 
     m2anum = card (Set.filter (\<lambda>nm. case nm of Msg2a i2 b2 _ \<Rightarrow> (i2 = i \<and> b2 = b)| _ \<Rightarrow> False) (network s)); m2anum = 0; 
@@ -126,22 +121,22 @@ next
   thus ?case using vote_cmd.prems(2,3) vote_cmd.hyps(2)
     by (simp add: mp_state.ext_inject mp_state.surjective mp_state.update_convs(2))
 next
-  case (phase1b s b' a' s1 maxB v' i')
+  case (phase1b s b' a' maxB v' i')
   have " Msg2a i b c \<in> network s" using phase1b.prems(1)
     using UnE mp_state.ext_inject mp_state.surjective mp_state.update_convs(3) msgs.simps(9) singletonD by auto
   hence 0:"card accs < 2 * card (Set.filter (\<lambda>a. case a of Msg1b x i2 b2 xa \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network s))"
     using phase1b.prems(2,3) phase1b.hyps(2)
       by (simp add: finite_Un mp_state.select_convs(3) mp_state.surjective mp_state.update_convs(3))
-  have "(network s) \<subseteq> (network (s1\<lparr>network := network s \<union> {Msg1b a' i' b' (maxB, v')}\<rparr>))"
+  have "(network s) \<subseteq> (network (s\<lparr>ballot := (ballot s)(a' $:= b'), network := network s \<union> {Msg1b a' i' b' (maxB, v')}\<rparr>))"
     by (simp add: Un_empty_right Un_insert_right mp_state.ext_inject mp_state.surjective mp_state.update_convs(3) subset_insertI)
   hence 1:"Set.filter (\<lambda>a. case a of Msg1b x i2 b2 xa \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network s) \<subseteq>
-    Set.filter (\<lambda>a. case a of Msg1b x i2 b2 xa \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network (s1\<lparr>network := network s \<union> {Msg1b a' i' b' (maxB, v')}\<rparr>))"
+    Set.filter (\<lambda>a. case a of Msg1b x i2 b2 xa \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network (s\<lparr>ballot := (ballot s)(a' $:= b'), network := network s \<union> {Msg1b a' i' b' (maxB, v')}\<rparr>))"
       by (simp add: subset_eq)
-  have "finite (Set.filter (\<lambda>a. case a of Msg1b x i2 b2 xa \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network (s1\<lparr>network := network s \<union> {Msg1b a' i' b' (maxB, v')}\<rparr>)))"
+  have "finite (Set.filter (\<lambda>a. case a of Msg1b x i2 b2 xa \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network (s\<lparr>ballot := (ballot s)(a' $:= b'), network := network s \<union> {Msg1b a' i' b' (maxB, v')}\<rparr>)))"
     using phase1b.prems(3)
       by (simp add: Collect_mem_eq Set.filter_def finite_Collect_conjI)
   hence "card (Set.filter (\<lambda>a. case a of Msg1b x i2 b2 xa \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network s)) \<le>
-    card (Set.filter (\<lambda>a. case a of Msg1b x i2 b2 xa \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network (s1\<lparr>network := network s \<union> {Msg1b a' i' b' (maxB, v')}\<rparr>)))"
+    card (Set.filter (\<lambda>a. case a of Msg1b x i2 b2 xa \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network (s\<lparr>ballot := (ballot s)(a' $:= b'), network := network s \<union> {Msg1b a' i' b' (maxB, v')}\<rparr>)))"
       using phase1b.prems(3) 1 card_mono by blast 
   thus ?case using 0 using le_less_trans nat_mult_less_cancel_disj not_le by linarith 
 next
@@ -171,7 +166,7 @@ next
       by (smt Collect_cong Set.filter_def Un_insert_right insert_iff mp_state.ext_inject mp_state.surjective mp_state.update_convs(3) msgs.simps(12) sup_bot.comm_neutral)
   qed
 qed
-  
+
 lemma single_i_b[simp]:
   assumes "s \<in> reach" and "Msg2a i b c \<in> network s" and "finite accs" and "finite (network s)"
   shows "card (Set.filter (\<lambda>nm. case nm of Msg2a i2 b2 _ \<Rightarrow> (i2 = i \<and> b2 = b)| _ \<Rightarrow> False) (network s)) = 1"
@@ -195,16 +190,14 @@ next
   thus ?case using vote_cmd.prems(2,3) vote_cmd.hyps(2)
     using mp_state.ext_inject mp_state.surjective mp_state.update_convs(2) by fastforce  
 next
-  case (phase1b s b' a' s1 maxBal v' i')
+  case (phase1b s b' a' maxBal v' i')
     have 0:"Msg2a i b c \<in> network s" using phase1b.prems(1)
       by (simp add: Un_insert_right insert_iff mp_state.cases mp_state.select_convs(3) mp_state.update_convs(3) msgs.simps(9) sup_bot.right_neutral)
     have "finite (network s)" using phase1b.prems(3)
       by (simp add: finite_Un mp_state.select_convs(3) mp_state.surjective mp_state.update_convs(3))
-    hence 1:"card (Set.filter(\<lambda>a. case a of  Msg2a i2 b2 x \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network s)) = 1" 
+    hence "card (Set.filter(\<lambda>a. case a of  Msg2a i2 b2 x \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network s)) = 1" 
       using 0 phase1b.prems(2) phase1b.hyps(2) by blast
-    hence "card (Set.filter(\<lambda>a. case a of  Msg2a i2 b2 x \<Rightarrow> i2 = i \<and> b2 = b | _ \<Rightarrow> False) (network s1)) = 1" 
-      using phase1b.hyps(6) by (simp add: mp_state.ext_inject mp_state.surjective mp_state.update_convs(1))
-    thus ?case using 1
+    thus ?case
       by (smt Collect_cong Set.filter_def UnCI Un_insert_right insertE mp_state.select_convs(3) mp_state.surjective mp_state.update_convs(3) msgs.case(2) sup_bot.comm_neutral) 
 next
   case (phase2a s m2anum i' b' m1bmsgs safeVal c')
@@ -286,16 +279,14 @@ next
   case phase2a
     thus ?case by (metis finite_Un mp_state.ext_inject mp_state.surjective mp_state.update_convs(3)) 
 next
-  case (phase1b s b' a' s1 maxNal v' i')
+  case (phase1b s b' a' maxNal v' i')
     thus ?case
       by (simp add: mp_state.ext_inject mp_state.surjective mp_state.update_convs(1) mp_state.update_convs(3)) 
 next
   case (vote_cmd s a' b' i' c')
-    print_cases
     thus ?case
     proof(cases "acc\<^sub>1 = a' \<and> i = i' \<and> b = b'")
       case True
-        print_cases
         assume 0:"acc\<^sub>1 = a' \<and> i = i' \<and> b = b'"
         have 1:"i = i' \<and> b = b'" using 0 by blast
         have 2:"cmd2 = (vote s) $ acc\<^sub>2 $ i $ b" using vote_cmd.prems(7,5) 0
