@@ -50,10 +50,10 @@ fun safe_value_rec where
   "safe_value_rec _ b c [] seen m = 
     (if is_quorum seen then (case m of None \<Rightarrow> True | Some (b2,c2) \<Rightarrow> c = c2) else False)"
 | "safe_value_rec i b c ((Phase1b a i2 b2 vs)#es) seen m =
-    (if (a \<notin> seen \<and> i2 = i) then
+    (if (a \<notin> seen \<and> i2 = i \<and> b2 = b) then
       let seen' = (seen \<union> {a}); c2 = map_option snd vs;
-          m' = (if b2 \<le> b then (case m of None \<Rightarrow> Some (b2,c2) | Some (b3,c3) \<Rightarrow> if b2 > b3 
-            then Some (b2,c2) else m) else m)
+          m' = (case m of None \<Rightarrow> Some (b2,c2) | Some (b3,c3) \<Rightarrow> if b2 > b3 
+            then Some (b2,c2) else m)
       in if is_quorum seen' 
         then (case m' of None \<Rightarrow> True | Some (b3,c3) \<Rightarrow> c = c3)
         else safe_value_rec i b c es seen' m' 
@@ -94,7 +94,7 @@ lemma "\<lbrakk>paxos es; ballot_2 a es = b\<rbrakk> \<Longrightarrow> (started 
 lemma assumes "paxos es" and "a \<noteq> a2" 
   shows "last_vote_2 a i es = None \<or> last_vote_2 a2 i es = None" quickcheck oops
 
-lemma assumes "paxos es" shows "\<not> started b es" nitpick oops
+lemma assumes "paxos es" shows "\<not> started b es" oops
 
 lemma assumes "paxos es" 
   shows "\<not> (started b es \<and> ballot_2 a es \<le> 1 \<and> r = last_vote_2 a i es \<and> r \<noteq> None)" quickcheck[eval="ballot_2 a es"]
