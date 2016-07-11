@@ -116,6 +116,15 @@ fun ballot :: "event list \<Rightarrow> acc \<Rightarrow> bal" and
         case e of VoteCmd a' i' b' c' \<Rightarrow> 
           if (a = a' \<and> i = i' \<and> b' = (ballot s a) \<and> Msg2a i b' c' \<in> network s) then vs(b' $:= Some c') else vs
       |_ \<Rightarrow> vs)"
+
+fun paxos where
+  "paxos [] = True"
+| "paxos ((Propose c) # es) = True"
+| "paxos ((Phase1a b) # es) = (b > 0 \<and> paxos es)"
+| "paxos ((Phase1b a i b r) # es) = (started b es \<and> ballot_2 a es \<le> b \<and> r = last_vote_2 a i es \<and> paxos es)"
+| "paxos ((Phase2a i b c) # es) = (safe_value i b c es \<and> paxos es)"
+| "paxos ((VoteCmd a i b c) # es) = (suggestion i b es = Some c \<and> paxos es)"
+
 thm network.simps(2)
 lemma network_prop1[simp]:"network (Phase1a b # s) = network s \<or> network (Phase1a b # s) = network s \<union> {Msg1a b}"
    by (smt event.simps(27) network.simps(2))
