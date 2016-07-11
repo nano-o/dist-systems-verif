@@ -4,12 +4,15 @@ theory BallotArrays3
 imports Main "~~/src/HOL/Library/Monad_Syntax" LinorderOption Quorums2 Max_Properties
 begin
 
-subsection {* The definitions *}
+text {* A ballot array represents a history of execution of a Paxos-like algorithm, i.e. the current 
+  ballot of every acceptor, and the history of all votes ever cast by every acceptor . *}
 
 locale ballot_array =
   fixes quorums :: "'a set set"
   and ballot :: "'a \<Rightarrow> nat"
+    -- {* The current ballot *}
   and vote :: "'a \<Rightarrow> nat \<rightharpoonup> 'v"
+    -- {* The history of votes *}
 begin
 
 definition conservative where
@@ -18,22 +21,18 @@ definition conservative where
       case v1 of Some x \<Rightarrow> (case v2 of Some y \<Rightarrow> x = y | None \<Rightarrow> True) | None \<Rightarrow> True"
 
 definition conservative_array where
+  -- {* A ballot array is conservative when all votes cast in a given ballot are the same. *}
   "conservative_array \<equiv> \<forall> b . conservative b"
 
 text {* Here the @{term Max} is the one from @{text Lattices_Big} *}
 
 definition proved_safe_at_2_a where
+  -- {* Any value that has been proved safe at ballot b can be voted for in ballot b. *}
   "proved_safe_at_2_a q b v \<equiv>
     q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
     (if \<exists> a \<in> q . \<exists> b\<^sub>2 . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None
     then \<exists> a \<in> q . vote a (Max {b\<^sub>2 . \<exists> a \<in> q . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None}) = Some v
     else True)"
-
-definition voted_bal where
-  "voted_bal a v_bal b \<equiv> v_bal < b \<and> vote a v_bal \<noteq> None"
-
-lemma finite_voted_bal:"finite {b\<^sub>a. voted_bal a b\<^sub>a b}"
-by (simp add: voted_bal_def)
 
 definition chosen_at where
   "chosen_at v b \<equiv> \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . vote a b = (Some v))"
@@ -42,6 +41,9 @@ definition chosen where
   "chosen v \<equiv> \<exists> b . chosen_at v b"
   
 definition choosable where
+  -- {* A value is choosable at ballot b when there is a quorum such that any acceptor in
+  this quorum that is past ballot b has voted for v. 
+  In a Paxos execution, choosable is monotonically decreasing. *}
   "choosable v b \<equiv>
     \<exists> q . q \<in> quorums \<and> (\<forall> a \<in> q . ballot a > b \<longrightarrow> vote a b = Some v)"
 
