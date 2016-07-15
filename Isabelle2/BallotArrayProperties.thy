@@ -4,6 +4,13 @@ theory BallotArrayProperties
 imports Main BallotArrays3 Quorums2 
 begin
 
+text {* 
+In this theory we show the two main properties of ballot-arrays:
+1) If a value v is @{term "ballot_array.proved_safe_at_2_a q b v"}, then it is @{term "ballot_array.safe_at v b"}}
+2) If a ballot array increases, according to the prefix definition below, then every
+value that was @{term "ballot_array.safe_at v b"} before is still @{term "ballot_array.safe_at v b"}}}
+*}
+
 subsection {* Correctness of the @{term proved_safe_at} computation *}
 
 locale ballot_array_props = ballot_array quorums + quorums quorums for quorums
