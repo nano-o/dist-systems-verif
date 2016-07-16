@@ -46,7 +46,7 @@ definition join_ballot where
 
 abbreviation proved_safe_at where 
   -- {* v is proved safe in instance i at ballot b by quorum q *}
-  "proved_safe_at s i q b v \<equiv> ballot_array.proved_safe_at_2_a quorums (ballot s) (vote s i) q b v"
+  "proved_safe_at s i q b v \<equiv> ballot_array.proved_safe_at_abs quorums (ballot s) (vote s i) q b v"
 
 abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (vote s i)"
