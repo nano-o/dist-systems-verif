@@ -36,7 +36,7 @@ apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
     apply (force simp add:ballot_array.conservative_def)
   apply (case_tac a) 
   apply (auto simp add:inv_proofs_defs split add:option.split_asm)
-done
+done 
 declare conservative_inductive[invs]
 
 subsection {* @{term safe}  is inductive relative to @{term conservative_array}} *}

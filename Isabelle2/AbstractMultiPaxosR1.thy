@@ -15,6 +15,11 @@ type_synonym bal = nat
 type_synonym inst = nat
 text {* TODO: how to use real types, and the transfer package? *}
 
+text {* 
+How to make it executable? Use finfun or mappings? 
+Create a finfun version, then show refinement?
+*}
+
 record ('v,'a,'l) amp_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
@@ -91,7 +96,7 @@ definition learn where
   "learn l i v s s' \<equiv> chosen s i v \<and> s' = s\<lparr>learned := (learned s)(l := (learned s l)(i := Some v))\<rparr>"
 
 definition catch_up where
-  "catch_up l1 l2 i v s s' \<equiv> learned s l2 i = Some v 
+  "catch_up l1 l2 i v s s' \<equiv> learned s l2 i = Some v
     \<and> s' = s\<lparr>learned := (learned s)(l1 := (learned s l1)(i := Some v))\<rparr>"
 
 fun amp_trans_rel where
