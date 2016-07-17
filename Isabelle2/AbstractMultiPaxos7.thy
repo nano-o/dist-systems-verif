@@ -6,14 +6,13 @@ section {* Definition of the Abstract MultiPaxos I/O-automaton *}
 
 subsection {* State and actions *}
 
-text {* The actions (labels on transitions) of the I/O-automaton *}
-
 text {* The states of the I/O-automaton *}
 
 record ('v,'a) amp_state =
   propCmd :: "'v set"
-  ballot :: "'a \<Rightarrow> nat"
-  vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  ballot :: "'a \<Rightarrow> bal"
+  vote :: "nat \<Rightarrow> 'a \<Rightarrow> bal \<Rightarrow> 'v option"
+    -- {* @{term amp_state.vote} is a function from instance, acceptor, and ballot to an optional vote *}
 
 locale amp_ioa = IOA +
   fixes quorums::"'a set set"
@@ -21,6 +20,7 @@ locale amp_ioa = IOA +
 begin
 
 datatype ('vv,'aa,'ll) amp_action =
+  --  {* The actions (labels on transitions) of the I/O-automaton *}
   Propose 'vv
 | Learn nat 'vv 'll
 | Internal
@@ -46,10 +46,10 @@ definition join_ballot where
 
 abbreviation proved_safe_at where 
   -- {* v is proved safe in instance i at ballot b by quorum q *}
-  "proved_safe_at s i q b v \<equiv> ballot_array.proved_safe_at_abs quorums (ballot s) (vote s i) q b v"
+  "proved_safe_at s i q b v \<equiv> bal_proved_safe_at_abs quorums (ballot s) (vote s i) q b v"
 
 abbreviation conservative_at where
-  "conservative_at s i \<equiv> ballot_array.conservative_array (vote s i)"
+  "conservative_at s i \<equiv> bal_conservative_array (vote s i)"
 
 definition do_vote where
   "do_vote a i q v s s' \<equiv> let b = ballot s a in
@@ -61,7 +61,7 @@ definition do_vote where
         \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>"
 
 abbreviation chosen where
-  "chosen s i v \<equiv> ballot_array.chosen quorums (vote s i) v"
+  "chosen s i v \<equiv> bal_chosen quorums (vote s i) v"
 
 definition learn where
   "learn i v s s' \<equiv> chosen s i v \<and> s = s'"

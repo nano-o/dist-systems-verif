@@ -31,7 +31,7 @@ abbreviation conservative_array where
 "conservative_array s \<equiv>  \<forall> i . conservative_at s i"
 
 lemma conservative_inductive:
-  "invariant the_ioa conservative_array"
+  "invariant the_ioa conservative_array" (* TODO: how to transfer this from bal to nat? *)
 apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
     apply (force simp add:ballot_array.conservative_def)
   apply (case_tac a) 

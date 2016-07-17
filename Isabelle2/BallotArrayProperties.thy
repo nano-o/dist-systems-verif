@@ -6,21 +6,28 @@ begin
 
 text {* 
 In this theory we show the two main properties of ballot-arrays:
-1) If a value v is @{term "ballot_array.proved_safe_at_2_a q b v"}, then it is @{term "ballot_array.safe_at v b"}}
+1) If a value v is @{term "ballot_array.proved_safe_at_abs q b v"}, then it is @{term "ballot_array.safe_at v b"}}
 2) If a ballot array increases, according to the prefix definition below, then every
-value that was @{term "ballot_array.safe_at v b"} before is still @{term "ballot_array.safe_at v b"}}}
+value that was @{term "ballot_array.safe_at v b"} before is still @{term "ballot_array.safe_at v b"}
 *}
 
-subsection {* Correctness of the @{term proved_safe_at} computation *}
+subsection {* Correctness of the @{term proved_safe_at_abs} computation *}
 
 locale ballot_array_props = ballot_array quorums + quorums quorums for quorums
 begin
 
 context 
-begin 
+begin
 
-lemma "safe_at v (bot::nat)"
-by (auto simp add:safe_at_def)
+lemma safe_zero:"safe_at v 0" oops
+(*
+apply (auto simp add:safe_at_def less_bal zero_bal)
+subgoal premises prems for b v
+proof -
+  from prems(1) have False by (transfer, simp)
+  thus ?thesis by auto
+qed
+done *)
 
 (* Only used in safe \<Rightarrow> agreement *)
 private lemma chosen_at_is_choosable:
@@ -47,8 +54,8 @@ by (metis assms chosen_at_def option.inject quorum_inter_witness)
 private lemma all_choosable_no_safe:
   assumes "\<And> (v::'b) . choosable v b"
   and "safe_at v (Suc b)" and "(v1::'b) \<noteq> v2"
-  shows False
-  by (metis assms(1) assms(2) assms(3) lessI safe_at_def)
+  shows False (* using assms apply (simp add:safe_at_def) *)
+  by (metis assms lessI safe_at_def)
 (*>*) 
 
 lemma safe_imp_agreement:
@@ -84,16 +91,16 @@ qed
 
 text {* The main lemma. Inspired by section 2.2.2 of the paper "Fast Paxos", by Leslie Lamport. *}
 
-lemma proved_safe_at_2_a_imp_safe_at:
+lemma proved_safe_at_abs_imp_safe_at:
   assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"
-  and "proved_safe_at_2_a q i v" and "conservative_array"
+  and "proved_safe_at_abs q i v" and "conservative_array"
   shows "safe_at v (i::nat)"
 proof (cases "i = 0")
   case True thus ?thesis
     by (metis not_less0 safe_at_def)
 next
   case False
-  have "q \<in> quorums" and ballot_q:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" using assms(2) by (auto simp add:proved_safe_at_2_a_def)
+  have "q \<in> quorums" and ballot_q:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" using assms(2) by (auto simp add:proved_safe_at_abs_def)
   text {* There are two cases: 
     (a) an acceptor a in the quorum q voted in round k < i, 
     and k is the maximum round smaller than i in which an acceptor in q voted;
@@ -111,7 +118,7 @@ next
     def votes \<equiv> "{l . \<exists> a \<in> q . l < i \<and> vote a l \<noteq> None }"
     def k \<equiv> "Max votes"
     from True assms(2) obtain a where "a \<in> q" and "vote a k = Some v"
-      by (auto simp add:proved_safe_at_2_a_def k_def votes_def)
+      by (auto simp add:proved_safe_at_abs_def k_def votes_def)
     moreover have "k < i" and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
     proof -
       have "k \<in> votes" and "\<And> x . x \<in> votes \<Longrightarrow> x \<le> k"

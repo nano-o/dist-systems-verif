@@ -9,11 +9,29 @@ text {*
 4) Catch-up.
 5) Localizing suggestions (the leader function).
 6) Explicit leadership acquisition.
+7) typedef for bal.
 *}
 
-type_synonym bal = nat
+text {* What about defining a new command to make type copies? *}
+
+typedef bal = "UNIV::nat set"
+by auto 
+setup_lifting type_definition_bal
+lift_definition zero :: bal is "0::nat" .
+instantiation bal :: zero
+begin
+definition Zero_nat_def:
+  "0 = zero"
+instance ..
+end
+
 type_synonym inst = nat
 text {* TODO: how to use real types, and the transfer package? *}
+
+text {* 
+How to make it executable? Use finfun or mappings? 
+Create a finfun version, then show refinement?
+*}
 
 record ('v,'a,'l) amp_state =
   propCmd :: "'v set"
@@ -91,7 +109,7 @@ definition learn where
   "learn l i v s s' \<equiv> chosen s i v \<and> s' = s\<lparr>learned := (learned s)(l := (learned s l)(i := Some v))\<rparr>"
 
 definition catch_up where
-  "catch_up l1 l2 i v s s' \<equiv> learned s l2 i = Some v 
+  "catch_up l1 l2 i v s s' \<equiv> learned s l2 i = Some v
     \<and> s' = s\<lparr>learned := (learned s)(l1 := (learned s l1)(i := Some v))\<rparr>"
 
 fun amp_trans_rel where
