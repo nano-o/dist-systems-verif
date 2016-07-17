@@ -235,10 +235,25 @@ qed
 
 export_code max_inst_bal in SML
 
+term "foldr (insort_key id)"
+term "insort_key id"
+value "insort_key id 3 ([2,1,4]::int list)"
+
+definition max_inst_vote where "max_inst_vote vs \<equiv> map_option (\<lambda> b . SOME v . Some (v,b) \<in> vs) (max_inst_bal vs)"
+
+lemma l1[code]:"max_inst_vote (set vs) = map_option fst (hd (sort_key (map_option (\<lambda> (v,b) . b)) vs))" sorry
+
+export_code max_inst_vote in SML
+
+definition max_votes_2 :: "(acc \<times> (inst \<rightharpoonup> ('c \<times> bal))) set \<Rightarrow> (inst \<rightharpoonup> 'c)" where
+  "max_votes_2 one_bs \<equiv> max_inst_vote o (inst_votes one_bs)"
+
+export_code max_votes_2 in SML
+
 (* TODO: a code equation for max_inst_bal, in terms of fold on lists? *)
 
 definition max_votes :: "(acc \<times> (inst \<rightharpoonup> ('c \<times> bal))) set \<Rightarrow> (inst \<rightharpoonup> 'c)" where
-  "max_votes one_bs \<equiv> (\<lambda> vs . max_inst_bal vs \<bind> (\<lambda> b . Some (SOME v . Some (v,b) \<in> vs))) 
+  "max_votes one_bs \<equiv> (\<lambda> vs . map_option (\<lambda> b . (SOME v . Some (v,b) \<in> vs)) (max_inst_bal vs)) 
     o (inst_votes one_bs)"
 
 (* TODO: a code equation for that too. *)
