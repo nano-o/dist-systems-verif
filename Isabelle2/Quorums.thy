@@ -1,4 +1,4 @@
-theory Quorums2
+theory Quorums
 imports Main
 begin
 

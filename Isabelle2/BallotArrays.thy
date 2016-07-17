@@ -1,7 +1,7 @@
 section {* Definition of ballot arrays *}
 
-theory BallotArrays3
-imports Main "~~/src/HOL/Library/Monad_Syntax" LinorderOption Quorums2 Max_Properties
+theory BallotArrays
+imports Main "~~/src/HOL/Library/Monad_Syntax"Quorums Max_Properties
 begin
 
 text {* A ballot array represents a history of execution of a Paxos-like algorithm, i.e. the current 

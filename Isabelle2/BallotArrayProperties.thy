@@ -1,7 +1,7 @@
 section {* Properties of ballot arrays. *}
 
 theory BallotArrayProperties
-imports Main BallotArrays3 Quorums2 
+imports Main BallotArrays Quorums 
 begin
 
 text {* 

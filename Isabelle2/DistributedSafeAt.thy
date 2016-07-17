@@ -1,5 +1,5 @@
 theory DistributedSafeAt
-imports BallotArrays3 BallotArrayProperties
+imports BallotArrays BallotArrayProperties
 begin
 
 subsection {* Computing safe values in a distributed implementation *}

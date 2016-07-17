@@ -1,7 +1,7 @@
 section {* Proof of the agreement property of AbstractMultiPaxos. *}
 
 theory AbstractMultiPaxosR1Correctness
-imports AbstractMultiPaxosR1 "../../IO-Automata/IOA_Automation"
+imports AbstractMultiPaxosR1 "/home/nano/Documents/IO-Automata/IOA_Automation"
   BallotArrayProperties
 begin
 

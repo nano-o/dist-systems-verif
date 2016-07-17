@@ -1,7 +1,7 @@
 section {* A few lemmas about Max *}
 
 theory Max_Properties 
-imports Main LinorderOption
+imports Main 
 begin
 
 lemma Max_Max:
@@ -22,27 +22,6 @@ qed
 
 lemma Max_bot:"\<lbrakk>finite (S::'b::{linorder,order_bot} set); S \<noteq> {}; s \<in> S; Max S = bot\<rbrakk> \<Longrightarrow> s = bot"
 by (metis Max.coboundedI bot.extremum_uniqueI)
-
-lemma max_insert_none:
-  fixes S :: "'b::linorder option set"
-  assumes "S \<noteq> {}" and "finite S"
-  shows "Max (insert None S) = Max S"
-using bot_def Max_insert assms bot.extremum max_def by metis
-
-lemma Some_Max_commute:
-  fixes S::"'b::linorder set" assumes "S \<noteq> {}" and "finite S"
-  shows "Max (Some ` S) = Some (Max S)"
-proof -
-  have "mono (Some::('b::linorder \<Rightarrow> 'b option))" 
-  proof (auto simp add:mono_def)
-    fix x y :: "'b::linorder"
-    assume "x \<le> y"
-    thus "Some x \<le> Some y"
-      by (metis less_eq_def less_eq_o.simps(3)) 
-  qed
-  thus ?thesis
-  by (metis assms(1) assms(2) mono_Max_commute) 
-qed
 
 subsection {* Max by key *}
 
