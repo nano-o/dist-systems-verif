@@ -306,16 +306,16 @@ definition agreement where agreement_def[inv_proofs_defs]:
 
 lemma agreement:"invariant the_ioa agreement"
 proof -
-  { fix s
-    assume "inv4 s" and "safe s"
-    have "agreement s"
-    proof (auto simp add:inv_proofs_defs)
-      fix i l1 l2 v w
-      assume a1:"learned s l1 i = Some v" and a2:"learned s l2 i = Some w"
-      with \<open>inv4 s\<close> have "chosen s i v" and "chosen s i w" by (auto simp add:inv_proofs_defs split add:option.splits)
-      with \<open>safe s\<close> show "v = w" by (metis ballot_array_props.intro ballot_array_props.safe_imp_agreement quorums_axioms)
-    qed }
-  thus ?thesis using inv4 inv8_inv2_safe by (metis (mono_tags, lifting) IOA.invariant_def) 
+  text {* We prove that @{term inv4} and @{term  safe} imply @{term agreement}. 
+    Therefore, since they are invariant, @{term agreement} is invariant} *}
+  have "agreement s" if "inv4 s" and "safe s" for s
+  proof (auto simp add:inv_proofs_defs)
+    fix i l1 l2 v w
+    assume a1:"learned s l1 i = Some v" and a2:"learned s l2 i = Some w"
+    with \<open>inv4 s\<close> have "chosen s i v" and "chosen s i w" by (auto simp add:inv_proofs_defs split add:option.splits)
+    with \<open>safe s\<close> show "v = w" by (metis ballot_array_props.intro ballot_array_props.safe_imp_agreement quorums_axioms)
+  qed
+  thus ?thesis using inv4 inv8_inv2_safe by (metis (mono_tags, lifting) IOA.invariant_def)
 qed
     
 end
