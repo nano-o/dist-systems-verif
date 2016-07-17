@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosCode
-imports AbstractMultiPaxosR1
+imports AbstractMultiPaxosR1 "~~/src/HOL/Library/FinFun_Syntax"
 begin
 
 print_locale amp_ioa
@@ -25,22 +25,26 @@ value qs
 
 record amp_state_2 =
   propCmd :: "nat set"
-  ballot :: "nat \<Rightarrow> bal"
-  vote :: "inst \<Rightarrow> nat \<Rightarrow> bal \<rightharpoonup> nat"
-  suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> nat"
-  onebs :: "nat \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> (nat\<times>bal))"
-  learned :: "nat \<Rightarrow> inst \<rightharpoonup> nat"
-  leader_ :: "nat \<Rightarrow> bool"
+  ballot :: "nat \<Rightarrow>f bal"
 
 definition amp_start_2 where
   -- {* The initial state *}
-  "amp_start_2 \<equiv> {\<lparr>amp_state_2.propCmd = {}, amp_state_2.ballot = (\<lambda> a . 0), amp_state_2.vote = (\<lambda> i a . Map.empty), 
-    amp_state_2.suggestion = \<lambda> i . Map.empty, amp_state_2.onebs = \<lambda> a . Map.empty, amp_state_2.learned = \<lambda> l . Map.empty,
-    amp_state_2.leader_ = \<lambda> a . leader 0 = a\<rparr>}"
+  "amp_start_2 \<equiv> {\<lparr>amp_state_2.propCmd = {}, amp_state_2.ballot = (K$ 0)\<rparr>}"
 
-text {* Fails *}
+text {* Fails. Should we lift to finfun? How? The problem seems to come from records *}
 value "amp_start_2"
 
+record test_rec = x :: "nat \<Rightarrow> bal"
+record test_rec_2 = x :: "nat \<Rightarrow>f bal"
+value "\<lparr>x = \<lambda> a . (0::nat)\<rparr>"
+-- {* works *}
+value "{\<lparr>x = \<lambda> a . (0::nat)\<rparr>}"
+-- {* fails *}
+value "{\<lparr>x = (K$ 0)\<rparr>}"
+-- {* works *}
+value "{(\<lambda> a::nat . (0::nat))}"
+-- {* fails too *}
+term List.coset
 global_interpretation amp_ioa quorums leader 
   defines mytest = "amp_ioa.amp_start" .
 
