@@ -2,16 +2,17 @@ section {* MultiPaxosL1 refines AbstractMultiPaxos7 *}
 
 theory MultiPaxosL1Correctness
 imports MultiPaxosL1 AbstractMultiPaxos7 "../../IO-Automata/Simulations"
+  BallotArrayProperties
 begin
 
-locale l1_correctness = mp1 acceptors quorums learners for acceptors quorums learners +
+locale l1_correctness = mp1  quorums learners for  quorums learners +
   fixes the_ioa :: "(('v,'a)mp_state, ('v,'a,'b)mp_action) ioa"
   defines "the_ioa \<equiv> mp_ioa"
     -- {* Here I just made this definition to "bind" all type variables so that I don't get
       weird behavior in apply scripts. *}
 begin
 
-interpretation amp: amp_ioa acceptors quorums learners .
+interpretation amp: amp_ioa quorums learners .
 
 context begin
 
@@ -48,16 +49,19 @@ definition amp_ioa_2 :: "(('v, 'a) amp_state, ('v, 'a, 'b) common_act) ioa" wher
 definition mp_ioa_2 :: "(('v, 'a) mp_state, ('v, 'a, 'b) common_act) ioa" where
   "mp_ioa_2 \<equiv> rename mp_ioa rn_1"
 
+subsection {* Invariants *}
+
 lemmas ioa_simps = rename_def rename_set_def refines_def is_trans_def trace_def
   externals_def schedule_def filter_act_def
 lemmas simps = amp_ioa_2_def mp_ioa_2_def amp.simps simps ioa_simps
 declare simps[inv_proofs_defs]
 
+text {* A suggestion is safe_at. *}
+
 definition inv1 :: "('v, 'a) mp_state \<Rightarrow> bool" where 
-  "inv1 s \<equiv> \<forall> i b v . let sug = suggestion s i b in 
-    sug = Some v \<longrightarrow> (v \<in> mp_state.propCmd s 
-      \<and> (\<exists> q \<in> quorums . proved_safe_at s i q b v
-          \<and> (\<forall> a \<in> q . mp_state.ballot s a \<ge> Some b)))"
+  "inv1 s \<equiv> \<forall> i b v . case suggestion of 
+    Some v \<Rightarrow> ballot_array.safe_at s 
+  | None \<Rightarrow> True"
 
 definition inv3 :: "('v, 'a) mp_state \<Rightarrow> bool" where 
   -- {* votes are always equal to the suggestion. Why do I need this? *}
