@@ -1,7 +1,7 @@
 section {* The specification of Composable Generalized Consensus *}
 
 theory ComposableGC
-imports CStruct "/home/nano/Documents/IO-Automata/IOA"
+imports CStruct IOA
 begin
 
 

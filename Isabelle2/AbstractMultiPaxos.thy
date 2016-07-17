@@ -1,5 +1,5 @@
-theory AbstractMultiPaxos7
-imports  "../../IO-Automata/IOA" BallotArrays3
+theory AbstractMultiPaxos
+imports  IOA BallotArrays
 begin
 
 section {* Definition of the Abstract MultiPaxos I/O-automaton *}

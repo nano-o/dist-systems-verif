@@ -1,7 +1,7 @@
 theory ComposableMultiPaxos
 imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
   LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
-  "../../IO-Automata/IOA" FinFun_Supplemental
+  IOA FinFun_Supplemental
 begin
 
 text {* A version of MultiPaxos using FinFuns *}

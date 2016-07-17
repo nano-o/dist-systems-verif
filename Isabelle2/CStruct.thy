@@ -1,5 +1,5 @@
 theory CStruct
-imports Main "/home/nano/Documents/IO-Automata/Sequences"
+imports Main Sequences
 begin
 
 section {* A formalization of command ctructures (C-Structs)*}
