@@ -38,7 +38,9 @@ begin
 context begin
 
 private                                                  
-lemma l1: assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_abs q b v"
+lemma l1: assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_2_a q b v"
+nitpick[verbose, card 'a = 3, card nat = 2, card 'b = 3, card "nat option" = 3, card "'b option" = 4, card "('b \<times> nat) option" = 7,
+  card "'b \<times> nat" = 6, expect=none]
 proof -
   text {* First a few immediate facts. *}
   from assms have "q \<in> quorums" and bals:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> b" using proved_safe_at_def by auto
@@ -137,17 +139,17 @@ proof -
     case False
     thus ?thesis by auto
   qed
-  thus ?thesis using \<open>q \<in> quorums\<close> bals by (auto simp add:proved_safe_at_abs_def)
+  thus ?thesis using \<open>q \<in> quorums\<close> bals by (auto simp add:proved_safe_at_2_a_def)
 qed
 
 lemma proved_safe_at_imp_safe_at:
   assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"
   and "proved_safe_at q i v" and "conservative_array"
-  shows "safe_at v (i::nat)" using l1 ballot_array_props.proved_safe_at_abs_imp_safe_at
+  shows "safe_at v (i::nat)" using l1 ballot_array_props.proved_safe_at_2_a_imp_safe_at
 by (metis assms(1) assms(2) assms(3) ballot_array_props.intro quorums_axioms) 
 
 end
 
-end
+end 
 
 end
