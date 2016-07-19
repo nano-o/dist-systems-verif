@@ -36,10 +36,15 @@ method unfold_to_trans_rel =
 subsection {* Auxiliary invariants *}
 
 definition inv6 where inv6_def[inv_proofs_defs]:
+  -- {* If a is the leader of ballot b and its current ballot is strictly lower than b or its 
+  ballot is equal to b but its leader flag is not set,
+  then no suggestion was made in ballot b.  *}
   "inv6 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> amp_state.leader s a))
     \<longrightarrow> suggestion s i b = None"
 
 definition inv7 where inv7_def[inv_proofs_defs]:
+  -- {* When the leader flag of an acceptor is set, then the leader function applied to the 
+  acceptor's current ballot returns this very acceptor. *}
   "inv7 s \<equiv> \<forall> a . amp_state.leader s a \<longrightarrow> leader (ballot s a) = a"
 
 lemma inv7: "invariant the_ioa inv7"
@@ -80,19 +85,35 @@ apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
 done
 declare inv1[invs]
 
-
 declare
   ballot_array.conservative_array_def[inv_proofs_defs]
   ballot_array.conservative_def[inv_proofs_defs]
 
 abbreviation conservative_array where
-  "conservative_array s \<equiv>  \<forall> i . ballot_array.conservative_array (vote s i)"
+  "conservative_array s \<equiv>  \<forall> i . bal_conservative_array (vote s i)"
+
+lemma "bal_conservative_array x" using [[show_types]]
+apply transfer oops
+
+lemma "\<forall> i . bal_conservative_array (vote s i)" using [[show_types]]
+apply transfer
+oops
 
 lemma conservative: "invariant the_ioa conservative_array"
 proof -
   have "\<And> s . inv1 s \<Longrightarrow> conservative_array s"
-    by (auto simp add:inv_proofs_defs split add:option.splits) (metis option.sel)
-  with inv1 show ?thesis  using IOA.invariant_def by blast 
+  proof -
+    have 1:"\<And> vsi ssi . \<lbrakk>\<And> a b y . vsi a b = Some y \<longrightarrow> vsi a b = ssi b\<rbrakk> \<Longrightarrow> bal_conservative_array vsi" for vsi a b y ssi
+      -- {* Here we generalize the goal in order to apply the transfer method. TODO: how to automate this? Maybe look at how induct implements "arbitrary". *}
+    apply transfer apply (auto simp add:ballot_array.conservative_array_def ballot_array.conservative_def split add:option.splits) by (metis option.sel)
+    show "inv1 s \<Longrightarrow> conservative_array s" for s
+    apply (auto simp add:inv_proofs_defs)
+    subgoal premises prems for i
+    apply (insert prems)
+    apply (insert 1[of "vote s i" "suggestion s i"]) by fast
+    done
+  qed
+  with inv1 show ?thesis  using IOA.invariant_def by blast
 qed
 declare conservative[invs]
 
@@ -104,13 +125,13 @@ lemma trans_imp_prefix_order:
   apply (auto simp add:is_prefix_def inv_proofs_defs split add:option.split_asm)
 done
 
-abbreviation safe_at where "safe_at s i \<equiv> ballot_array.safe_at quorums (ballot s) (vote s i)"
+abbreviation safe_at where "safe_at s i \<equiv> bal_safe_at quorums (ballot s) (vote s i)"
 
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic. *}
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "safe_at s i v b"
   shows "safe_at t i v b" using assms ballot_array_prefix.safe_at_mono
-by (metis ballot_array_prefix_axioms_def ballot_array_prefix_def quorums_axioms trans_imp_prefix_order) 
+(* apply (metis ballot_array_prefix_axioms_def ballot_array_prefix_def quorums_axioms trans_imp_prefix_order)  *)
 
 definition inv3 where inv3_def[inv_proofs_defs]:
   "inv3 s \<equiv> \<forall> a b . case onebs s a b of None \<Rightarrow> True

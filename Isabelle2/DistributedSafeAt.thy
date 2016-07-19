@@ -32,6 +32,10 @@ end
 print_locale distributed_safe_at
 print_locale quorums
 
+term distributed_safe_at.acc_max
+lift_definition bal_acc_max :: "('a \<Rightarrow> bal \<Rightarrow> 'b option) \<Rightarrow> 'a \<Rightarrow> bal \<Rightarrow> ('b \<times> bal) option" 
+  is distributed_safe_at.acc_max .
+
 locale dsa_properties = quorums quorums + distributed_safe_at quorums for quorums
 begin
 

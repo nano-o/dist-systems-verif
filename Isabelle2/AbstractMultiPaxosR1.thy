@@ -12,26 +12,7 @@ text {*
 7) typedef for bal.
 *}
 
-text {* What about defining a new command to make type copies? *}
-
-typedef bal = "UNIV::nat set"
-by auto 
-setup_lifting type_definition_bal
-lift_definition zero :: bal is "0::nat" .
-instantiation bal :: zero
-begin
-definition Zero_nat_def:
-  "0 = zero"
-instance ..
-end
-
 type_synonym inst = nat
-text {* TODO: how to use real types, and the transfer package? *}
-
-text {* 
-How to make it executable? Use finfun or mappings? 
-Create a finfun version, then show refinement?
-*}
 
 record ('v,'a,'l) amp_state =
   propCmd :: "'v set"
@@ -71,7 +52,7 @@ definition propose where
 
 definition join_ballot where
   "join_ballot a b s s' \<equiv> 
-    let onebs' = \<lambda> i . distributed_safe_at.acc_max (vote s i) a b
+    let onebs' = \<lambda> i . bal_acc_max (vote s i) a b
     in
       b > (ballot s a) 
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
@@ -103,7 +84,7 @@ definition do_vote where
         \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>"
 
 abbreviation chosen where
-  "chosen s i v \<equiv> ballot_array.chosen quorums (vote s i) v"
+  "chosen s i v \<equiv> bal_chosen quorums (vote s i) v"
 
 definition learn where
   "learn l i v s s' \<equiv> chosen s i v \<and> s' = s\<lparr>learned := (learned s)(l := (learned s l)(i := Some v))\<rparr>"

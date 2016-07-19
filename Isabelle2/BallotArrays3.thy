@@ -1,7 +1,7 @@
 section {* Definition of ballot arrays *}
 
 theory BallotArrays3
-imports Main "~~/src/HOL/Library/Monad_Syntax" LinorderOption Quorums2 Max_Properties
+imports Main "~~/src/HOL/Library/Monad_Syntax" Quorums2 Max_Properties
 begin
 
 text {* A ballot array represents a history of execution of a Paxos-like algorithm, i.e. the current 
@@ -92,8 +92,11 @@ term ballot_array.conservative
 term ballot_array.proved_safe_at_abs
 term ballot_array.conservative_array
 term ballot_array.chosen
+term ballot_array.safe_at
+lift_definition bal_safe_at :: "'a set set \<Rightarrow> ('a \<Rightarrow> bal) \<Rightarrow> ('a \<Rightarrow> bal \<Rightarrow> 'b option) \<Rightarrow> 'b \<Rightarrow> bal \<Rightarrow> bool"
+  is ballot_array.safe_at .
 lift_definition bal_conservative :: "('a \<Rightarrow> bal \<Rightarrow> 'b option) \<Rightarrow> bal \<Rightarrow> bool" 
-  is ballot_array.conservative .
+  is ballot_array.conservative . 
 lift_definition bal_proved_safe_at_abs 
   :: "'a set set \<Rightarrow> ('a \<Rightarrow> bal) \<Rightarrow> ('a \<Rightarrow> bal \<Rightarrow> 'b option) \<Rightarrow> 'a set \<Rightarrow> bal \<Rightarrow> 'b \<Rightarrow> bool"
   is ballot_array.proved_safe_at_abs .

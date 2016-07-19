@@ -19,7 +19,7 @@ begin
 context 
 begin
 
-lemma safe_zero:"safe_at v 0" oops
+lemma safe_zero:"safe_at v 0" by (auto simp add:safe_at_def less_bal zero_bal)
 (*
 apply (auto simp add:safe_at_def less_bal zero_bal)
 subgoal premises prems for b v
