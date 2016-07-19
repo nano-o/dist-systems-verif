@@ -19,7 +19,7 @@ record ('v,'a,'l) amp_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
   vote :: "'a \<Rightarrow> inst \<Rightarrow> bal \<rightharpoonup> 'v"
-  suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
+  suggestion :: "'a \<Rightarrow> inst \<Rightarrow> bal \<rightharpoonup> 'v"
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> ('v \<times> bal))"
   learned :: "'l \<Rightarrow> inst \<rightharpoonup> 'v"
   leader :: "'a \<Rightarrow> bool"
