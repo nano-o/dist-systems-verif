@@ -90,33 +90,6 @@ fun paxos where
 | "paxos ((Phase2a i b c) # es) = (safe_value i b c es \<and> paxos es)"
 | "paxos ((VoteCmd a i b c) # es) = (suggestion i b es = Some c \<and> paxos es)"
 
-lemma "\<lbrakk>paxos es; ballot_2 a es = b\<rbrakk> \<Longrightarrow> \<not>(started b es)" quickcheck oops
-
-lemma assumes "paxos es" and "a \<noteq> a2" 
-  shows "\<not> (paxos ((Phase1b a2 i b r) # (Phase1b a i b r) # es))" quickcheck oops
-
-lemma assumes "paxos es"
-  shows "\<not> (paxos ((Phase2a i b c) # es))" quickcheck oops
-
-lemma assumes "paxos es" and "a \<noteq> a2" 
-  shows "last_vote_2 a i es = None \<or> last_vote_2 a2 i es = None" nitpick oops
-
-lemma assumes "paxos es" shows "\<not> started b es" quickcheck oops
-
-lemma assumes "paxos es" 
-  shows "\<not> (started b es \<and> ballot_2 a es \<le> 1 \<and> r = last_vote_2 a i es \<and> r \<noteq> None)" quickcheck[eval="ballot_2 a es"]
-oops
-
-lemma assumes "paxos es" and "b \<noteq> 0" shows "suggestion i b es = None" nitpick
-oops 
-
-lemma assumes "paxos (e#es)"
-  shows "\<not> (e = Phase1b a i b r)" quickcheck oops
-
-
-lemma assumes "paxos es" and "decide i b c es" and "decide i b2 c2 es"
-  shows "c2 = c" quickcheck
-
 (* record mp_state = 
   ballot :: "acc \<Rightarrow> bal"
   vote ::"acc \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f cmd option"

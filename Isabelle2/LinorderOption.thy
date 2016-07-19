@@ -1,7 +1,8 @@
 theory LinorderOption
 imports Main
 begin
-section {* nat option as a linear order *}
+
+section {* Type @{typ "nat option"} as a linear order *}
 
 fun less_eq_o where 
   "less_eq_o None _ = True"
@@ -14,13 +15,14 @@ fun less_o where
 | "less_o (Some x) None = False"
 | "less_o (Some x) (Some y) = (x < y)"
 
-instantiation option :: (preorder) preorder
+instantiation option :: (preorder) "{preorder,bot}"
 begin
 
 definition less_eq_def:"o1 \<le> o2 = less_eq_o o1 o2"
 definition less_def:"o1 < o2 = less_o o1 o2"
+definition bot_def:"bot = None"
 
-instance 
+instance
 apply(intro_classes)
 apply (auto simp add:less_eq_def less_def)
 apply (metis less_eq_o.simps(1) less_eq_o.simps(3) less_le_not_le less_o.elims(2))
@@ -32,14 +34,16 @@ done
 
 end
 
-instantiation option :: (linorder) linorder
+instantiation option :: (linorder) "{linorder,order_bot}"
 begin
 
 instance 
 apply(intro_classes)
 apply (auto simp add:less_eq_def less_def)
 apply (metis less_eq_o.elims(2) option.inject option.simps(3) order_class.order.antisym)
-by (metis le_cases less_eq_o.elims(3) less_eq_o.simps(3))
+apply (metis le_cases less_eq_o.elims(3) less_eq_o.simps(3))
+apply (metis bot_def less_eq_o.simps(1))
+done
 
 end
 
