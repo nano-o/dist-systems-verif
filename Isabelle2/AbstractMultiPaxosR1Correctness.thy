@@ -33,6 +33,7 @@ method rm_trans_rel_assm =
 method unfold_to_trans_rel = 
   (simp add:is_trans_def the_ioa_def ioa_def trans_def)
 
+
 subsection {* Auxiliary invariants *}
 
 definition inv6 where inv6_def[inv_proofs_defs]:

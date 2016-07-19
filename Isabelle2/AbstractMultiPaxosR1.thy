@@ -124,7 +124,7 @@ definition ioa where
   "ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
 
 lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def 
-  do_vote_def learn_def
+  do_vote_def learn_def suggest_def catch_up_def acquire_leadership_def
 
 end
 

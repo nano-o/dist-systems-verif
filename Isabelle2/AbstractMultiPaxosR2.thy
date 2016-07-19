@@ -115,6 +115,18 @@ lemma trans_cases[consumes 1]:
 | (acquire) a q where "acquire_leadership a q r r'"
 using assms by induct auto
 
+lemma trans_cases_2[consumes 1]:
+  assumes "trans_rel r aa r'"
+  obtains 
+  (propose) c where "propose c r r'" and "aa = ampr1.action.Propose c"
+| (learn) l i v where "learn l i v r r'" and "aa = ampr1.action.Learn i v l"
+| (join_ballot) a b where "join_ballot a b r r'" and "aa = ampr1.action.Internal"
+| (do_vote) a i v where "do_vote a i v r r'" and "aa = ampr1.action.Internal"
+| (suggest) a i b v where "suggest a i b v r r'" and "aa = ampr1.action.Internal"
+| (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'" and "aa = ampr1.action.Internal"
+| (acquire) a q where "acquire_leadership a q r r'" and "aa = ampr1.action.Internal"
+using assms by induct auto
+
 definition trans where
   "trans \<equiv> { (r,a,r') . trans_rel r a r'}"
 
@@ -124,7 +136,7 @@ definition ioa where
   "ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
 
 lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def 
-  do_vote_def learn_def
+  do_vote_def learn_def suggest_def catch_up_def acquire_leadership_def
 
 end
 
