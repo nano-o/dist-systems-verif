@@ -13,14 +13,8 @@ text {*
 
 type_synonym bal = nat
 type_synonym inst = nat
-text {* TODO: how to use real types, and the transfer package? *}
 
-text {* 
-How to make it executable? Use finfun or mappings? 
-Create a finfun version, then show refinement?
-*}
-
-record ('v,'a,'l) amp_state =
+record ('v,'a,'l) ampr1_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
   vote :: "inst \<Rightarrow> 'a \<Rightarrow> bal \<rightharpoonup> 'v"
@@ -29,25 +23,25 @@ record ('v,'a,'l) amp_state =
   learned :: "'l \<Rightarrow> inst \<rightharpoonup> 'v"
   leader :: "'a \<Rightarrow> bool"
 
-locale amp_ioa = IOA +
+locale ampr1_ioa = IOA +
   fixes quorums::"'a set set" and leader :: "bal \<Rightarrow> 'a"
   -- {* @{term leader} determines the leader of a ballot. *}
 begin
 
-datatype ('vv,'aa,'ll) amp_action =
+datatype ('vv,'aa,'ll) action =
   Propose 'vv
 | Learn nat 'vv 'll
 | Internal
 
-definition amp_asig where
-  "amp_asig \<equiv>
+definition asig where
+  "asig \<equiv>
     \<lparr> inputs = { Propose c | c . True},
       outputs = { Learn i v l | i v l . True},
       internals = {Internal}\<rparr>"
 
-definition amp_start where
+definition start where
   -- {* The initial state *}
-  "amp_start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> i a . Map.empty), 
+  "start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> i a . Map.empty), 
     suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty, learned = \<lambda> l . Map.empty,
     leader = \<lambda> a . leader 0 = a\<rparr>}"
 
@@ -63,15 +57,15 @@ definition join_ballot where
       b > (ballot s a) 
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
         onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')),
-        leader := (amp_state.leader s)(a := False)\<rparr>"
+        leader := (ampr1_state.leader s)(a := False)\<rparr>"
 
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in 
     leader b = a
     \<and> q \<in> quorums
-    \<and> \<not> amp_state.leader s a 
+    \<and> \<not> ampr1_state.leader s a 
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
-    \<and> s' = s\<lparr>leader := (amp_state.leader s)(a := True), 
+    \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True), 
         suggestion := \<lambda> i . (suggestion s i)(b :=
           let m = distributed_safe_at.max_pair q (\<lambda> a . the (onebs s a b) i) in
             map_option fst m)\<rparr>"
@@ -79,7 +73,7 @@ definition acquire_leadership where
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
         \<and> ballot s a = b
-        \<and> amp_state.leader s a
+        \<and> ampr1_state.leader s a
         \<and> suggestion s i b = None
         \<and> s' = s\<lparr>suggestion := (suggestion s)(i := (suggestion s i)(b \<mapsto> v))\<rparr>"
 
@@ -99,18 +93,18 @@ definition catch_up where
   "catch_up l1 l2 i v s s' \<equiv> learned s l2 i = Some v
     \<and> s' = s\<lparr>learned := (learned s)(l1 := (learned s l1)(i := Some v))\<rparr>"
 
-fun amp_trans_rel where
-  "amp_trans_rel r (Propose c) r' = propose c r r'"
-| "amp_trans_rel r Internal r' = (
+fun trans_rel where
+  "trans_rel r (Propose c) r' = propose c r r'"
+| "trans_rel r Internal r' = (
     (\<exists> a b . join_ballot a b r r')
     \<or> (\<exists> a i v . do_vote a i v r r')
     \<or> (\<exists> a i b v . suggest a i b v r r')
     \<or> (\<exists> l1 l2 i v . catch_up l1 l2 i v r r')
     \<or> (\<exists> a q . acquire_leadership a q r r'))"
-| "amp_trans_rel r (Learn i v l) r' = learn l i v r r'"
+| "trans_rel r (Learn i v l) r' = learn l i v r r'"
 
 lemma trans_cases[consumes 1]:
-  assumes "amp_trans_rel r a r'"
+  assumes "trans_rel r a r'"
   obtains 
   (propose) c where "propose c r r'"
 | (learn) l i v where "learn l i v r r'"
@@ -121,15 +115,15 @@ lemma trans_cases[consumes 1]:
 | (acquire) a q where "acquire_leadership a q r r'"
 using assms by induct auto
 
-definition amp_trans where
-  "amp_trans \<equiv> { (r,a,r') . amp_trans_rel r a r'}"
+definition trans where
+  "trans \<equiv> { (r,a,r') . trans_rel r a r'}"
 
 subsection {* The I/O-automaton *}
 
-definition amp_ioa where
-  "amp_ioa \<equiv> \<lparr>ioa.asig = amp_asig, start = amp_start, trans = amp_trans\<rparr>"
+definition ampr1_ioa where
+  "ampr1_ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
 
-lemmas simps = amp_ioa_def amp_asig_def amp_start_def amp_trans_def propose_def join_ballot_def 
+lemmas simps = ampr1_ioa_def asig_def start_def trans_def propose_def join_ballot_def 
   do_vote_def learn_def
 
 end

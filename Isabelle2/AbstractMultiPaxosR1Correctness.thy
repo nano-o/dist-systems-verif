@@ -5,19 +5,19 @@ imports AbstractMultiPaxosR1 IOA_Automation
   BallotArrayProperties
 begin
 
-locale amp_proof = IOA + quorums quorums + amp_ioa quorums for
+locale ampr1_proof = IOA + quorums quorums + ampr1_ioa quorums for
      quorums :: "'a set set" +
-  fixes the_ioa :: "(('v,'a,'l)amp_state, ('v,'a,'l)amp_action) ioa"
-  defines "the_ioa \<equiv> amp_ioa"
+  fixes the_ioa :: "(('v,'a,'l)ampr1_state, ('v,'a,'l)action) ioa"
+  defines "the_ioa \<equiv> ampr1_ioa"
 begin
 
 subsection {* Automation setup *}
 
-lemmas amp_ioa_defs =
-   is_trans_def actions_def amp_trans_def amp_start_def
-   externals_def amp_ioa_def amp_asig_def
+lemmas ampr1_ioa_defs =
+   is_trans_def actions_def trans_def start_def
+   externals_def ampr1_ioa_def asig_def
 
-declare amp_ioa_defs[inv_proofs_defs]
+declare ampr1_ioa_defs[inv_proofs_defs]
 declare the_ioa_def[inv_proofs_defs]
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp] suggest_def[simp]
@@ -26,21 +26,21 @@ declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp] suggest_def[si
 
 (*  Nitpick config:
 nitpick[no_assms, show_consts, verbose, card 'a = 3, card 'v = 2, card nat = 2, card "'v option" = 3, card "nat option" = 3,
-    card "('v \<times> nat) option" = 5, card "'v \<times> nat" = 4, card unit = 1, card "('v, 'a) amp_state" = 32]
+    card "('v \<times> nat) option" = 5, card "'v \<times> nat" = 4, card unit = 1, card "('v, 'a) ampr1_state" = 32]
 *)
 method rm_trans_rel_assm = 
-  (match premises in P[thin]:"amp_trans_rel ?x ?y ?z" \<Rightarrow> \<open>-\<close>)
+  (match premises in P[thin]:"trans_rel ?x ?y ?z" \<Rightarrow> \<open>-\<close>)
 method unfold_to_trans_rel = 
-  (simp add:is_trans_def the_ioa_def amp_ioa_def amp_trans_def)
+  (simp add:is_trans_def the_ioa_def ampr1_ioa_def trans_def)
 
 subsection {* Auxiliary invariants *}
 
 definition inv6 where inv6_def[inv_proofs_defs]:
-  "inv6 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> amp_state.leader s a))
+  "inv6 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> ampr1_state.leader s a))
     \<longrightarrow> suggestion s i b = None"
 
 definition inv7 where inv7_def[inv_proofs_defs]:
-  "inv7 s \<equiv> \<forall> a . amp_state.leader s a \<longrightarrow> leader (ballot s a) = a"
+  "inv7 s \<equiv> \<forall> a . ampr1_state.leader s a \<longrightarrow> leader (ballot s a) = a"
 
 lemma inv7: "invariant the_ioa inv7"
 apply (rule invariantI)
@@ -140,10 +140,10 @@ apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
         note 3 = this
         { fix j assume "j = i \<and> a = a2"
           hence "maxs j = distributed_safe_at.acc_max (vote t j) a2 b" using 1 \<open>do_vote a i v s t\<close> a1 2 apply (simp add:distributed_safe_at.acc_max_def)
-            by (smt Collect_cong amp_state.select_convs(2) amp_state.surjective amp_state.update_convs(3) dual_order.strict_trans1 neq_iff split_cong) }
+            by (smt Collect_cong ampr1_state.select_convs(2) ampr1_state.surjective ampr1_state.update_convs(3) dual_order.strict_trans1 neq_iff split_cong) }
         note this 2 3 }
       thus ?thesis apply (simp add:inv3_def split add:option.splits)
-        by (metis (no_types, lifting) amp_ioa.do_vote_def amp_state.select_convs(5) amp_state.surjective amp_state.update_convs(3) \<open>do_vote a i v s t\<close>)
+        by (metis (no_types, lifting) ampr1_ioa.do_vote_def ampr1_state.select_convs(5) ampr1_state.surjective ampr1_state.update_convs(3) \<open>do_vote a i v s t\<close>)
     qed
   apply (auto simp add:inv_proofs_defs  split add:option.splits)
   apply (meson dual_order.trans less_imp_le_nat)
@@ -151,7 +151,7 @@ done
 declare inv3[invs]
       
 (* nitpick[no_assms, show_consts, verbose, card 'a = 3, card 'v = 2, card nat = 2, card "'v option" = 3, card "nat option" = 3,
-    card "('v \<times> nat) option" = 5, card "'v \<times> nat" = 4, card unit = 1, card "('v, 'a) amp_state" = 32, card 'l = 1, expect=none]  *)
+    card "('v \<times> nat) option" = 5, card "'v \<times> nat" = 4, card unit = 1, card "('v, 'a) ampr1_state" = 32, card 'l = 1, expect=none]  *)
 
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
 declare ballot_array.safe_def[inv_proofs_defs]
@@ -191,7 +191,7 @@ qed
 
 definition inv8 where inv8_def[inv_proofs_defs]:
   "inv8 s \<equiv> \<forall> a i v . let b = ballot s a in
-    amp_state.leader s a \<and> suggestion s i b = None \<longrightarrow> safe_at s i v b"
+    ampr1_state.leader s a \<and> suggestion s i b = None \<longrightarrow> safe_at s i v b"
 
 definition inv2 where
   -- {* a suggestion is safe. *}
@@ -217,7 +217,7 @@ apply (rule invariantI)
         next
           show "inv8 t"  proof (auto simp add:inv8_def)
             fix a2 i v
-            assume a1:"amp_state.leader t a2" and a2:"suggestion t i (ballot t a2) = None"
+            assume a1:"ampr1_state.leader t a2" and a2:"suggestion t i (ballot t a2) = None"
             show "safe_at t i v (ballot t a2)"
             proof (cases "a2 = a")
               case False thus ?thesis using \<open>acquire_leadership a q s t\<close> \<open>inv8 s\<close> \<open>inv7 s\<close> prems(1) a1 a2
@@ -247,11 +247,11 @@ apply (rule invariantI)
       apply (elim conjE)
       subgoal premises prems for a i v
       proof (rule conjI; (rule conjI)?) thm prems(12,14,9)
-        show "inv8 t" by (smt amp_ioa.do_vote_def amp_state.ext_inject amp_state.surjective amp_state.update_convs(3) inv8_def prems(1) \<open>inv8 s\<close> \<open>do_vote a i v s t\<close>)
+        show "inv8 t" by (smt ampr1_ioa.do_vote_def ampr1_state.ext_inject ampr1_state.surjective ampr1_state.update_convs(3) inv8_def prems(1) \<open>inv8 s\<close> \<open>do_vote a i v s t\<close>)
       next
-        show "inv2 t" by (smt prems(1) amp_ioa.do_vote_def amp_state.ext_inject amp_state.surjective amp_state.update_convs(3) inv2_def option.case_eq_if \<open>inv2 s\<close>  \<open>do_vote a i v s t\<close>) 
+        show "inv2 t" by (smt prems(1) ampr1_ioa.do_vote_def ampr1_state.ext_inject ampr1_state.surjective ampr1_state.update_convs(3) inv2_def option.case_eq_if \<open>inv2 s\<close>  \<open>do_vote a i v s t\<close>) 
       next
-        show "safe t" by (smt amp_ioa.do_vote_def amp_state.ext_inject amp_state.surjective amp_state.update_convs(3) ballot_array.safe_def inv1_def inv2_def option.case_eq_if prems(1) \<open>do_vote a i v s t\<close> \<open>inv2 s\<close> \<open>inv1 t\<close>) 
+        show "safe t" by (smt ampr1_ioa.do_vote_def ampr1_state.ext_inject ampr1_state.surjective ampr1_state.update_convs(3) ballot_array.safe_def inv1_def inv2_def option.case_eq_if prems(1) \<open>do_vote a i v s t\<close> \<open>inv2 s\<close> \<open>inv1 t\<close>) 
       qed
     done
   qed
@@ -295,7 +295,7 @@ apply (auto simp add:inv_proofs_defs split add:option.splits)[3] defer
 apply (auto simp add:inv_proofs_defs split add:option.splits)[1]
 apply (insert chosen_mono[simplified inv_proofs_defs])
 apply (auto simp add:inv4_def inv5_def  split add:option.splits)
-by (metis (mono_tags) amp_state.select_convs(3) amp_state.surjective amp_state.update_convs(3) fun_upd_same)
+by (metis (mono_tags) ampr1_state.select_convs(3) ampr1_state.surjective ampr1_state.update_convs(3) fun_upd_same)
 declare inv4[invs]
 
 subsection {* Finally, the proof of agreement. *}
