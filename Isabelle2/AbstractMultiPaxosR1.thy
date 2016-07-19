@@ -15,7 +15,7 @@ type_synonym bal = nat
 type_synonym inst = nat
 text {* TODO: how to use real types, and the transfer package? *}
 
-text {* 
+text {*
 How to make it executable? Use finfun or mappings? 
 Create a finfun version, then show refinement?
 *}
@@ -24,7 +24,7 @@ record ('v,'a,'l) amp_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
   vote :: "inst \<Rightarrow> 'a \<Rightarrow> bal \<rightharpoonup> 'v"
-  suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
+  suggestion :: "'a \<Rightarrow> inst \<Rightarrow> bal \<rightharpoonup> 'v"
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> ('v\<times>bal))"
   learned :: "'l \<Rightarrow> inst \<rightharpoonup> 'v"
   leader :: "'a \<Rightarrow> bool"
@@ -47,8 +47,8 @@ definition amp_asig where
 
 definition amp_start where
   -- {* The initial state *}
-  "amp_start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> i a . Map.empty), 
-    suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty, learned = \<lambda> l . Map.empty,
+  "amp_start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> i a . Map.empty),
+    suggestion = \<lambda> a . \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty, learned = \<lambda> l . Map.empty,
     leader = \<lambda> a . leader 0 = a\<rparr>}"
 
 subsection {* The transitions *}
@@ -71,22 +71,22 @@ definition acquire_leadership where
     \<and> q \<in> quorums
     \<and> \<not> amp_state.leader s a 
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
-    \<and> s' = s\<lparr>leader := (amp_state.leader s)(a := True), 
-        suggestion := \<lambda> i . (suggestion s i)(b :=
+    \<and> s' = s\<lparr>leader := (amp_state.leader s)(a := True),
+        suggestion := (suggestion s)(a := (\<lambda> i . (suggestion s a i)(b :=
           let m = distributed_safe_at.max_pair q (\<lambda> a . the (onebs s a b) i) in
-            map_option fst m)\<rparr>"
+            map_option fst m)))\<rparr>"
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
         \<and> ballot s a = b
         \<and> amp_state.leader s a
-        \<and> suggestion s i b = None
-        \<and> s' = s\<lparr>suggestion := (suggestion s)(i := (suggestion s i)(b \<mapsto> v))\<rparr>"
+        \<and> suggestion s a i b = None
+        \<and> s' = s\<lparr>suggestion := (suggestion s)(a := (suggestion s a)(i := (suggestion s a i)(b \<mapsto> v)))\<rparr>"
 
 definition do_vote where
   "do_vote a i v s s' \<equiv> let b = ballot s a in
           vote s i a b = None
-        \<and> suggestion s i b = Some v
+        \<and> suggestion s (leader b) i b = Some v
         \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>"
 
 abbreviation chosen where

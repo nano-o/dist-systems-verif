@@ -36,10 +36,15 @@ method unfold_to_trans_rel =
 subsection {* Auxiliary invariants *}
 
 definition inv6 where inv6_def[inv_proofs_defs]:
+  -- {* If a is the leader of ballot b and its current ballot is strictly lower than b or its 
+  ballot is equal to b but its leader flag is not set,
+  then no suggestion was made in ballot b.  *}
   "inv6 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> amp_state.leader s a))
-    \<longrightarrow> suggestion s i b = None"
+    \<longrightarrow> suggestion s a i b = None"
 
 definition inv7 where inv7_def[inv_proofs_defs]:
+  -- {* When the leader flag of an acceptor is set, then the leader function applied to the 
+  acceptor's current ballot returns this very acceptor. *}
   "inv7 s \<equiv> \<forall> a . amp_state.leader s a \<longrightarrow> leader (ballot s a) = a"
 
 lemma inv7: "invariant the_ioa inv7"
@@ -63,8 +68,8 @@ done
 declare inv6[invs]
 
 definition inv1 where inv1_def[inv_proofs_defs]:
-  -- {* acceptors only vote for the suggestion. *}
-  "inv1 s \<equiv> \<forall> i a b . let v = vote s i a b in v \<noteq> None \<longrightarrow> v = suggestion s i b"
+  -- {* acceptors only vote for the suggestion of the leader. *}
+  "inv1 s \<equiv> \<forall> i a b . let v = vote s i a b in v \<noteq> None \<longrightarrow> v = suggestion s (leader b) i b"
 
 lemma inv1:
   "invariant the_ioa inv1"
@@ -76,10 +81,9 @@ apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
               apply (simp_all add:inv1_def)
     apply (metis option.simps(3))
   apply (simp add:inv7_def inv6_def)
-  apply force
+  apply (metis option.distinct(1))
 done
 declare inv1[invs]
-
 
 declare
   ballot_array.conservative_array_def[inv_proofs_defs]
@@ -145,7 +149,7 @@ apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
       thus ?thesis apply (simp add:inv3_def split add:option.splits)
         by (metis (no_types, lifting) amp_ioa.do_vote_def amp_state.select_convs(5) amp_state.surjective amp_state.update_convs(3) \<open>do_vote a i v s t\<close>)
     qed
-  apply (auto simp add:inv_proofs_defs  split add:option.splits)
+  apply (simp add:inv_proofs_defs  split add:option.splits)
   apply (meson dual_order.trans less_imp_le_nat)
 done
 declare inv3[invs]
@@ -158,27 +162,29 @@ declare ballot_array.safe_def[inv_proofs_defs]
 
 lemma aqcuire_leadership_ok:
   assumes "acquire_leadership a q s t" and "inv3 s" and "safe s" and "conservative_array t"
-  shows "let safe_at = \<lambda> v . ballot_array.safe_at quorums (ballot t) (vote t i) v (ballot t a) in
-    case suggestion t i (ballot t a) of Some v \<Rightarrow> safe_at v | None \<Rightarrow> safe_at v"
+  defines b_def[simp]:"b \<equiv> ballot s a"
+  shows "let safe_at = \<lambda> v . ballot_array.safe_at quorums (ballot t) (vote t i) v (ballot t a)
+    in case suggestion t a i b of Some v \<Rightarrow> safe_at v | None \<Rightarrow> safe_at v"
 proof -
-  let ?b = "ballot s a"
-  have 2:"?b = ballot t a" using assms(1) by (auto simp add:inv_proofs_defs)let ?proved_safe_at = "distributed_safe_at.proved_safe_at quorums (ballot t) (vote t i) q ?b"
-  have 5:"case suggestion t i (ballot t a) of Some v \<Rightarrow>  ?proved_safe_at v | None \<Rightarrow> ?proved_safe_at  v"
+  have 2:"b = ballot t a" using assms(1) by (auto simp add:inv_proofs_defs)
+  let ?proved_safe_at = "distributed_safe_at.proved_safe_at quorums (ballot t) (vote t i) q b"
+  have 5:"case suggestion t a i (ballot t a) of Some v \<Rightarrow>  ?proved_safe_at v | None \<Rightarrow> ?proved_safe_at  v"
   proof -  
     have "q \<in> quorums" by (metis acquire_leadership_def assms(1)) 
     moreover
-    have "\<And> a2 . a2 \<in> q \<Longrightarrow> ?b \<le> ballot t a2" using assms(1,2) apply (auto simp add:inv_proofs_defs) by (metis (no_types, lifting) option.simps(5))
+    have "\<And> a2 . a2 \<in> q \<Longrightarrow> b \<le> ballot t a2" using assms(1,2) apply (auto simp add:inv_proofs_defs) 
+      by (metis (no_types, lifting) option.simps(5))
     moreover
-    have "distributed_safe_at.max_pair q (\<lambda> a2 . the (onebs t a2 ?b) i) = 
-      distributed_safe_at.max_pair q (\<lambda> a2 . distributed_safe_at.acc_max (vote t i) a2 ?b)"
+    have "distributed_safe_at.max_pair q (\<lambda> a2 . the (onebs t a2 b) i) = 
+      distributed_safe_at.max_pair q (\<lambda> a2 . distributed_safe_at.acc_max (vote t i) a2 b)"
     proof -
-      have "distributed_safe_at.max_pair q (\<lambda> a2 . the (onebs s a2 ?b) i) = 
-        distributed_safe_at.max_pair q (\<lambda> a2 . distributed_safe_at.acc_max (vote s i) a2 ?b)"
+      have "distributed_safe_at.max_pair q (\<lambda> a2 . the (onebs s a2 b) i) = 
+        distributed_safe_at.max_pair q (\<lambda> a2 . distributed_safe_at.acc_max (vote s i) a2 b)"
       proof -
-        have "\<And> a2 . a2 \<in> q \<Longrightarrow> case onebs s a2 ?b of 
-                  Some f \<Rightarrow> f i = distributed_safe_at.acc_max (vote s i) a2 ?b 
+        have "\<And> a2 . a2 \<in> q \<Longrightarrow> case onebs s a2 b of 
+                  Some f \<Rightarrow> f i = distributed_safe_at.acc_max (vote s i) a2 b 
                 | None \<Rightarrow> False" using assms by (auto simp add:inv_proofs_defs split add:option.splits)
-        thus ?thesis apply (simp add:distributed_safe_at.max_pair_def split add:option.splits) by (smt SUP_cong option.case_eq_if)
+        thus ?thesis apply (simp add:distributed_safe_at.max_pair_def split add:option.splits) by (smt SUP_cong assms(5) option.case_eq_if) 
       qed
       thus ?thesis using assms(1) by (auto simp add:inv_proofs_defs)
     qed
@@ -212,7 +218,7 @@ apply (rule invariantI)
             apply (auto simp add:inv_proofs_defs split add:option.splits)[2]
             apply (elim conjE)
         subgoal premises prems for a q
-        proof (rule conjI; (rule conjI)?) thm prems
+        proof (rule conjI; (rule conjI)?)
           show "safe t" using \<open>safe s\<close> \<open>acquire_leadership a q s t\<close> by (auto simp add:inv_proofs_defs)
         next
           show "inv8 t"  proof (auto simp add:inv8_def)
