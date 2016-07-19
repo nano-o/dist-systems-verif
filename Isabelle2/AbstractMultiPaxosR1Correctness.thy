@@ -8,16 +8,16 @@ begin
 locale ampr1_proof = IOA + quorums quorums + ampr1_ioa quorums for
      quorums :: "'a set set" +
   fixes the_ioa :: "(('v,'a,'l)ampr1_state, ('v,'a,'l)action) ioa"
-  defines "the_ioa \<equiv> ampr1_ioa"
+  defines "the_ioa \<equiv> ioa"
 begin
 
 subsection {* Automation setup *}
 
-lemmas ampr1_ioa_defs =
+lemmas ioa_defs =
    is_trans_def actions_def trans_def start_def
-   externals_def ampr1_ioa_def asig_def
+   externals_def ioa_def asig_def
 
-declare ampr1_ioa_defs[inv_proofs_defs]
+declare ioa_defs[inv_proofs_defs]
 declare the_ioa_def[inv_proofs_defs]
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp] suggest_def[simp]
@@ -31,7 +31,7 @@ nitpick[no_assms, show_consts, verbose, card 'a = 3, card 'v = 2, card nat = 2, 
 method rm_trans_rel_assm = 
   (match premises in P[thin]:"trans_rel ?x ?y ?z" \<Rightarrow> \<open>-\<close>)
 method unfold_to_trans_rel = 
-  (simp add:is_trans_def the_ioa_def ampr1_ioa_def trans_def)
+  (simp add:is_trans_def the_ioa_def ioa_def trans_def)
 
 subsection {* Auxiliary invariants *}
 

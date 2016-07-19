@@ -120,10 +120,10 @@ definition trans where
 
 subsection {* The I/O-automaton *}
 
-definition ampr1_ioa where
-  "ampr1_ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
+definition ioa where
+  "ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
 
-lemmas simps = ampr1_ioa_def asig_def start_def trans_def propose_def join_ballot_def 
+lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def 
   do_vote_def learn_def
 
 end
