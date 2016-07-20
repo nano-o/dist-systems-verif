@@ -11,6 +11,14 @@ text {*
 6) Explicit leadership acquisition.
 *}
 
+text {* TODO: Let's generate code for acc_max *}
+
+print_locale  distributed_safe_at
+global_interpretation dsa:distributed_safe_at quorums ballot vote for quorums ballot vote 
+  defines my_acc_max = dsa.acc_max .
+
+export_code my_acc_max
+
 type_synonym bal = nat
 type_synonym inst = nat
 

@@ -4,31 +4,14 @@ theory Max_Properties
 imports Main 
 begin
 
-lemma Max_Max:
-  assumes "finite Xs" and "Union Xs \<noteq> {}" and "\<And> X . X \<in> Xs \<Longrightarrow> X \<noteq> {} \<and> finite X"
-  shows "Max (Max ` Xs) = Max (Union Xs)" (is "?A = ?B")
-  -- {* Is this of any use? Note that all subsets are required to be non-empty. *}
-nitpick[verbose, card 'a = 2, card "'a option" = 3, expect=none]
-proof -
-  have 0:"finite (Union Xs)" using assms(1,3) by auto
-  hence 1:"?B \<in> Union Xs"
-    by (metis Max_in assms(2))
-  have "finite (Max ` Xs)" by (metis assms(1) finite_imageI)
-  moreover have "Max ` Xs \<noteq> {}" using assms(2) by (metis Sup_empty image_is_empty) 
-  ultimately have 3:"?A \<in> (Max ` Xs)" and "\<And> x . x \<in> Max ` Xs \<Longrightarrow> x \<le> ?A"
-    by (metis Max_in, metis Max_ge \<open>finite (Max ` Xs)\<close>)
-  show ?thesis by (smt 1 3 Max_ge Max_mono Sup_upper UnionE 0 antisym assms(1,3) finite_imageI image_iff) 
-qed
-
-lemma Max_bot:"\<lbrakk>finite (S::'b::{linorder,order_bot} set); S \<noteq> {}; s \<in> S; Max S = bot\<rbrakk> \<Longrightarrow> s = bot"
-by (metis Max.coboundedI bot.extremum_uniqueI)
-
 subsection {* Max by key *}
 
 definition max_by_key where
   "max_by_key S f \<equiv>
     let max_key = Max {f x | x . x \<in> S}
     in SOME x . x \<in> S \<and> f x = max_key"
+
+text {* TODO: How to generate code for max_by_key? Should we make it return a set? *}
 
 lemma max_by_key_in_and_ge: fixes S::"'b set" and x::'b assumes "finite S" and "x \<in> S"
   shows "f x \<le> f (max_by_key S f)" and "max_by_key S f \<in> S"
@@ -45,14 +28,14 @@ proof -
   show "f x \<le> f (max_by_key S f)" and "max_by_key S f \<in> S" 
     apply (auto simp add:max_by_key_def)
     using Max.coboundedI \<open>f (SOME x. x \<in> S \<and> f x = Max {f x |x. x \<in> S}) = Max {f x |x. x \<in> S}\<close> \<open>finite {f x |x. x \<in> S}\<close> assms(2) apply auto[1]
-    using \<open>(SOME x. x \<in> S \<and> f x = Max {f x |x. x \<in> S}) \<in> S\<close> by blast 
+    using \<open>(SOME x. x \<in> S \<and> f x = Max {f x |x. x \<in> S}) \<in> S\<close> by blast
 qed
 
 lemma in_and_ge_is_max_by_key: fixes S :: "'a set" and f :: "'a \<Rightarrow> ('b::linorder)"
   assumes "\<And> x . x \<in> S \<Longrightarrow> f x \<le> f m" and "m \<in> S" and "finite S" and "\<And> x y . \<lbrakk>x \<in> S; y \<in> S; x \<noteq> y\<rbrakk> \<Longrightarrow> f x \<noteq> f y"
   shows "m = max_by_key S f" 
 nitpick[verbose,  card 'a = 4, card 'b =6, card "'b option" = 30, expect = none]
-proof (rule ccontr) 
+proof (rule ccontr)
   assume "m \<noteq> max_by_key S f" (is "m \<noteq> ?m'")
   have "\<And> x . x \<in> S \<Longrightarrow> f x \<le> f ?m'" and "?m' \<in> S"
     apply (metis assms(3) max_by_key_in_and_ge(1)) by (metis assms(2) assms(3) max_by_key_in_and_ge(2)) 
@@ -92,5 +75,27 @@ proof -
     note 3 4 }
   thus ?thesis using in_and_ge_is_max_by_key[where ?S="Union Ss" and ?f=f] by (metis (mono_tags, lifting) \<open>finite (\<Union>Ss)\<close> assms(5)) 
 qed
+
+subsection {* Other properties *}
+text {* Used anywhere? *}
+
+lemma Max_Max:
+  assumes "finite Xs" and "Union Xs \<noteq> {}" and "\<And> X . X \<in> Xs \<Longrightarrow> X \<noteq> {} \<and> finite X"
+  shows "Max (Max ` Xs) = Max (Union Xs)" (is "?A = ?B")
+  -- {* Is this of any use? Note that all subsets are required to be non-empty. *}
+nitpick[verbose, card 'a = 2, card "'a option" = 3, expect=none]
+proof -
+  have 0:"finite (Union Xs)" using assms(1,3) by auto
+  hence 1:"?B \<in> Union Xs"
+    by (metis Max_in assms(2))
+  have "finite (Max ` Xs)" by (metis assms(1) finite_imageI)
+  moreover have "Max ` Xs \<noteq> {}" using assms(2) by (metis Sup_empty image_is_empty) 
+  ultimately have 3:"?A \<in> (Max ` Xs)" and "\<And> x . x \<in> Max ` Xs \<Longrightarrow> x \<le> ?A"
+    by (metis Max_in, metis Max_ge \<open>finite (Max ` Xs)\<close>)
+  show ?thesis by (smt 1 3 Max_ge Max_mono Sup_upper UnionE 0 antisym assms(1,3) finite_imageI image_iff) 
+qed
+
+lemma Max_bot:"\<lbrakk>finite (S::'b::{linorder,order_bot} set); S \<noteq> {}; s \<in> S; Max S = bot\<rbrakk> \<Longrightarrow> s = bot"
+by (metis Max.coboundedI bot.extremum_uniqueI)
 
 end
