@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR1
-imports  "../../IO-Automata/IOA" BallotArrays DistributedSafeAt
+imports  "../IO-Automata/IOA" BallotArrays DistributedSafeAt
 begin
 
 text {*

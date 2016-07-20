@@ -1,5 +1,5 @@
 theory DMultiPaxosCorrectness
-imports "../../IO-Automata/Simulations" "../../IO-Automata/IOA_Automation" 
+imports "../IO-Automata/Simulations" "../IO-Automata/IOA_Automation" 
   "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
   "~~/src/HOL/Library/FinFun_Syntax"
 begin
