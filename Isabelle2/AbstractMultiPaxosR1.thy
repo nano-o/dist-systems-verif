@@ -53,11 +53,11 @@ definition propose where
 
 definition join_ballot where
   "join_ballot a b s s' \<equiv> 
-    let onebs' = \<lambda> i . distributed_safe_at.acc_max (\<lambda>a'. vote s a' i) a b
+    let onebs' = \<lambda> i . distributed_safe_at.acc_max (\<lambda>a. vote s a i) a b
     in
       b > (ballot s a) 
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
-        onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')),
+        onebs := (onebs s)(a := (onebs s a)(b := Some onebs')),
         leader := (amp_state.leader s)(a := False)\<rparr>"
 
 definition acquire_leadership where
@@ -76,7 +76,7 @@ definition suggest where "suggest a i b v s s' \<equiv>
         \<and> ballot s a = b
         \<and> amp_state.leader s a
         \<and> suggestion s i b = None
-        \<and> s' = s\<lparr>suggestion := (suggestion s)(i := (suggestion s i)(b \<mapsto> v))\<rparr>"
+        \<and> s' = s\<lparr>suggestion := (suggestion s)(i := (suggestion s i)(b := Some v))\<rparr>"
 
 definition do_vote where
   "do_vote a i v s s' \<equiv> let b = ballot s a in

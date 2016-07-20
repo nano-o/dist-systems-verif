@@ -1,0 +1,9 @@
+session "Isabelle2" = "HOL" +
+  options [document = pdf, document_output = "output"]
+  theories [document = false]
+    AbstractMultiPaxosR1
+    AbstractMultiPaxosR1Correctness
+    AbstractMultiPaxosR2Correctness
+  theories
+  document_files
+    "root.tex"

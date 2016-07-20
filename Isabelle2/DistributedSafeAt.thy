@@ -1,5 +1,5 @@
 theory DistributedSafeAt
-imports BallotArrays3 BallotArrayProperties
+imports BallotArrays BallotArrayProperties
 begin
 
 subsection {* Computing safe values in a distributed implementation *}
@@ -36,7 +36,7 @@ locale dsa_properties = quorums quorums + distributed_safe_at quorums for quorum
 begin
 
 context begin
-
+                                                         
 private                                                  
 lemma l1: assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_2_a q b v"
 nitpick[verbose, card 'a = 3, card nat = 2, card 'b = 3, card "nat option" = 3, card "'b option" = 4, card "('b \<times> nat) option" = 7,
