@@ -3,7 +3,6 @@ session "Isabelle2" = "HOL" +
   theories [document = false]
     AbstractMultiPaxosR1
     AbstractMultiPaxosR1Correctness
-    AbstractMultiPaxosR2Correctness
   theories
   document_files
     "root.tex"
