@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR1
-imports  "../../IO-Automata/IOA" BallotArrays3 DistributedSafeAt
+imports  "../../IO-Automata/IOA" BallotArrays DistributedSafeAt
 begin
 
 text {*
@@ -19,7 +19,7 @@ record ('v,'a,'l) amp_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
   vote :: "'a \<Rightarrow> inst \<Rightarrow> bal \<rightharpoonup> 'v"
-  suggestion :: "'a \<Rightarrow> inst \<Rightarrow> bal \<rightharpoonup> 'v"
+  suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> ('v \<times> bal))"
   learned :: "'l \<Rightarrow> inst \<rightharpoonup> 'v"
   leader :: "'a \<Rightarrow> bool"
@@ -43,7 +43,7 @@ definition amp_asig where
 definition amp_start where
   -- {* The initial state *}
   "amp_start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> a i. Map.empty), 
-    suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty, learned = \<lambda> l . Map.empty,
+    suggestion = (\<lambda> i . Map.empty), onebs = \<lambda> a . Map.empty, learned = \<lambda> l . Map.empty,
     leader = \<lambda> a . leader 0 = a\<rparr>}"
 
 subsection {* The transitions *}
