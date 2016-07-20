@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR2
-imports  AbstractMultiPaxosR1
+imports  AbstractMultiPaxosR1 "~~/src/HOL/Library/FinFun_Syntax"
 begin
 
 text {*
@@ -10,27 +10,19 @@ text {*
 5) Localizing suggestions (the leader function).
 6) Explicit leadership acquisition.
 7) Per-acceptor state.
-*}
-
-type_synonym bal = nat
-type_synonym inst = nat
-text {* TODO: how to use real types, and the transfer package? *}
-
-text {* 
-How to make it executable? Use finfun or mappings? 
-Create a finfun version, then show refinement?
+8) finfuns.
 *}
 
 record ('v,'a,'l) ampr2_state =
   propCmd :: "'v set"
-  ballot :: "'a \<Rightarrow> bal"
-  vote :: "'a \<Rightarrow> inst \<Rightarrow> bal \<rightharpoonup> 'v"
-  suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
-  onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> ('v\<times>bal))"
-  learned :: "'l \<Rightarrow> inst \<rightharpoonup> 'v"
-  leader :: "'a \<Rightarrow> bool"
+  ballot :: "'a \<Rightarrow>f bal"
+  vote :: "'a \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
+  suggestion :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
+  onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option"
+  learned :: "'l \<Rightarrow>f inst \<Rightarrow>f 'v option"
+  leader :: "'a \<Rightarrow>f bool"
 
-locale ampr2_ioa = IOA + ampr1:ampr1_ioa quorums leader for quorums ::"'a set set" and leader
+locale ampr2_ioa = IOA + ampr1:ampr1_ioa quorums leader for quorums :: "'a set set" and leader
 begin
 
 definition asig where
@@ -41,22 +33,37 @@ definition asig where
 
 definition start where
   -- {* The initial state *}
-  "start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> a i . Map.empty), 
-    suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty, learned = \<lambda> l . Map.empty,
-    leader = \<lambda> a . leader 0 = a\<rparr>}"
+  "start \<equiv> {\<lparr>propCmd = {}, ballot = K$ 0, vote = K$ K$ K$ None, 
+    suggestion = K$ K$ None, onebs = K$ K$ None, learned = K$ K$ None,
+    leader = (K$ False)(leader 0 $:= True)\<rparr>}"
 
 subsection {* The transitions *}
 
 definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
 
+term distributed_safe_at.acc_max
+lift_definition finfun_acc_max :: "('b \<Rightarrow> nat \<Rightarrow>f 'c option) \<Rightarrow> 'b \<Rightarrow> nat \<Rightarrow> ('c \<times> nat) option"
+  is distributed_safe_at.acc_max .
+
+term "vote s $ a $ i"
+value "\<lambda> s i . finfun_acc_max (\<lambda> a . vote s $ a $ i)"
+
 definition join_ballot where
   "join_ballot a b s s' \<equiv> 
-    let onebs' = \<lambda> i . distributed_safe_at.acc_max (\<lambda> a . vote s a i) a b
+    let onebs' = \<lambda> i . finfun_acc_max (\<lambda> a . vote s $ a $ i) a b
+    in
+      b > (ballot s $ a) 
+      \<and> s' = s\<lparr>ballot := (ballot s)(a $:= b),
+        leader := (ampr2_state.leader s)(a $:= False)\<rparr>"
+
+definition join_ballot where
+  "join_ballot a b s s' \<equiv> 
+    let onebs' = \<lambda> i . finfun_acc_max (\<lambda> a . vote s $ a $ i) a b
     in
       b > (ballot s a) 
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
-        onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')),
+        onebs := (onebs s)(a := (onebs s a)(b $:= onebs')),
         leader := (ampr2_state.leader s)(a := False)\<rparr>"
 
 definition acquire_leadership where
@@ -66,7 +73,7 @@ definition acquire_leadership where
     \<and> \<not> ampr2_state.leader s a 
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
     \<and> s' = s\<lparr>leader := (ampr2_state.leader s)(a := True), 
-        suggestion := \<lambda> i . (suggestion s i)(b :=
+        suggestion := \<lambda> i . (suggestion s $ i)(b :=
           let m = distributed_safe_at.max_pair q (\<lambda> a . the (onebs s a b) i) in
             map_option fst m)\<rparr>"
 
@@ -74,13 +81,13 @@ definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
         \<and> ballot s a = b
         \<and> ampr2_state.leader s a
-        \<and> suggestion s i b = None
-        \<and> s' = s\<lparr>suggestion := (suggestion s)(i := (suggestion s i)(b \<mapsto> v))\<rparr>"
+        \<and> (suggestion s $ i) b = None
+        \<and> s' = s\<lparr>suggestion := (suggestion s)(i $:= (suggestion s $ i)(b \<mapsto> v))\<rparr>"
 
 definition do_vote where
   "do_vote a i v s s' \<equiv> let b = ballot s a in
           vote s a i b = None
-        \<and> suggestion s i b = Some v
+        \<and> (suggestion s $ i) b = Some v
         \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(i := (vote s a i)(b := Some v)))\<rparr>"
 
 abbreviation chosen where
