@@ -25,7 +25,7 @@ record ('v,'a,'l) amp_state =
   leader :: "'a \<Rightarrow> bool"
 
 locale amp_ioa = IOA +
-  fixes quorums::"'a set set" and leader :: "bal \<Rightarrow> 'a"
+  fixes quorums::"'a set set" and leading :: "bal \<Rightarrow> 'a"
   -- {* @{term leader} determines the leader of a ballot. *}
 begin
 
@@ -44,7 +44,7 @@ definition amp_start where
   -- {* The initial state *}
   "amp_start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> a i. Map.empty), 
     suggestion = (\<lambda> i . Map.empty), onebs = \<lambda> a . Map.empty, learned = \<lambda> l . Map.empty,
-    leader = \<lambda> a . leader 0 = a\<rparr>}"
+    leader = \<lambda> a . leading 0 = a\<rparr>}"
 
 subsection {* The transitions *}
 
@@ -62,7 +62,7 @@ definition join_ballot where
 
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in 
-    leader b = a
+    leading b = a
     \<and> q \<in> quorums
     \<and> \<not> amp_state.leader s a 
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)

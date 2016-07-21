@@ -36,11 +36,11 @@ method unfold_to_trans_rel =
 subsection {* Auxiliary invariants *}
 
 definition inv6 where inv6_def[inv_proofs_defs]:
-  "inv6 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> amp_state.leader s a))
+  "inv6 s \<equiv> \<forall> a b i . leading b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> amp_state.leader s a))
     \<longrightarrow> suggestion s i b = None"
 
 definition inv7 where inv7_def[inv_proofs_defs]:
-  "inv7 s \<equiv> \<forall> a . amp_state.leader s a \<longrightarrow> leader (ballot s a) = a"
+  "inv7 s \<equiv> \<forall> a . amp_state.leader s a \<longrightarrow> leading (ballot s a) = a"
 
 lemma inv7: "invariant the_ioa inv7"
 apply (rule invariantI)

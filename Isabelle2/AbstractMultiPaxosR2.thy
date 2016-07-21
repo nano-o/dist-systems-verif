@@ -22,7 +22,7 @@ record ('v,'a,'l) ampr2_state =
   learned :: "'l \<Rightarrow>f inst \<Rightarrow>f 'v option"
   leader :: "'a \<Rightarrow>f bool"
 
-locale ampr2_ioa = IOA + ampr1:amp_ioa quorums leader for quorums :: "'a set set" and leader
+locale ampr2_ioa = IOA + ampr1:amp_ioa quorums leading for quorums :: "'a set set" and leading
 begin
 
 definition asig where
@@ -35,7 +35,7 @@ definition start where
   -- {* The initial state *}
   "start \<equiv> {\<lparr>propCmd = {}, ballot = K$ 0, vote = K$ K$ K$ None, 
     suggestion = \<lambda>i. (K$ None), onebs = K$ K$ None, learned = K$ K$ None,
-    leader = (K$ False)(leader 0 $:= True)\<rparr>}"
+    leader = (K$ False)(leading 0 $:= True)\<rparr>}"
 
 subsection {* The transitions *}
 
@@ -43,13 +43,13 @@ definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
 
 term distributed_safe_at.acc_max
-lift_definition finfun_acc_max :: "('b \<Rightarrow> nat \<Rightarrow>f 'c option) \<Rightarrow> 'b \<Rightarrow> nat \<Rightarrow> ('c \<times> nat) option"
+lift_definition finfun_acc_max :: "('a \<Rightarrow> nat \<Rightarrow>f 'v option) \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> ('v \<times> nat) option"
   is distributed_safe_at.acc_max .
 
 term "vote s $ a $ i"
 value "\<lambda> s i . finfun_acc_max (\<lambda> a . vote s $ a $ i)"
 
-definition join_ballot::"'b \<Rightarrow> nat \<Rightarrow> ('c, 'b, 'd) ampr2_state \<Rightarrow> ('c, 'b, 'd) ampr2_state \<Rightarrow> bool" where
+definition join_ballot where
   "join_ballot a b s s' \<equiv> 
     let onebs' = \<lambda>i. (finfun_acc_max (\<lambda> a . vote s $ a $ i) a b)
     in
@@ -60,7 +60,7 @@ definition join_ballot::"'b \<Rightarrow> nat \<Rightarrow> ('c, 'b, 'd) ampr2_s
 
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s $ a in 
-    leader b = a
+    leading b = a
     \<and> q \<in> quorums
     \<and> \<not> ampr2_state.leader s $ a 
     \<and> (\<forall> a \<in> q . onebs s $ a $ b \<noteq> None)
