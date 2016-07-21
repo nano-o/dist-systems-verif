@@ -1,5 +1,5 @@
 theory DistributedSafeAt
-imports BallotArrays BallotArrayProperties
+imports BallotArrays BallotArrayProperties Max_Properties
 begin
 
 subsection {* Computing safe values in a distributed implementation *}
@@ -11,21 +11,21 @@ definition acc_max where
   -- {* @{term acc_max} can be computed locally by an acceptor. *}
   "acc_max a bound \<equiv> 
     if (\<exists> b < bound . vote a b \<noteq> None)
-    then Some (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd)
+    then Some (max_by_key_2 {(v,b) . b < bound \<and> vote a b = Some v} snd)
     else None"
 
 definition max_pair where
   "max_pair q a_max \<equiv> 
-    let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q)
+    let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some S \<Rightarrow> S) ` q)
     in
       if acc_maxs = {} then None
-      else Some (max_by_key acc_maxs snd)"
+      else Some (max_by_key_2 acc_maxs snd)"
 
 definition proved_safe_at where
   -- {* @{term proved_safe_at} can be computed locally by a leader *}
   "proved_safe_at q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
     (case max_pair q (\<lambda> a . acc_max a b) of None \<Rightarrow> True
-    | Some (v',b) \<Rightarrow> v = v')"
+    | Some S \<Rightarrow> v \<in> (fst ` S))"
           
 end
 
