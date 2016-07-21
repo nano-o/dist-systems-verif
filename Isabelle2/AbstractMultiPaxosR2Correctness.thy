@@ -28,7 +28,7 @@ proof (auto simp add:is_ref_map_def simp del:split_paired_Ex)
   fix s
   assume "s \<in> ioa.start ampr2_ioa"
   thus "ref_map s \<in> ioa.start ampr1_ioa" 
-    apply (simp add:ref_map_def ampr1.simps ampr2_ioa_def ampr1_ioa_def ioa_def start_def)
+    apply (simp add:ref_map_def ampr2_ioa_def ampr1_ioa_def ioa_def start_def ampr1.simps)
 next
   fix s t a
   assume a1:"reachable ampr2_ioa s" and a2:"s \<midarrow>a\<midarrow>ampr2_ioa\<longrightarrow> t"

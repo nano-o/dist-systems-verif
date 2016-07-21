@@ -1,4 +1,14 @@
-session "Isabelle2" = "HOL" +
+session "IOAutomata" = "HOL-Eisbach" +
+  options [document = pdf, document_output = "output"]
+  theories [document = false]
+    "../../IO-Automata/IOA"
+    "../../IO-Automata/Simulations"
+    "../../IO-Automata/History"
+    "../../IO-Automata/IOA_Automation"
+  document_files
+    "root.tex"
+
+session "Isabelle2" = "IOAutomata" +
   options [document = pdf, document_output = "output"]
   theories [document = false]
     AbstractMultiPaxosR1
