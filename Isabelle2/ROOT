@@ -4,6 +4,7 @@ session "Isabelle2" = "IOAutomata" +
     AbstractMultiPaxosR1
     AbstractMultiPaxosR1Correctness
     AbstractMultiPaxosR2
+    AbstractMultiPaxosR2Correctness
   theories
   document_files
     "root.tex"
