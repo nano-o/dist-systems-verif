@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR2
-imports  AbstractMultiPaxosR1 "~~/src/HOL/Library/FinFun_Syntax"
+imports  AbstractMultiPaxosR1Correctness "~~/src/HOL/Library/FinFun_Syntax"
 begin
 
 text {*
@@ -42,16 +42,9 @@ subsection {* The transitions *}
 definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
 
-term distributed_safe_at.acc_max
-lift_definition finfun_acc_max :: "('a \<Rightarrow> nat \<Rightarrow>f 'v option) \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> ('v \<times> nat) option"
-  is distributed_safe_at.acc_max .
-
-term "vote s $ a $ i"
-value "\<lambda> s i . finfun_acc_max (\<lambda> a . vote s $ a $ i)"
-
 definition join_ballot where
   "join_ballot a b s s' \<equiv> 
-    let onebs' = \<lambda>i. (finfun_acc_max (\<lambda> a . vote s $ a $ i) a b)
+    let onebs' = \<lambda>i. (distributed_safe_at.acc_max (\<lambda> a b. vote s $ a $ i $ b) a b)
     in
       b > (ballot s $ a) 
       \<and> s' = s\<lparr>ballot := (ballot s)(a $:= b),
@@ -66,7 +59,7 @@ definition acquire_leadership where
     \<and> (\<forall> a \<in> q . onebs s $ a $ b \<noteq> None)
     \<and> s' = s\<lparr>leader := (ampr2_state.leader s)(a $:= True), 
         suggestion := \<lambda> i . (suggestion s i)(b $:=
-          let m = distributed_safe_at.max_pair q (\<lambda> a . the (onebs s $ a $ b) i) in
+          let m = distributed_safe_at.max_pair q (\<lambda> a . (the (onebs s $ a $ b)) i) in
             map_option fst m)\<rparr>"
 
 definition suggest where "suggest a i b v s s' \<equiv>
@@ -82,12 +75,8 @@ definition do_vote where
         \<and> (suggestion s i) $ b = Some v
         \<and> s' = s\<lparr>vote := (vote s)(a $:= (vote s $ a)(i $:= (vote s $ a $ i)(b $:= Some v)))\<rparr>"
 
-term ballot_array.chosen
-lift_definition finfun_chosen :: "'b set set \<Rightarrow> ('b \<Rightarrow> nat \<Rightarrow>f 'c option) \<Rightarrow> 'c \<Rightarrow> bool"
-  is ballot_array.chosen .
-
 abbreviation chosen where
-  "chosen s i v \<equiv> finfun_chosen quorums (\<lambda> a . vote s $ a $ i) v"
+  "chosen s i v \<equiv> ballot_array.chosen quorums (\<lambda> a b. vote s $ a $ i $ b) v"
 
 definition learn where
   "learn l i v s s' \<equiv> chosen s i v \<and> s' = s\<lparr>learned := (learned s)(l $:= (learned s $ l)(i $:= Some v))\<rparr>"

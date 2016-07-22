@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR1
-imports  "../IO-Automata/IOA" BallotArrays DistributedSafeAt
+imports  "../../IO-Automata/IOA" BallotArrays DistributedSafeAt
 begin
 
 text {*
@@ -68,7 +68,7 @@ definition acquire_leadership where
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
     \<and> s' = s\<lparr>leader := (amp_state.leader s)(a := True), 
         suggestion := (\<lambda>i . (suggestion s i)(b :=
-          let m = distributed_safe_at.max_pair q (\<lambda> a . the (onebs s a b) i) in
+          let m = distributed_safe_at.max_pair q (\<lambda> a . (the (onebs s a b)) i) in
             map_option fst m))\<rparr>"
 
 definition suggest where "suggest a i b v s s' \<equiv>
