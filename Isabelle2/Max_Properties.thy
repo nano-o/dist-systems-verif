@@ -49,9 +49,10 @@ qed
 
 
 lemma max_by_key_2_subsets:
+  -- {* Lemma showing that computing max_by_key_2 in 2 steps, first computing the max per acceptor and then the max of those values, 
+  is the same thing as max_by_key_2. *}
   fixes Ss :: "'a set set" and f :: "'a \<Rightarrow> ('b::linorder)" and S
   assumes "\<And> S . S \<in> Ss \<Longrightarrow> finite S" and "finite Ss" and "S \<in> Ss" and "S \<noteq> {}"
-  and "\<And> x y . \<lbrakk>x \<in> Union Ss; y \<in> Union Ss; f x = f y\<rbrakk> \<Longrightarrow> x = y"
   shows "max_by_key_2 (Union {max_by_key_2 S f | S . S \<in> Ss \<and> S \<noteq> {}}) f = max_by_key_2 (Union Ss) f"
 proof -
   def maxs \<equiv> "Union {max_by_key_2 S f | S . S \<in> Ss \<and> S \<noteq> {}}"
