@@ -1,4 +1,4 @@
-theory AbstractMultiPaxosR1
+theory AbstractMultiPaxosR4
 imports  "../../IO-Automata/IOA" BallotArrays DistributedSafeAt
 begin
 
@@ -95,6 +95,12 @@ definition catch_up where
   "catch_up l1 l2 i v s s' \<equiv> learned s l2 i = Some v 
     \<and> s' = s\<lparr>learned := (learned s)(l1 := (learned s l1)(i := Some v))\<rparr>"
 
+definition truncate_log where
+  "truncate_log a i s s' \<equiv> vote s a i \<noteq> (Map.empty)
+    \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(i := (Map.empty))),
+      onebs := (onebs s)(a := (\<lambda>b. (let obs = (onebs s a b) in if obs \<noteq> None then
+        Some ((the obs)(i := None)) else None)))\<rparr>"
+
 fun amp_trans_rel where
   "amp_trans_rel r (Propose c) r' = propose c r r'"
 | "amp_trans_rel r Internal r' = (
@@ -102,7 +108,8 @@ fun amp_trans_rel where
     \<or> (\<exists> a i v . do_vote a i v r r')
     \<or> (\<exists> a i b v . suggest a i b v r r')
     \<or> (\<exists> l1 l2 i v . catch_up l1 l2 i v r r')
-    \<or> (\<exists> a q . acquire_leadership a q r r'))"
+    \<or> (\<exists> a q . acquire_leadership a q r r')
+    \<or> (\<exists> a i . truncate_log a i r r'))"
 | "amp_trans_rel r (Learn i v l) r' = learn l i v r r'"
 
 lemma trans_cases[consumes 1]:
@@ -115,6 +122,7 @@ lemma trans_cases[consumes 1]:
 | (suggest) a i b v where "suggest a i b v r r'"
 | (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'"
 | (acquire) a q where "acquire_leadership a q r r'"
+| (truncate_log) a i where "truncate_log a i r r'"
 using assms by induct auto
 
 definition amp_trans where
@@ -126,7 +134,7 @@ definition amp_ioa where
   "amp_ioa \<equiv> \<lparr>ioa.asig = amp_asig, start = amp_start, trans = amp_trans\<rparr>"
 
 lemmas simps = amp_ioa_def amp_asig_def amp_start_def amp_trans_def propose_def join_ballot_def 
-  do_vote_def learn_def
+  do_vote_def learn_def truncate_log_def
 
 end
 

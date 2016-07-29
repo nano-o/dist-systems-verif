@@ -1,7 +1,7 @@
 section {* Proof of the agreement property of AbstractMultiPaxos. *}
 
-theory AbstractMultiPaxosR1Correctness
-imports AbstractMultiPaxosR1 "../../IO-Automata/IOA_Automation"
+theory AbstractMultiPaxosR4Correctness
+imports AbstractMultiPaxosR4 "../../IO-Automata/IOA_Automation"
   BallotArrayProperties
 begin
 
@@ -22,7 +22,7 @@ declare the_ioa_def[inv_proofs_defs]
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp] suggest_def[simp]
   learn_def[simp] Let_def[simp] split_if[split] split_if_asm[split] catch_up_def[simp]
-  acquire_leadership_def[simp]
+  acquire_leadership_def[simp] truncate_log_def[simp]
 
 (*  Nitpick config:
 nitpick[no_assms, show_consts, verbose, card 'a = 3, card 'v = 2, card nat = 2, card "'v option" = 3, card "nat option" = 3,

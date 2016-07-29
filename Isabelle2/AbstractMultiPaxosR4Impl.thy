@@ -1,5 +1,5 @@
-theory AbstractMultiPaxosR3
-imports  AbstractMultiPaxosR1 "~~/src/HOL/Library/FinFun_Syntax"
+theory AbstractMultiPaxosR4Impl
+imports  AbstractMultiPaxosR4 "~~/src/HOL/Library/FinFun_Syntax"
 begin
 
 text {*
@@ -113,6 +113,13 @@ definition catch_up where
   "catch_up l1 l2 i v s s' \<equiv> learned s $ l2 $ i = Some v
     \<and> s' = s\<lparr>learned := (learned s)(l1 $:= (learned s $ l1)(i $:= Some v))\<rparr>"
 
+definition truncate_log where
+  "truncate_log a i s s' \<equiv> vote s $ a $ i \<noteq> (K$ None)
+    \<and> s' = s\<lparr>vote := (vote s)(a $:= (vote s $ a)(i $:= (K$ None))),
+      onebs := (let bals = finfun_to_list(onebs s $ a) in 
+      (onebs s)(a $:= (fold (\<lambda>b ob. ob(b $:= (let obs = (ob $ b) in if obs \<noteq> None then
+        Some ((the obs)(i $:= None)) else None)))) bals (onebs s $ a)))\<rparr>"
+
 fun trans_rel where
   "trans_rel r (ampr1.Propose c) r' = propose c r r'"
 | "trans_rel r ampr1.Internal r' = (
@@ -120,7 +127,8 @@ fun trans_rel where
     \<or> (\<exists> a i v . do_vote a i v r r')
     \<or> (\<exists> a i b v . suggest a i b v r r')
     \<or> (\<exists> l1 l2 i v . catch_up l1 l2 i v r r')
-    \<or> (\<exists> a q . acquire_leadership a q r r'))"
+    \<or> (\<exists> a q . acquire_leadership a q r r')
+    \<or> (\<exists> a i . truncate_log a i r r'))"
 | "trans_rel r (ampr1.Learn i v l) r' = learn l i v r r'"
 
 lemma trans_cases[consumes 1]:
@@ -133,6 +141,7 @@ lemma trans_cases[consumes 1]:
 | (suggest) a i b v where "suggest a i b v r r'"
 | (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'"
 | (acquire) a q where "acquire_leadership a q r r'"
+| (truncate_log) a i where "truncate_log a i r r'"
 using assms by induct auto
 
 lemma trans_cases_2[consumes 1]:
@@ -145,6 +154,7 @@ lemma trans_cases_2[consumes 1]:
 | (suggest) a i b v where "suggest a i b v r r'" and "aa = ampr1.amp_action.Internal"
 | (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'" and "aa = ampr1.amp_action.Internal"
 | (acquire) a q where "acquire_leadership a q r r'" and "aa = ampr1.amp_action.Internal"
+| (truncate_log) a i where "truncate_log a i r r'" and "aa = ampr1.amp_action.Internal"
 using assms by induct auto
 
 definition trans where
@@ -156,7 +166,7 @@ definition ioa where
   "ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
 
 lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def 
-  do_vote_def learn_def suggest_def catch_up_def acquire_leadership_def
+  do_vote_def learn_def suggest_def catch_up_def acquire_leadership_def truncate_log_def
 
 end
 

@@ -38,12 +38,12 @@ begin
 context begin
                                                          
 private                                                  
-lemma l1: assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_2_a q b v"
-nitpick[verbose, card 'a = 3, card nat = 2, card 'b = 3, card "nat option" = 3, card "'b option" = 4, card "('b \<times> nat) option" = 7,
-  card "'b \<times> nat" = 6, expect=none]
+lemma l1: assumes "proved_safe_at q b v" and "conservative_array"
+  shows "proved_safe_at_2_a q b v"
 proof -
   text {* First a few immediate facts. *}
-  from assms have "q \<in> quorums" and bals:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> b" using proved_safe_at_def by auto
+  from assms have "q \<in> quorums" and bals:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> b" using proved_safe_at_def
+    apply force by (meson assms(1) proved_safe_at_def)
   from \<open>q \<in> quorums\<close> have "finite q" and "q \<noteq> {}"
     apply (metis quorums_axioms quorums_def) by (metis \<open>q \<in> quorums\<close> empty_iff quorum_inter_witness)
 
@@ -80,7 +80,8 @@ proof -
       let ?acc_maxs = "Union ?acc_maxs_set"
       have 1:"?acc_maxs \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> apply (auto split add:option.splits) by (metis \<open>a \<in> q\<close>)
       hence 2:"fst (max_by_key ?acc_maxs snd) = v" using assms(1) proved_safe_at_def 
-        apply (auto simp add:max_pair_def split add:option.splits) apply (metis option.simps(3)) by (metis (no_types, lifting) fst_conv option.inject) 
+        apply (auto simp add:max_pair_def split add:option.splits)
+        apply (metis option.simps(3)) by (metis (no_types, lifting) fst_conv option.inject) 
       moreover
       have 7:"?acc_maxs = {max_by_key S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}"
         apply (auto simp add: acc_max_def split add:option.splits split_if_asm)
