@@ -11,21 +11,21 @@ definition acc_max where
   -- {* @{term acc_max} can be computed locally by an acceptor. *}
   "acc_max a bound \<equiv> 
     if (\<exists> b < bound . vote a b \<noteq> None)
-    then Some (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd)
+    then Some (max_by_key_2 {(v,b) . b < bound \<and> vote a b = Some v} snd)
     else None"
 
 definition max_pair where
   "max_pair q a_max \<equiv> 
-    let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q)
+    let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some S \<Rightarrow> S) ` q)
     in
       if acc_maxs = {} then None
-      else Some (max_by_key acc_maxs snd)"
+      else Some (max_by_key_2 acc_maxs snd)"
 
 definition proved_safe_at where
   -- {* @{term proved_safe_at} can be computed locally by a leader *}
   "proved_safe_at q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
     (case max_pair q (\<lambda> a . acc_max a b) of None \<Rightarrow> True
-    | Some (v',b) \<Rightarrow> v = v')"
+    | Some S \<Rightarrow> v \<in> (fst ` S))"
           
 end
 
@@ -53,7 +53,7 @@ proof -
     else True" (is "if ?cond then ?true else ?false")
   proof (cases "?cond")
     case True    
-    from True obtain a b\<^sub>a where "a \<in> q" and "vote a b\<^sub>a \<noteq> None" and "b\<^sub>a < b" by (auto simp add:acc_max_def)
+    from True obtain a b\<^sub>a where t0:"a \<in> q" and t1:"vote a b\<^sub>a \<noteq> None" and t2:"b\<^sub>a < b" by (auto simp add:acc_max_def)
     hence "acc_max a b \<noteq> None" by (auto simp add:acc_max_def)
 
     text {* Using lemma @{thm max_by_key_subsets} *}
@@ -74,34 +74,53 @@ proof -
     qed
     have 5:"?S \<in> ?Ss" using \<open>a \<in> q\<close> by blast
     have 6:"?S \<noteq> {}" using \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close> by blast
-    have v_max_max:"v = fst (max_by_key {max_by_key S snd | S . S \<in> ?Ss \<and> S \<noteq> {}} snd)" 
+    have v_max_max:"v \<in> fst ` (max_by_key_2 (Union {max_by_key_2 S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}) snd)" 
     proof -
-      let ?acc_maxs_set = "(\<lambda> a . case acc_max a b of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q"
+      let ?acc_maxs_set = "(\<lambda> a . case acc_max a b of None \<Rightarrow> {} | Some S \<Rightarrow> S) ` q"
       let ?acc_maxs = "Union ?acc_maxs_set"
-      have 1:"?acc_maxs \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> apply (auto split add:option.splits) by (metis \<open>a \<in> q\<close>)
-      hence 2:"fst (max_by_key ?acc_maxs snd) = v" using assms(1) proved_safe_at_def 
+      obtain B where b0:"B = the (acc_max a b)" using \<open>acc_max a b \<noteq> None\<close> by simp
+      hence b1:"B \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close> unfolding acc_max_def
+        by (smt "5" "6" "9" max_by_key_ne option.sel)
+      have "B \<in> ?acc_maxs_set" using b0 \<open>a \<in> q\<close> \<open>acc_max a b \<noteq> None\<close> image_iff option.case_eq_if by fastforce
+      hence 1:"?acc_maxs \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> \<open>a \<in> q\<close> apply (auto split add:option.splits)
+        using b1 by auto
+      hence 2:"v \<in> fst ` (max_by_key_2 ?acc_maxs snd)" using assms(1) proved_safe_at_def 
         apply (auto simp add:max_pair_def split add:option.splits)
-        apply (metis option.simps(3)) by (metis (no_types, lifting) fst_conv option.inject) 
+        apply (metis empty_iff option.simps(3))
+        proof -
+          fix x2 :: "('b \<times> nat) set" and ba :: nat and aaa :: 'a and y :: "('b \<times> nat) set" and aa :: 'b and bb :: nat
+          assume a1: "(if \<forall>a\<in>q. \<forall>x2. acc_max a b = Some x2 \<longrightarrow> x2 = {} then None else Some (max_by_key_2 (\<Union>a\<in>q. case acc_max a b of None \<Rightarrow> {} | Some S \<Rightarrow> S) snd)) = Some x2"
+          assume a2: "(v, ba) \<in> x2"
+          assume a3: "aaa \<in> q"
+          assume a4: "acc_max aaa b = Some y"
+          assume a5: "v \<notin> fst ` max_by_key_2 (\<Union>a\<in>q. case acc_max a b of None \<Rightarrow> {} | Some S \<Rightarrow> S) snd"
+          assume a6: "(aa, bb) \<in> y"
+          have "v \<in> fst ` x2"
+            using a2 by (metis (no_types) fst_eqD image_iff)
+          then show False
+            using a6 a5 a4 a3 a1 by (metis equals0D option.sel)
+        qed
       moreover
-      have 7:"?acc_maxs = {max_by_key S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}"
+      have 7:"?acc_maxs = Union {max_by_key_2 S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}"
         apply (auto simp add: acc_max_def split add:option.splits split_if_asm)
         apply (smt Collect_empty_eq case_prodI) by (metis (mono_tags) option.simps(3))
       ultimately show ?thesis by auto 
     qed
-    hence v_max_Union:"v = fst (max_by_key (Union ?Ss) snd)"
+    hence v_max_Union:"v \<in> fst ` (max_by_key_2 (Union ?Ss) snd)"
     proof -
       have 10:"\<And> x y . \<lbrakk>x \<in> Union ?Ss; y \<in> Union ?Ss; snd x = snd y\<rbrakk> \<Longrightarrow> x = y"
         using assms(2) by (auto simp add:conservative_array_def conservative_def split add:option.splits)
-      show ?thesis using max_by_key_subsets[of ?Ss ?S snd]
+      show ?thesis using max_by_key_2_subsets[of ?Ss ?S snd]
         by (metis (no_types, lifting) "10" "5" "6" "8" "9" v_max_max) 
     qed
 
     text {* now we prove that this is the same as Max... *}
-    let ?m = "max_by_key (Union ?Ss) snd"  let ?b\<^sub>m = "snd ?m"
-    have 13:"v = fst ?m" by (metis v_max_Union)
+    let ?m = "(max_by_key_2 (Union ?Ss) snd)"  let ?b\<^sub>m = "(snd ` ?m)"
+    have 13:"v \<in> fst ` ?m" by (metis v_max_Union)
     let ?bals = "{b\<^sub>2 . b\<^sub>2 < b \<and> (\<exists> a \<in> q . vote a b\<^sub>2 \<noteq> None)}"
-    have bm_max:"?b\<^sub>m = Max ?bals"
+    have bm_max:"Max ?bals \<in> ?b\<^sub>m"
     proof -
+      have "card (snd ` ?m) = 1"  using \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close> unfolding max_by_key_2_def 
       have "?b\<^sub>m \<in> ?bals" and "\<And> b . b \<in> ?bals \<Longrightarrow> b \<le> ?b\<^sub>m"
       proof -
         have 14:"(v,?b\<^sub>m) \<in> Union ?Ss" and 15:"\<And> x . x \<in> Union ?Ss \<Longrightarrow> snd x \<le> ?b\<^sub>m" 
@@ -109,8 +128,7 @@ proof -
           have 11:"finite (Union ?Ss)" by (metis (no_types, lifting) "8" "9" finite_Union)
           have 12:"Union ?Ss \<noteq> {}" by (metis (no_types, lifting) "5" "6" Sup_bot_conv(1))
           show "(v,?b\<^sub>m) \<in> Union ?Ss" and 15:"\<And> x . x \<in> Union ?Ss \<Longrightarrow> snd x \<le> ?b\<^sub>m"
-            apply (metis (mono_tags, lifting) "11" "12" ex_in_conv max_by_key_in_and_ge(2) surjective_pairing v_max_Union)
-            by (metis (no_types, lifting) "11" max_by_key_in_and_ge(1))
+            
         qed
         have 18:"?b\<^sub>m < b" using 14 by auto 
         have 16:"Union ?Ss = {(v\<^sub>2,b\<^sub>2) . b\<^sub>2 < b \<and> (\<exists> a \<in> q . vote a b\<^sub>2 = Some v\<^sub>2)}" by auto
