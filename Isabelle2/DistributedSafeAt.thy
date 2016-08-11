@@ -11,12 +11,12 @@ definition acc_max where
   -- {* @{term acc_max} can be computed locally by an acceptor. *}
   "acc_max a bound \<equiv> 
     if (\<exists> b < bound . vote a b \<noteq> None)
-    then Some (max_by_key_2 {(v,b) . b < bound \<and> vote a b = Some v} snd)
+    then Some (the_elem (max_by_key_2 {(v,b) . b < bound \<and> vote a b = Some v} snd))
     else None"
 
 definition max_pair where
   "max_pair q a_max \<equiv> 
-    let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some S \<Rightarrow> S) ` q)
+    let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q)
     in
       if acc_maxs = {} then None
       else Some (max_by_key_2 acc_maxs snd)"
@@ -37,7 +37,27 @@ begin
 
 context begin
                                                          
-private                                                  
+private     
+
+lemma l0: assumes "\<exists> b < bound . vote a b \<noteq> None" and "S = {(v, b). b < bound \<and> vote a b = Some v}" and "finite S"
+  shows "card (max_by_key_2 S snd) = 1"
+unfolding max_by_key_2_def
+proof-
+  have 0:"S \<noteq> {}" using assms(1,2)
+    using Collect_empty_eq case_prodI not_Some_eq by blast
+  obtain b' where 1:"b' = Max (snd ` S)" by simp
+  with this obtain v' where 2:"vote a b' = Some v'" using assms(1,2,3) 0
+    by (smt Max_in Product_Type.Collect_case_prodD finite_imageI imageE image_is_empty)
+  hence 3:"(v', b') \<in> {x \<in> S. snd x = Max (snd ` S)}" using "0" "1" "2" assms(2) assms(3) by auto
+  {
+    assume "\<exists>(v'',b'') \<in> {x \<in> S. snd x = Max (snd ` S)}. (v'',b'') \<noteq> (v', b')"
+    hence "False" using 2 by (simp add: "1" assms(2) case_prodE eq_snd_iff mem_Collect_eq option.inject)
+  }
+  hence "{x \<in> S. snd x = Max (snd ` S)} = {(v', b')}" using "3" by blast
+  thus "card {x \<in> S. snd x = Max (snd ` S)} = 1" by simp
+qed
+  
+                                             
 lemma l1: assumes "proved_safe_at q b v" and "conservative_array"
   shows "proved_safe_at_2_a q b v"
 proof -
@@ -76,32 +96,15 @@ proof -
     have 6:"?S \<noteq> {}" using \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close> by blast
     have v_max_max:"v \<in> fst ` (max_by_key_2 (Union {max_by_key_2 S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}) snd)" 
     proof -
-      let ?acc_maxs_set = "(\<lambda> a . case acc_max a b of None \<Rightarrow> {} | Some S \<Rightarrow> S) ` q"
+      let ?acc_maxs_set = "(\<lambda> a . case acc_max a b of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q"
       let ?acc_maxs = "Union ?acc_maxs_set"
-      obtain B where b0:"B = the (acc_max a b)" using \<open>acc_max a b \<noteq> None\<close> by simp
-      hence b1:"B \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close> unfolding acc_max_def
-        by (smt "5" "6" "9" max_by_key_ne option.sel)
-      have "B \<in> ?acc_maxs_set" using b0 \<open>a \<in> q\<close> \<open>acc_max a b \<noteq> None\<close> image_iff option.case_eq_if by fastforce
-      hence 1:"?acc_maxs \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> \<open>a \<in> q\<close> apply (auto split add:option.splits)
-        using b1 by auto
-      hence 2:"v \<in> fst ` (max_by_key_2 ?acc_maxs snd)" using assms(1) proved_safe_at_def 
-        apply (auto simp add:max_pair_def split add:option.splits)
-        apply (metis empty_iff option.simps(3))
-        proof -
-          fix x2 :: "('b \<times> nat) set" and ba :: nat and aaa :: 'a and y :: "('b \<times> nat) set" and aa :: 'b and bb :: nat
-          assume a1: "(if \<forall>a\<in>q. \<forall>x2. acc_max a b = Some x2 \<longrightarrow> x2 = {} then None else Some (max_by_key_2 (\<Union>a\<in>q. case acc_max a b of None \<Rightarrow> {} | Some S \<Rightarrow> S) snd)) = Some x2"
-          assume a2: "(v, ba) \<in> x2"
-          assume a3: "aaa \<in> q"
-          assume a4: "acc_max aaa b = Some y"
-          assume a5: "v \<notin> fst ` max_by_key_2 (\<Union>a\<in>q. case acc_max a b of None \<Rightarrow> {} | Some S \<Rightarrow> S) snd"
-          assume a6: "(aa, bb) \<in> y"
-          have "v \<in> fst ` x2"
-            using a2 by (metis (no_types) fst_eqD image_iff)
-          then show False
-            using a6 a5 a4 a3 a1 by (metis equals0D option.sel)
-        qed
+      have 1:"?acc_maxs \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> apply (auto split add:option.splits) by (metis \<open>a \<in> q\<close>)
+      hence 2:"fst (max_by_key_2 ?acc_maxs snd) = v" using assms(1) proved_safe_at_def 
+        apply (auto simp add:max_pair_def split add:option.splits) 
+        apply (metis option.simps(3)) 
+        by (metis (no_types, lifting) fst_conv option.inject) 
       moreover
-      have 7:"?acc_maxs = Union {max_by_key_2 S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}"
+      have 7:"?acc_maxs = {max_by_key S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}"
         apply (auto simp add: acc_max_def split add:option.splits split_if_asm)
         apply (smt Collect_empty_eq case_prodI) by (metis (mono_tags) option.simps(3))
       ultimately show ?thesis by auto 
@@ -118,8 +121,8 @@ proof -
     let ?m = "(max_by_key_2 (Union ?Ss) snd)"  let ?b\<^sub>m = "(snd ` ?m)"
     have 13:"v \<in> fst ` ?m" by (metis v_max_Union)
     let ?bals = "{b\<^sub>2 . b\<^sub>2 < b \<and> (\<exists> a \<in> q . vote a b\<^sub>2 \<noteq> None)}"
-    have bm_max:"Max ?bals \<in> ?b\<^sub>m"
-    proof -
+    have bm_max:"Max ?bals \<in> ?b\<^sub>m" sorry
+    (*proof -
       have "card (snd ` ?m) = 1"  using \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close> unfolding max_by_key_2_def 
       have "?b\<^sub>m \<in> ?bals" and "\<And> b . b \<in> ?bals \<Longrightarrow> b \<le> ?b\<^sub>m"
       proof -
@@ -143,16 +146,16 @@ proof -
       moreover have "?bals \<noteq> {}"
         by (metis (mono_tags, lifting) Collect_empty_eq \<open>a \<in> q\<close> \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close>) 
       ultimately show "?b\<^sub>m = Max ?bals" by (metis (no_types, lifting) Max_eqI)
-    qed
-    have m_in_union:"?m \<in> Union ?Ss" 
+    qed*)
+    have m_in_union:"?m = Union ?Ss" 
     proof -
       have "finite (Union ?Ss)" by (metis (no_types, lifting) "8" "9" finite_Union) 
       moreover have "Union ?Ss \<noteq> {}"
         by (metis (mono_tags, lifting) "5" "6" empty_Union_conv)
-      ultimately show ?thesis by (metis (no_types, lifting) ex_in_conv max_by_key_in_and_ge(2)) 
+      ultimately show ?thesis sorry
     qed
-    obtain a2 where "a2 \<in> q" and max_vote:"vote a2 ?b\<^sub>m = Some v"
-      by (smt Product_Type.Collect_case_prodD UnionE m_in_union mem_Collect_eq v_max_Union) 
+    obtain a2 where "a2 \<in> q" and max_vote:"\<forall>b \<in> ?b\<^sub>m. vote a2 b = Some v" sorry
+      (*by (smt Product_Type.Collect_case_prodD UnionE m_in_union mem_Collect_eq v_max_Union) *)
     show ?thesis using bexI[where ?x=a2 and ?A=q] max_vote True \<open>a2 \<in> q\<close> bm_max by auto
   next
     case False
