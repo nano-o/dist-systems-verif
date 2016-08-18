@@ -13,11 +13,14 @@ text {*
 
 text {* TODO: Let's generate code for acc_max *}
 
-print_locale  distributed_safe_at
+print_locale distributed_safe_at
 global_interpretation dsa:distributed_safe_at quorums ballot vote for quorums ballot vote 
   defines my_acc_max = dsa.acc_max .
 
-export_code my_acc_max
+term my_acc_max
+thm my_acc_max_def
+
+export_code my_acc_max in Haskell
 
 type_synonym bal = nat
 type_synonym inst = nat

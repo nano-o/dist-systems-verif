@@ -1,17 +1,88 @@
 theory DistributedSafeAt
-imports BallotArrays BallotArrayProperties Max_Properties
+imports BallotArrays BallotArrayProperties MaxByKey
 begin
 
 subsection {* Computing safe values in a distributed implementation *}
 
 locale distributed_safe_at = ballot_array 
 begin
-
+  
 definition acc_max where
   -- {* @{term acc_max} can be computed locally by an acceptor. *}
   "acc_max a bound \<equiv> 
     if (\<exists> b < bound . vote a b \<noteq> None)
-    then Some (max_by_key_2 {(v,b) . b < bound \<and> vote a b = Some v} snd)
+    then Some (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd)
+    else None"
+  
+term "the ` ((\<lambda> b . vote a b \<bind> (\<lambda> v . Some (v,b))) ` {0::nat..<bound} - {None})"
+
+lemma acc_max_code[code]:"acc_max a bound = 
+  (if (\<exists> b < bound . vote a b \<noteq> None)
+  then 
+    let 
+      f = \<lambda> x . case x of None \<Rightarrow> {} | Some y \<Rightarrow> {y};
+      g = \<lambda> b . vote a b \<bind> (\<lambda> v . Some (v,b));
+      votes = (g ` {0..<bound}) \<bind> f
+    in Some (max_by_key votes snd)
+  else None)" 
+proof (cases "\<exists> b < bound . vote a b \<noteq> None")
+  case True
+  then show ?thesis 
+  proof -              
+    have "(((\<lambda> b . vote a b \<bind> (\<lambda> v . Some (v,b))) ` {0..<bound}) \<bind> 
+        (\<lambda> x . case x of None \<Rightarrow> {} | Some y \<Rightarrow> {y}))
+        = {(v,b) . b < bound \<and> vote a b = Some v}" apply (auto split!:option.split_asm)
+        apply (simp add: bind_eq_Some_conv)
+       apply (smt bind_eq_Some_conv option.sel prod.inject)
+      by force
+    thus ?thesis
+      using acc_max_def by auto
+  qed
+next
+  case False
+  then show ?thesis
+    using acc_max_def by auto 
+qed
+
+lemma acc_max_singleton: 
+  assumes "acc_max a bound = Some xs"
+  obtains val bal where "xs = {(val,bal)}" 
+proof -  
+  define votes where "votes = {(v,b) . b < bound \<and> vote a b = Some v}"
+  have 4:"acc_max a bound = Some (max_by_key votes snd)"
+    by (metis (no_types, lifting) votes_def acc_max_def assms option.distinct(1))
+  obtain x where "max_by_key votes snd = {x}"
+  proof -
+    have 1:"votes \<noteq> {}" (is "?votes \<noteq> {}") using assms
+      by (auto simp add:acc_max_def votes_def split!: if_split_asm)
+    have 2:"finite votes" 
+    proof -
+      have 1:"finite (S \<bind> f)" if "finite S" and "\<And> x . x \<in> S \<Longrightarrow> finite (f x)" for S f
+        by (simp add: bind_UNION that)
+      have 2:"?votes = {b . b < bound} \<bind> (\<lambda> b . case vote a b of Some v \<Rightarrow> {(v,b)} | None  \<Rightarrow> {})"
+        (is "?votes = Set.bind ?bals ?f")
+        by (auto simp add: Set.bind_def votes_def split!:option.split)
+      have 3:"finite ?bals"
+        by simp 
+      have 4:"finite (?f b)" for b by (simp split!:option.split)
+      show ?thesis
+        by (metis (no_types, lifting) 2 3 1 4)
+    qed
+    have 3:"snd x \<noteq> snd y" if "x \<in> ?votes" and "y \<in> ?votes" and "x \<noteq> y" for x y
+      by (metis (mono_tags, lifting) votes_def BNF_Def.Collect_case_prodD option.simps(1) prod_eq_iff that)
+    show ?thesis using that max_by_key_ordered 1 2 3
+      by (metis (full_types))
+  qed
+  thus ?thesis using that
+    by (metis "4" assms old.prod.exhaust option.simps(1))
+qed
+
+definition acc_max_2 where
+  "acc_max_2 a bound \<equiv>
+    if (\<exists> b < bound . vote a b \<noteq> None)
+    then let 
+        mbk2 = max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd
+      in Some (the_elem mbk2)
     else None"
 
 definition max_pair where
@@ -19,7 +90,7 @@ definition max_pair where
     let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some S \<Rightarrow> S) ` q)
     in
       if acc_maxs = {} then None
-      else Some (max_by_key_2 acc_maxs snd)"
+      else Some (max_by_key acc_maxs snd)"
 
 definition proved_safe_at where
   -- {* @{term proved_safe_at} can be computed locally by a leader *}
@@ -29,16 +100,19 @@ definition proved_safe_at where
           
 end
 
-print_locale distributed_safe_at
-print_locale quorums
-
 locale dsa_properties = quorums quorums + distributed_safe_at quorums for quorums
 begin
 
 context begin
 
-private                                                  
-lemma l1: assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_abs q b v"
+private lemma l1:
+  assumes "proved_safe_at q b v"
+  shows "proved_safe_at_abs q b v"
+proof -
+  have "v \<in> fst ` (max_by_key {} snd)" if "\<exists> a \<in> q . \<exists> b' < b . vote a b' \<noteq> None"
+
+private
+lemma l1: assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_abs q b v" sorry
 nitpick[verbose, card 'a = 3, card nat = 2, card 'b = 3, card "nat option" = 3, card "'b option" = 4, card "('b \<times> nat) option" = 7,
   card "'b \<times> nat" = 6, expect=none]
 proof -
@@ -74,7 +148,7 @@ proof -
     qed
     have 5:"?S \<in> ?Ss" using \<open>a \<in> q\<close> by blast
     have 6:"?S \<noteq> {}" using \<open>b\<^sub>a < b\<close> \<open>vote a b\<^sub>a \<noteq> None\<close> by blast
-    have v_max_max:"v = fst (max_by_key {max_by_key S snd | S . S \<in> ?Ss \<and> S \<noteq> {}} snd)" 
+    have v_max_max:"v \<in> fst ` (max_by_key (Union {max_by_key S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}) snd)" 
     proof -
       let ?acc_maxs_set = "(\<lambda> a . case acc_max a b of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q"
       let ?acc_maxs = "Union ?acc_maxs_set"
@@ -90,7 +164,7 @@ proof -
     hence v_max_Union:"v = fst (max_by_key (Union ?Ss) snd)"
     proof -
       have 10:"\<And> x y . \<lbrakk>x \<in> Union ?Ss; y \<in> Union ?Ss; snd x = snd y\<rbrakk> \<Longrightarrow> x = y"
-        using assms(2) by (auto simp add:conservative_array_def conservative_def split add:option.splits)
+        using assms(2) by (auto simp add:conservative_array_def conservative_def split:option.splits)
       show ?thesis using max_by_key_subsets[of ?Ss ?S snd]
         by (metis (no_types, lifting) "10" "5" "6" "8" "9" v_max_max) 
     qed
