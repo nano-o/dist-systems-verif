@@ -14,29 +14,26 @@ definition acc_max where
     then Some (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd)
     else None"
   
-term "the ` ((\<lambda> b . vote a b \<bind> (\<lambda> v . Some (v,b))) ` {0::nat..<bound} - {None})"
-
-lemma acc_max_code[code]:"acc_max a bound = 
+lemma acc_max_code[code]:
+  fixes get_vote vote_as_set
+  defines "get_vote a b \<equiv> vote a b \<bind> (\<lambda> v . Some (v,b))"
+    and "vote_as_set v \<equiv> case v of None \<Rightarrow> {} | Some x \<Rightarrow> {x}"
+  shows "acc_max a bound = 
   (if (\<exists> b < bound . vote a b \<noteq> None)
-  then 
-    let 
-      f = \<lambda> x . case x of None \<Rightarrow> {} | Some y \<Rightarrow> {y};
-      g = \<lambda> b . vote a b \<bind> (\<lambda> v . Some (v,b));
-      votes = (g ` {0..<bound}) \<bind> f
+  then let votes = (get_vote a ` {0..<bound}) \<bind> vote_as_set
     in Some (max_by_key votes snd)
-  else None)" 
+  else None)"
 proof (cases "\<exists> b < bound . vote a b \<noteq> None")
   case True
   then show ?thesis 
   proof -              
-    have "(((\<lambda> b . vote a b \<bind> (\<lambda> v . Some (v,b))) ` {0..<bound}) \<bind> 
-        (\<lambda> x . case x of None \<Rightarrow> {} | Some y \<Rightarrow> {y}))
-        = {(v,b) . b < bound \<and> vote a b = Some v}" apply (auto split!:option.split_asm)
+    have "(get_vote a ` {0..<bound}) \<bind> vote_as_set = {(v,b) . b < bound \<and> vote a b = Some v}" 
+      apply (auto simp add:vote_as_set_def get_vote_def split!:option.split_asm)
         apply (simp add: bind_eq_Some_conv)
        apply (smt bind_eq_Some_conv option.sel prod.inject)
       by force
     thus ?thesis
-      using acc_max_def by auto
+      by (simp add: distributed_safe_at.acc_max_def) 
   qed
 next
   case False
