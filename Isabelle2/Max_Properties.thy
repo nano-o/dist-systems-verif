@@ -6,34 +6,56 @@ begin
 
 subsection {* Max by key *}
 
+context begin
+
 definition max_by_key where
-  "max_by_key S f \<equiv> let max_key = Max {f x | x . x \<in> S} in SOME x . x \<in> S \<and> f x = max_key"
+  -- {* Executable version *}
+  "max_by_key S f \<equiv> {x \<in> S . f x = Max (f ` S)}"
 
-definition max_by_key_2 where
-  -- {* Executable version *} 
-  "max_by_key_2 S f \<equiv> {x \<in> S . f x = Max (f ` S)}"
+lemma fixes X::"nat set" assumes "finite X" and "X \<noteq> {}"
+  obtains a where "a \<in> X" and "\<And> x . \<lbrakk>x \<in> X; x \<noteq> a\<rbrakk> \<Longrightarrow> x < a"
+  by (metis Max_ge Max_in assms(1) assms(2) le_neq_implies_less) 
+  
+lemma max_by_key_ordered:
+  fixes S::"'a set" and f::"'a \<Rightarrow> 'b::linorder"
+  assumes "\<And> x y . \<lbrakk>x \<in> S; y \<in> S; x \<noteq> y\<rbrakk> \<Longrightarrow> f x \<noteq> f y" and "finite S" and "S \<noteq> {}"
+  obtains z where "max_by_key S f = {z}"
+proof -
+  have "Max (f ` S) \<in> f ` S"
+    by (metis Max_in assms(2,3) finite_imageI image_is_empty)
+  with this obtain z where "f z = Max (f ` S)" and "z \<in> S"
+    by (metis imageE)
+  have "{x \<in> S . f x = Max (f ` S)} = {z}" 
+  proof 
+    show "{z} \<subseteq> {x \<in> S. f x = Max (f ` S)}" using \<open>f z = Max (f ` S)\<close> \<open>z \<in> S\<close> by auto
+  next
+    show "{x \<in> S. f x = Max (f ` S)} \<subseteq> {z}"
+      by (metis (mono_tags, lifting) \<open>f z = Max (f ` S)\<close> \<open>z \<in> S\<close> assms(1) mem_Collect_eq singleton_iff subsetI)
+  qed
+  thus ?thesis using that by (simp add:max_by_key_def)
+qed
 
-lemma max_by_key_ne:assumes "S \<noteq> {}" and "finite S" shows "max_by_key_2 S f \<noteq> {}" using assms
-by (simp add:max_by_key_2_def) (metis (mono_tags, hide_lams) Max_in finite_imageI image_iff image_is_empty)
+lemma max_by_key_ne:assumes "S \<noteq> {}" and "finite S" shows "max_by_key S f \<noteq> {}" using assms
+by (simp add:max_by_key_def) (metis (mono_tags, hide_lams) Max_in finite_imageI image_iff image_is_empty)
 
-export_code max_by_key_2 in SML
-value "max_by_key_2 {(1::nat,1),(0,3)} fst"
+export_code max_by_key in SML
+value "max_by_key {(1::nat,1),(0,3)} fst"
 
-lemma max_by_key_2_in_and_ge:
+lemma max_by_key_in_and_ge:
   fixes S::"'b set" and x::'b 
-  assumes "finite S" and "x \<in> S" and "m \<in> max_by_key_2 S f"
+  assumes "finite S" and "x \<in> S" and "m \<in> max_by_key S f"
   shows "f x \<le> f m" and  "m \<in> S"
 proof -
   from `finite S` have "finite (f ` S)" (is "finite ?keys") by simp
   from `x \<in> S` have "?keys \<noteq> {}" by auto
-  have "f m = Max (f ` S)" by (metis (mono_tags, lifting) assms(3) max_by_key_2_def mem_Collect_eq) 
-  have "m \<in> S" by (metis (no_types, lifting) assms(3) max_by_key_2_def mem_Collect_eq) 
+  have "f m = Max (f ` S)" by (metis (mono_tags, lifting) assms(3) max_by_key_def mem_Collect_eq) 
+  have "m \<in> S" by (metis (no_types, lifting) assms(3) max_by_key_def mem_Collect_eq) 
   show "f x \<le> f m" and  "m \<in> S" by (simp add: \<open>f m = Max (f ` S)\<close> \<open>finite (f ` S)\<close> assms(2), simp add: \<open>m \<in> S\<close>)
 qed
 
-lemma in_and_ge_is_max_by_key_2: fixes S :: "'a set" and f :: "'a \<Rightarrow> ('b::linorder)"
+lemma in_and_ge_is_max_by_key: fixes S :: "'a set" and f :: "'a \<Rightarrow> ('b::linorder)"
 assumes "\<And> x . x \<in> S \<Longrightarrow> f x \<le> f m" and "m \<in> S" and "finite S"
-shows "m \<in> max_by_key_2 S f" using assms apply (simp add:max_by_key_2_def)
+shows "m \<in> max_by_key S f" using assms apply (simp add:max_by_key_def)
 proof -
   assume a1: "\<And>x. x \<in> S \<Longrightarrow> f x \<le> f m"
   assume a2: "m \<in> S"
@@ -47,114 +69,83 @@ proof -
     using f4 a2 a1 by (metis (no_types) Max_ge Max_in equals0D order_class.order.antisym)
 qed 
 
-
-lemma max_by_key_2_subsets:
-  -- {* Lemma showing that computing max_by_key_2 in 2 steps, first computing the max per acceptor and then the max of those values, 
-  is the same thing as max_by_key_2. *}
-  fixes Ss :: "'a set set" and f :: "'a \<Rightarrow> ('b::linorder)" and S
-  assumes "\<And> S . S \<in> Ss \<Longrightarrow> finite S" and "finite Ss" and "S \<in> Ss" and "S \<noteq> {}"
-  shows "max_by_key_2 (Union {max_by_key_2 S f | S . S \<in> Ss \<and> S \<noteq> {}}) f = max_by_key_2 (Union Ss) f"
-proof -
-  def maxs \<equiv> "Union {max_by_key_2 S f | S . S \<in> Ss \<and> S \<noteq> {}}"
-  have 1:"finite maxs" 
+lemma max_by_key_finite: 
+  assumes "finite S" and "S \<noteq> {}"
+  shows "finite (max_by_key S f)"
+   by (metis all_not_in_conv assms(1) assms(2) infinite_super max_by_key_in_and_ge(2) subsetI)
+    
+lemma max_by_key_lemma: 
+  assumes "finite S1" and "finite S2"  and "S1 \<noteq> {}" and "S2 \<noteq> {}"
+  shows "max_by_key (max_by_key S1 f \<union> max_by_key S2 f) f = max_by_key (S1 \<union> S2) f" 
+    (is "?m (?m S1 f \<union> ?m S2 f) f = ?m (S1 \<union> S2) f")
+proof 
+  show "?m (?m S1 f \<union> ?m S2 f) f \<subseteq> ?m (S1 \<union> S2) f"
   proof -
-    have 1:"finite {max_by_key_2 S f | S . S \<in> Ss \<and> S \<noteq> {}}" using \<open>finite Ss\<close> by auto
-    have 2:"\<And> S . S \<in> Ss \<Longrightarrow> finite (max_by_key_2 S f)" using \<open>\<And> S . S \<in> Ss \<Longrightarrow> finite S\<close>  by (auto simp add:max_by_key_2_def)
-    show ?thesis using finite_Union[of "{max_by_key_2 S f | S . S \<in> Ss \<and> S \<noteq> {}}", OF 1] using 2 using CollectD maxs_def by blast
-  qed 
-  have 2:"maxs \<noteq> {}" 
-  proof -
-    have "max_by_key_2 S f \<noteq> {}" if "S \<in> Ss" and "S \<noteq> {}" for S using that 
-      by (simp add:max_by_key_2_def) (metis (mono_tags, lifting) Max_in assms(1) finite_imageI imageE image_is_empty)
-    thus ?thesis using assms(3) assms(4) using Sup_bot_conv(1) maxs_def mem_Collect_eq by auto 
-  qed
-  have 3:"finite (Union Ss)" using \<open>finite Ss\<close> and \<open>\<And> S . S \<in> Ss \<Longrightarrow> finite S\<close> by blast
-  { fix x assume a1:"x \<in> max_by_key_2 maxs f"
-    have a2:"x \<in> Union Ss" using a1 apply (simp add:max_by_key_2_def maxs_def) by (metis (no_types, lifting) mem_Collect_eq) 
-    have a3:"f x \<ge> f y" if "y \<in> Union Ss" for y
+    have "?m (?m S1 f \<union> ?m S2 f) f \<subseteq> (S1 \<union> S2)"
+      by (smt Un_iff max_by_key_def mem_Collect_eq subsetI)
+    have "f y \<le> f x" if "x \<in> ?m (?m S1 f \<union> ?m S2 f) f" and "y \<in> S1 \<union> S2" for x y
     proof -
-      from that obtain S where "S \<in> Ss" and "y \<in> S" by auto
-      def M_S \<equiv> "max_by_key_2 S f"
-      have "M_S \<noteq> {}" using \<open>y \<in> S\<close> max_by_key_ne by (metis M_S_def \<open>S \<in> Ss\<close> assms(1) equals0D) 
-      have "f m_S \<ge> f y" if "m_S \<in> M_S" for m_S using \<open>S \<in> Ss\<close> \<open>y \<in> S\<close> assms(1) max_by_key_2_in_and_ge(1) that by (metis M_S_def) 
-      have "M_S \<subseteq> maxs" using \<open>S \<in> Ss\<close> \<open>y \<in> S\<close> by (auto simp add:M_S_def maxs_def)
-      have "f x \<ge> f m_S" if "m_S \<in> M_S" for m_S using a1 \<open>S \<in> Ss\<close> that by (metis "1" \<open>M_S \<subseteq> maxs\<close> max_by_key_2_in_and_ge(1) rev_subsetD) 
-      show ?thesis by (metis \<open>M_S \<noteq> {}\<close> \<open>\<And>m_S. m_S \<in> M_S \<Longrightarrow> f m_S \<le> f x\<close> \<open>\<And>m_S. m_S \<in> M_S \<Longrightarrow> f y \<le> f m_S\<close> ex_in_conv order_trans)
+      have 1:"f z \<le> f x" if "z \<in> ?m S1 f \<union> ?m S2 f" for z
+        by (metis \<open>x \<in> max_by_key (max_by_key S1 f \<union> max_by_key S2 f) f\<close> assms(1) assms(2) assms(3) assms(4) finite_UnI max_by_key_finite max_by_key_in_and_ge(1) that) 
+      have 2:"f z \<le> f a" if "z \<in> S1" and "a \<in> ?m S1 f" for z a
+        by (metis assms(1) max_by_key_in_and_ge(1) that(1) that(2)) 
+      have 3:"f z \<le> f a" if "z \<in> S2" and "a \<in> ?m S2 f" for z a
+        by (metis assms(2) max_by_key_in_and_ge(1) that(1) that(2))
+      show ?thesis using that 1 2 3
+        by (metis Un_iff all_not_in_conv assms(1) assms(2) max_by_key_ne order_trans)
     qed
-    note a2 a3 }
-  hence 4:"max_by_key_2 maxs f \<subseteq> max_by_key_2 (Union Ss) f" by (metis "3" in_and_ge_is_max_by_key_2 subsetI)
-  { fix x assume a1:"x \<in> max_by_key_2 (Union Ss) f"
-    obtain S where "S \<in> Ss" and "x \<in> S" by (metis "3" Union_iff a1 assms(3) assms(4) ex_in_conv max_by_key_2_in_and_ge(2))
-    have "f x \<ge> f y" if "y \<in> S'" and "S' \<in> Ss" for y S' by (metis "3" UnionI a1 max_by_key_2_in_and_ge(1) that(1) that(2)) 
-    have "x \<in> max_by_key_2 S f" by (metis \<open>S \<in> Ss\<close> \<open>\<And>y S'. \<lbrakk>y \<in> S'; S' \<in> Ss\<rbrakk> \<Longrightarrow> f y \<le> f x\<close> \<open>x \<in> S\<close> assms(1) in_and_ge_is_max_by_key_2)
-    have a2:"x \<in> maxs" apply (simp add:maxs_def) by (metis \<open>S \<in> Ss\<close> \<open>x \<in> S\<close> \<open>x \<in> max_by_key_2 S f\<close> equals0D)
-    have a3:"f x \<ge> f y" if "y \<in> maxs" for y using that apply (simp add:maxs_def) by (metis "3" Union_iff a1 assms(1) bot.extremum_uniqueI max_by_key_2_in_and_ge(1) max_by_key_2_in_and_ge(2) subset_emptyI) 
-    note a2 a3 }
-  hence 5:"max_by_key_2 (Union Ss) f \<subseteq> max_by_key_2 maxs f" by (metis "1" in_and_ge_is_max_by_key_2 subsetI) 
-  from 4 5 show ?thesis using maxs_def set_eq_subset by blast
-qed
-
-lemma max_by_key_in_and_ge: fixes S::"'b set" and x::'b assumes "finite S" and "x \<in> S"
-  shows "f x \<le> f (max_by_key S f)" and "max_by_key S f \<in> S"
-nitpick[verbose, card 'b = 3, card "'b option" = 4, card 'c = 3, card "'c option" = 4, expect=none]
+    show ?thesis
+      by (smt \<open>\<And>y x. \<lbrakk>x \<in> max_by_key (max_by_key S1 f \<union> max_by_key S2 f) f; y \<in> S1 \<union> S2\<rbrakk> \<Longrightarrow> f y \<le> f x\<close> \<open>max_by_key (max_by_key S1 f \<union> max_by_key S2 f) f \<subseteq> S1 \<union> S2\<close> assms(1) assms(2) contra_subsetD finite_UnI in_and_ge_is_max_by_key subsetI)        
+  qed
+  show "?m (S1 \<union> S2) f \<subseteq> ?m (?m S1 f \<union> ?m S2 f) f"
+    by (smt Collect_empty_eq Un_iff assms(1) assms(2) assms(3) assms(4) finite_UnI max_by_key_def max_by_key_finite max_by_key_in_and_ge(1) max_by_key_ne mem_Collect_eq order_class.order.antisym subsetI) 
+qed    
+    
+private
+lemma f_Union_f_is_f_Union:
+  assumes "\<And> S1 S2 . \<lbrakk>finite S1; finite S2; S1 \<noteq> {}; S2 \<noteq> {}\<rbrakk> \<Longrightarrow> f (f S1 \<union> f S2) = f (S1 \<union> S2)"
+  and "\<And> S . S \<in> Ss \<Longrightarrow> finite S" and "{} \<notin> Ss" and "finite Ss" and "Ss \<noteq> {}"
+  and "\<And> S . \<lbrakk>finite S; S \<noteq> {}\<rbrakk> \<Longrightarrow> finite (f S) \<and> f S \<noteq> {}"
+shows "f (Union (f ` Ss)) = f (Union Ss)"
 proof -
-  from `finite S` have "finite {f x | x . x \<in> S}" (is "finite ?keys") by simp
-  from `x \<in> S` have "?keys \<noteq> {}" by auto
-  let ?some = "SOME x . x \<in> S \<and> f x = Max {f x | x . x \<in> S}"
-  from `?keys \<noteq> {}` have "?some \<in> S" and "f ?some = Max {f x | x . x \<in> S}"
-    apply (smt Max_in \<open>finite {f x |x. x \<in> S}\<close> mem_Collect_eq someI_ex)
-    by (smt Max_in \<open>finite {f x |x. x \<in> S}\<close> \<open>{f x |x. x \<in> S} \<noteq> {}\<close> mem_Collect_eq someI_ex) 
-  have "\<And> k . k \<in> ?keys \<Longrightarrow> k \<le> Max ?keys" and "Max ?keys \<in> ?keys" using `finite ?keys` and `?keys \<noteq> {}`
-    apply auto using Max_in by auto
-  show "f x \<le> f (max_by_key S f)" and "max_by_key S f \<in> S" 
-    apply (auto simp add:max_by_key_def)
-    using Max.coboundedI \<open>f (SOME x. x \<in> S \<and> f x = Max {f x |x. x \<in> S}) = Max {f x |x. x \<in> S}\<close> \<open>finite {f x |x. x \<in> S}\<close> assms(2) apply auto[1]
-    using \<open>(SOME x. x \<in> S \<and> f x = Max {f x |x. x \<in> S}) \<in> S\<close> by blast
+  show ?thesis using \<open>finite Ss\<close> and \<open>Ss \<noteq> {}\<close> assms(2-5)
+  proof (induct "Ss" rule:finite_ne_induct)
+    case (singleton x)
+    have "finite x"
+      by (metis singleton.prems(1) singletonI)
+    have "x \<noteq> {}"
+      by (metis Pow_bottom Pow_empty singleton.prems(2)) 
+    show ?case using \<open>x \<noteq> {}\<close> \<open>finite x\<close> apply simp
+      by (metis Un_absorb assms(1)) 
+  next
+    case (insert x F)
+    have 1:"f (\<Union>a\<in>F. f a) = f (\<Union>F)"
+      by (metis insert.hyps(1) insert.hyps(2) insert.hyps(4) insert.prems(1) insert.prems(2) insertI2) 
+    have 4:"f (f x \<union> f (\<Union>F)) = f (x \<union> \<Union>F)"
+      by (metis Sup_insert assms(1) finite.cases finite_Union insert.hyps(1) insert.hyps(2) insert.prems(1) insert.prems(2) insertCI sup_eq_bot_iff)  
+    have "f (\<Union>a\<in>insert x F. f a) = f (f x \<union> (\<Union>a\<in>F . f a))"
+      by (metis Union_image_insert)
+    also have "... = f (f x \<union> f (\<Union> F))" using assms(1)[of "f x" "f (\<Union> F)"]
+      by (smt "1" "4" SUP_bot_conv(1) Sup_bot_conv(2) Un_absorb assms(1) assms(6) finite_UN_I insert.hyps(1) insert.prems(1) insert.prems(2) insertI1 insertI2 sup_bot.right_neutral)
+    also have "... = f (\<Union> (insert x F))"
+      by (metis "4" Union_insert) 
+    finally show ?case by assumption
+  qed
 qed
-
-lemma in_and_ge_is_max_by_key: fixes S :: "'a set" and f :: "'a \<Rightarrow> ('b::linorder)"
-  assumes "\<And> x . x \<in> S \<Longrightarrow> f x \<le> f m" and "m \<in> S" and "finite S" and "\<And> x y . \<lbrakk>x \<in> S; y \<in> S; x \<noteq> y\<rbrakk> \<Longrightarrow> f x \<noteq> f y"
-  shows "m = max_by_key S f" 
-nitpick[verbose,  card 'a = 4, card 'b =6, card "'b option" = 30, expect = none]
-proof (rule ccontr)
-  assume "m \<noteq> max_by_key S f" (is "m \<noteq> ?m'")
-  have "\<And> x . x \<in> S \<Longrightarrow> f x \<le> f ?m'" and "?m' \<in> S"
-    apply (metis assms(3) max_by_key_in_and_ge(1)) by (metis assms(2) assms(3) max_by_key_in_and_ge(2)) 
-  hence "f m = f ?m'" by (metis assms(1) assms(2) dual_order.antisym) 
-  thus False by (metis \<open>m \<noteq> max_by_key S f\<close> \<open>max_by_key S f \<in> S\<close> assms(2) assms(4)) 
-qed
-
+  
 lemma max_by_key_subsets:
-  fixes Ss :: "'a set set" and f :: "'a \<Rightarrow> ('b::linorder)" and S
-  assumes "\<And> S . S \<in> Ss \<Longrightarrow> finite S" and "finite Ss" and "S \<in> Ss" and "S \<noteq> {}"
-  and "\<And> x y . \<lbrakk>x \<in> Union Ss; y \<in> Union Ss; f x = f y\<rbrakk> \<Longrightarrow> x = y"
-  shows "max_by_key {max_by_key S f | S . S \<in> Ss \<and> S \<noteq> {}} f = max_by_key (Union Ss) f" 
-nitpick[ card 'a = 3, card 'b = 3, card "'b option" = 4, expect=none] 
-proof -
-  let ?maxs = "{max_by_key S f | S . S \<in> Ss \<and> S \<noteq> {}}"
-  have "finite ?maxs" using \<open>finite Ss\<close> by auto
-  have "?maxs \<noteq> {}" using \<open>S \<in> Ss\<close> and \<open>S \<noteq> {}\<close> by blast
-  have "finite (Union Ss)" using \<open>finite Ss\<close> and \<open>\<And> S . S \<in> Ss \<Longrightarrow> finite S\<close> by blast
-  { fix S
-    assume "S \<in> Ss" and "S \<noteq> {}"
-    have 1:"max_by_key S f \<in> S" by (metis \<open>S \<in> Ss\<close> \<open>S \<noteq> {}\<close> assms(1) ex_in_conv max_by_key_in_and_ge(2))
-    have 2:"\<And> x . x \<in> S \<Longrightarrow> f x \<le> f (max_by_key S f)" by (metis \<open>S \<in> Ss\<close> assms(1) max_by_key_in_and_ge(1))
-    note 1 2 }
-  note 1 = this
-  { have 2:"max_by_key ?maxs f \<in> ?maxs" and 3:"\<And> m . m \<in> ?maxs \<Longrightarrow> f m \<le> f (max_by_key ?maxs f)"
-        apply (metis (no_types, lifting) \<open>finite {max_by_key S f |S. S \<in> Ss \<and> S \<noteq> {}}\<close> \<open>{max_by_key S f |S. S \<in> Ss \<and> S \<noteq> {}} \<noteq> {}\<close> ex_in_conv max_by_key_in_and_ge(2))
-        by (metis (no_types, lifting) \<open>finite {max_by_key S f |S. S \<in> Ss \<and> S \<noteq> {}}\<close> max_by_key_in_and_ge(1))
-    note 2 3 }
-  note 2 = this
-  { have 3:"max_by_key ?maxs f \<in> Union Ss" by (smt "1"(1) "2"(1) CollectD UnionI) 
-    have 4:"\<And> x . x \<in> Union Ss \<Longrightarrow> f x \<le> f (max_by_key ?maxs f)"  using "1"(2) "2"(2) apply auto by (metis (no_types, lifting) empty_iff order_trans) 
-    note 3 4 }
-  thus ?thesis using in_and_ge_is_max_by_key[where ?S="Union Ss" and ?f=f] by (metis (mono_tags, lifting) \<open>finite (\<Union>Ss)\<close> assms(5)) 
-qed
+  assumes "\<And> S . S \<in> Ss \<Longrightarrow> finite S" and "{} \<notin> Ss" and "finite Ss" and "Ss \<noteq> {}"
+  shows "max_by_key (\<Union>S\<in>Ss. max_by_key S f) f = max_by_key (Union Ss) f"
+  using f_Union_f_is_f_Union[where ?f="\<lambda> S . max_by_key S f" and ?Ss=Ss]
+  by (metis (mono_tags, lifting) assms max_by_key_finite max_by_key_lemma max_by_key_ne) 
 
 subsection {* Other properties *}
+
+context begin
+
 text {* Used anywhere? *}
 
+private
 lemma Max_Max:
   assumes "finite Xs" and "Union Xs \<noteq> {}" and "\<And> X . X \<in> Xs \<Longrightarrow> X \<noteq> {} \<and> finite X"
   shows "Max (Max ` Xs) = Max (Union Xs)" (is "?A = ?B")
@@ -171,7 +162,10 @@ proof -
   show ?thesis by (smt 1 3 Max_ge Max_mono Sup_upper UnionE 0 antisym assms(1,3) finite_imageI image_iff) 
 qed
 
+private
 lemma Max_bot:"\<lbrakk>finite (S::'b::{linorder,order_bot} set); S \<noteq> {}; s \<in> S; Max S = bot\<rbrakk> \<Longrightarrow> s = bot"
 by (metis Max.coboundedI bot.extremum_uniqueI)
+
+end 
 
 end
