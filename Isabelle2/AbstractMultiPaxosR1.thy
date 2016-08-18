@@ -11,17 +11,6 @@ text {*
 6) Explicit leadership acquisition.
 *}
 
-text {* TODO: Let's generate code for acc_max *}
-
-print_locale distributed_safe_at
-global_interpretation dsa:distributed_safe_at quorums ballot vote for quorums ballot vote 
-  defines my_acc_max = dsa.acc_max .
-
-term my_acc_max
-thm my_acc_max_def
-
-export_code my_acc_max in Haskell
-
 type_synonym bal = nat
 type_synonym inst = nat
 
@@ -38,6 +27,8 @@ locale ampr1_ioa = IOA +
   fixes quorums::"'a set set" and leader :: "bal \<Rightarrow> 'a"
   -- {* @{term leader} determines the leader of a ballot. *}
 begin
+
+interpretation dsa:distributed_safe_at quorums ballot vote for ballot vote .
 
 datatype ('vv,'aa,'ll) action =
   Propose 'vv
@@ -63,7 +54,7 @@ definition propose where
 
 definition join_ballot where
   "join_ballot a b s s' \<equiv> 
-    let onebs' = \<lambda> i . distributed_safe_at.acc_max (vote s i) a b
+    let onebs' = \<lambda> i . dsa.acc_max (vote s i) a b
     in
       b > (ballot s a) 
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
@@ -71,15 +62,19 @@ definition join_ballot where
         leader := (ampr1_state.leader s)(a := False)\<rparr>"
 
 definition acquire_leadership where
-  "acquire_leadership a q s s' \<equiv> let b = ballot s a in 
+  "acquire_leadership a q s s' \<equiv> let b = ballot s a in
     leader b = a
     \<and> q \<in> quorums
-    \<and> \<not> ampr1_state.leader s a 
+    \<and> \<not> ampr1_state.leader s a
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
     \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True), 
         suggestion := \<lambda> i . (suggestion s i)(b :=
-          let m = distributed_safe_at.max_pair q (\<lambda> a . the (onebs s a b) i) in
-            map_option fst m)\<rparr>"
+          let 
+            a_max = \<lambda> a . the (onebs s a b) i;
+            m = dsa.max_quorum_votes q a_max 
+          in
+            Some (fst (the_elem m))) \<rparr>"
+  -- {* This is well-defined only when the array is conservative. *}
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
@@ -134,7 +129,7 @@ subsection {* The I/O-automaton *}
 definition ioa where
   "ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
 
-lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def 
+lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def
   do_vote_def learn_def suggest_def catch_up_def acquire_leadership_def
 
 end

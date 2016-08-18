@@ -93,7 +93,7 @@ proof (cases "i = 0")
     by (metis not_less0 safe_at_def)
 next
   case False
-  have "q \<in> quorums" and ballot_q:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" using assms(2) by (auto simp add:proved_safe_at_abs_def)
+  have "q \<in> quorums" and ballot_q:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" using \<open>proved_safe_at_abs q i v\<close> by (auto simp add:proved_safe_at_abs_def)
   text {* There are two cases: 
     (a) an acceptor a in the quorum q voted in round k < i, 
     and k is the maximum round smaller than i in which an acceptor in q voted;
@@ -108,20 +108,20 @@ next
     case False thus ?thesis using that by blast
   next
     case True
-    def votes \<equiv> "{l . \<exists> a \<in> q . l < i \<and> vote a l \<noteq> None }"
-    def k \<equiv> "Max votes"
-    from True assms(2) obtain a where "a \<in> q" and "vote a k = Some v"
-      by (auto simp add:proved_safe_at_abs_def k_def votes_def)
+    define voted where "voted \<equiv> {l . \<exists> a \<in> q . l < i \<and> vote a l \<noteq> None }"
+    define k where "k \<equiv> Max voted"
+    from True \<open>proved_safe_at_abs q i v\<close> obtain a where "a \<in> q" and "vote a k = Some v"
+      by (auto simp add:proved_safe_at_abs_def k_def voted_def)
     moreover have "k < i" and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
     proof -
-      have "k \<in> votes" and "\<And> x . x \<in> votes \<Longrightarrow> x \<le> k"
+      have "k \<in> voted" and "\<And> x . x \<in> voted \<Longrightarrow> x \<le> k"
       proof -
-        have "finite votes" and "votes \<noteq> {}" using True
-          using True votes_def finite_nat_set_iff_bounded votes_def by auto
-        thus "k \<in> votes" and "\<And> x . x \<in> votes \<Longrightarrow> x \<le> k" by (metis Max_in k_def, metis Max_ge k_def)
+        have "finite voted" and "voted \<noteq> {}" using True
+          using True voted_def finite_nat_set_iff_bounded voted_def by auto
+        thus "k \<in> voted" and "\<And> x . x \<in> voted \<Longrightarrow> x \<le> k" by (metis Max_in k_def, metis Max_ge k_def)
       qed
       thus "k < i" and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None" 
-        by (force simp add:votes_def)+
+        by (force simp add:voted_def)+
     qed
     ultimately show ?thesis using that by blast
   qed
@@ -175,7 +175,7 @@ next
       next
         case bb
         with \<open>conservative_array\<close> \<open>vote a2 j = Some v'\<close> \<open>vote a k = Some v\<close> show ?thesis 
-          by (simp add:conservative_def conservative_array_def split add:option.splits)
+          by (simp add:conservative_def conservative_array_def split: option.splits)
       qed
     qed
     thus ?thesis by (metis safe_at_def)
@@ -226,7 +226,7 @@ lemma safe_votes:
   assumes ba_1.safe and "\<And> b a v . \<lbrakk>vote1 a b \<noteq> vote2 a b; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b"
   and "\<And> b a . b > ballot1 a \<Longrightarrow> vote1 a b = vote2 a b"
   shows ba_2.safe
-proof (auto simp add:ballot_array.safe_def split add:option.splits)
+proof (auto simp add:ballot_array.safe_def split:option.splits)
   fix a b v
   assume "vote2 a b = Some v"
   show "ba_2.safe_at v b"

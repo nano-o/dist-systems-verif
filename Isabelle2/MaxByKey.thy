@@ -1,6 +1,6 @@
 section {* A few lemmas about Max *}
 
-theory Max_Properties
+theory MaxByKey
 imports Main
 begin
 
@@ -138,6 +138,8 @@ lemma max_by_key_subsets:
   shows "max_by_key (\<Union>S\<in>Ss. max_by_key S f) f = max_by_key (Union Ss) f"
   using f_Union_f_is_f_Union[where ?f="\<lambda> S . max_by_key S f" and ?Ss=Ss]
   by (metis (mono_tags, lifting) assms max_by_key_finite max_by_key_lemma max_by_key_ne) 
+
+end 
 
 subsection {* Other properties *}
 

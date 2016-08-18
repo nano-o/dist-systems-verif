@@ -2,7 +2,7 @@ section {* Proof of the agreement property of AbstractMultiPaxos. *}
 
 theory AbstractMultiPaxosCorrectness
 imports AbstractMultiPaxos IOA_Automation
-  BallotArrayProperties
+  BallotArrayProperties 
 begin
 
 locale amp_proof = IOA + quorums quorums + amp_ioa quorums learners for
@@ -21,7 +21,7 @@ declare amp_ioa_defs[inv_proofs_defs]
 declare the_ioa_def[inv_proofs_defs]
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp]
-  learn_def[simp] Let_def[simp] split_if[split] split_if_asm[split]
+  learn_def[simp] Let_def[simp] if_split[split] if_split_asm[split]
 
 subsection {* @{term conservative_array}  is an inductive invariant *}
 
@@ -35,7 +35,7 @@ lemma conservative_inductive:
 apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
     apply (force simp add:ballot_array.conservative_def)
   apply (case_tac a) 
-  apply (auto simp add:inv_proofs_defs split add:option.split_asm)
+  apply (auto simp add:inv_proofs_defs split:option.split_asm)
 done 
 declare conservative_inductive[invs]
 
@@ -52,7 +52,7 @@ abbreviation safe_at where "safe_at s i \<equiv> ballot_array.safe_at  quorums (
 lemma trans_imp_prefix_order:
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t"
   shows "is_prefix (ballot s) (ballot t) (vote s i) (vote t i)" using assms
-by (cases a) (auto simp add:is_prefix_def inv_proofs_defs split add:option.split_asm)
+by (cases a) (auto simp add:is_prefix_def inv_proofs_defs split:option.split_asm)
 
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic. *}
@@ -80,7 +80,7 @@ lemma safe_inv:
   "invariant the_ioa safe"
 apply (try_solve_inv2 case_thm:trans_cases inv_proofs_defs:inv_proofs_defs ballot_array.safe_def invs:invs)
 subgoal premises prems for s t act
-proof (auto simp add:ballot_array.safe_def split add:option.splits)
+proof (auto simp add:ballot_array.safe_def split:option.splits)
   fix i b a v
   assume "vote t i a b = Some v"
   show "safe_at t i v b"

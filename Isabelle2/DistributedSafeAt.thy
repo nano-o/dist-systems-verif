@@ -4,31 +4,42 @@ begin
 
 subsection {* Computing safe values in a distributed implementation *}
 
-locale distributed_safe_at = ballot_array 
-begin
+definition option_as_set where "option_as_set x \<equiv> case x of None \<Rightarrow> {} | Some y \<Rightarrow> {y}"
   
+locale distributed_safe_at = ballot_array
+begin
+
 definition acc_max where
   -- {* @{term acc_max} can be computed locally by an acceptor. *}
   "acc_max a bound \<equiv> 
     if (\<exists> b < bound . vote a b \<noteq> None)
-    then Some (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd)
+    then Some (the_elem (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd))
     else None"
-  
+
+definition max_quorum_votes where
+  "max_quorum_votes q a_max \<equiv> 
+    let acc_maxs = Union ((\<lambda> a . option_as_set (a_max a)) ` q)
+    in max_by_key acc_maxs snd"
+
+definition proved_safe_at where
+  -- {* @{term proved_safe_at} can be computed locally by a leader when it knows acc_max over q *}
+  "proved_safe_at q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
+    v \<in> (fst ` max_quorum_votes q (\<lambda> a . acc_max a b))"
+
 lemma acc_max_code[code]:
-  fixes get_vote vote_as_set
+  fixes get_vote
   defines "get_vote a b \<equiv> vote a b \<bind> (\<lambda> v . Some (v,b))"
-    and "vote_as_set v \<equiv> case v of None \<Rightarrow> {} | Some x \<Rightarrow> {x}"
   shows "acc_max a bound = 
   (if (\<exists> b < bound . vote a b \<noteq> None)
-  then let votes = (get_vote a ` {0..<bound}) \<bind> vote_as_set
-    in Some (max_by_key votes snd)
+  then let votes = (get_vote a ` {0..<bound}) \<bind> option_as_set
+    in Some (the_elem (max_by_key votes snd))
   else None)"
 proof (cases "\<exists> b < bound . vote a b \<noteq> None")
   case True
   then show ?thesis 
   proof -              
-    have "(get_vote a ` {0..<bound}) \<bind> vote_as_set = {(v,b) . b < bound \<and> vote a b = Some v}" 
-      apply (auto simp add:vote_as_set_def get_vote_def split!:option.split_asm)
+    have "(get_vote a ` {0..<bound}) \<bind> option_as_set = {(v,b) . b < bound \<and> vote a b = Some v}" 
+      apply (auto simp add:option_as_set_def get_vote_def split!:option.split_asm)
         apply (simp add: bind_eq_Some_conv)
        apply (smt bind_eq_Some_conv option.sel prod.inject)
       by force
@@ -42,12 +53,11 @@ next
 qed
 
 lemma acc_max_singleton: 
-  assumes "acc_max a bound = Some xs"
-  obtains val bal where "xs = {(val,bal)}" 
-proof -  
-  define votes where "votes = {(v,b) . b < bound \<and> vote a b = Some v}"
-  have 4:"acc_max a bound = Some (max_by_key votes snd)"
-    by (metis (no_types, lifting) votes_def acc_max_def assms option.distinct(1))
+  assumes "b < bound" and "vote a b \<noteq> None"
+  fixes votes 
+  defines "votes \<equiv> {(v,b) . b < bound \<and> vote a b = Some v}"
+  obtains val bal where "max_by_key votes snd = {(val,bal)}"
+proof -
   obtain x where "max_by_key votes snd = {x}"
   proof -
     have 1:"votes \<noteq> {}" (is "?votes \<noteq> {}") using assms
@@ -71,33 +81,27 @@ proof -
       by (metis (full_types))
   qed
   thus ?thesis using that
-    by (metis "4" assms old.prod.exhaust option.simps(1))
+    by fastforce 
 qed
 
-definition acc_max_2 where
-  "acc_max_2 a bound \<equiv>
-    if (\<exists> b < bound . vote a b \<noteq> None)
-    then let 
-        mbk2 = max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd
-      in Some (the_elem mbk2)
-    else None"
+lemma acc_max_is_max_by_key:
+  fixes votes a bound v b
+  defines "votes \<equiv> {(v,b) . b < bound \<and> vote a b = Some v}"
+  assumes "acc_max a bound = Some (v,b)"
+  shows "max_by_key votes snd = {(v,b)}"
+proof -
+  obtain b' where 1:"b' < bound" and 2:"vote a b' \<noteq> None" using assms
+    by (metis acc_max_code option.simps(3))
+  from acc_max_singleton[OF 1 2] obtain val bal where 4:"max_by_key votes snd = {(val,bal)}"
+    using votes_def by blast
+  thus ?thesis using assms(2) apply (simp add:acc_max_def votes_def)
+    by (metis option.inject option.simps(3) prod.inject the_elem_eq)
+qed
 
-definition max_pair where
-  "max_pair q a_max \<equiv> 
-    let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some S \<Rightarrow> S) ` q)
-    in
-      if acc_maxs = {} then None
-      else Some (max_by_key acc_maxs snd)"
-
-definition proved_safe_at where
-  -- {* @{term proved_safe_at} can be computed locally by a leader *}
-  "proved_safe_at q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
-    (case max_pair q (\<lambda> a . acc_max a b) of None \<Rightarrow> True
-    | Some S \<Rightarrow> v \<in> (fst ` S))"
-          
 end
 
-locale dsa_properties = quorums quorums + distributed_safe_at quorums for quorums
+locale dsa_properties = quorums quorums + distributed_safe_at quorums ballot vote 
+  for quorums ballot vote
 begin
 
 context begin
@@ -151,7 +155,7 @@ proof -
       let ?acc_maxs = "Union ?acc_maxs_set"
       have 1:"?acc_maxs \<noteq> {}" using \<open>acc_max a b \<noteq> None\<close> apply (auto split add:option.splits) by (metis \<open>a \<in> q\<close>)
       hence 2:"fst (max_by_key ?acc_maxs snd) = v" using assms(1) proved_safe_at_def 
-        apply (auto simp add:max_pair_def split add:option.splits) apply (metis option.simps(3)) by (metis (no_types, lifting) fst_conv option.inject) 
+        apply (auto simp add:max_quorum_votes_def split add:option.splits) apply (metis option.simps(3)) by (metis (no_types, lifting) fst_conv option.inject) 
       moreover
       have 7:"?acc_maxs = {max_by_key S snd | S . S \<in> ?Ss \<and> S \<noteq> {}}"
         apply (auto simp add: acc_max_def split add:option.splits split_if_asm)

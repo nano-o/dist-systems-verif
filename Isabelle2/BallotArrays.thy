@@ -1,7 +1,7 @@
 section {* Definition of ballot arrays *}
 
 theory BallotArrays
-imports Main "~~/src/HOL/Library/Monad_Syntax"Quorums
+imports Main "~~/src/HOL/Library/Monad_Syntax" Quorums MaxByKey
 begin
 
 text {* A ballot array represents a history of execution of a Paxos-like algorithm, i.e. the current 
@@ -26,12 +26,22 @@ definition conservative_array where
 
 text {* Here the @{term Max} is the one from @{text Lattices_Big} *}
 
+definition proved_safe_at_abs_2 where
+  -- {* Any value that has been proved safe at ballot b can be voted for in ballot b. *}
+  "proved_safe_at_abs_2 q b v \<equiv>
+    q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
+    (if \<exists> a \<in> q . \<exists> b\<^sub>2 . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None
+    then let votes = {(w,b\<^sub>2) . b\<^sub>2 < b \<and> (\<exists> a \<in> q . vote a b = Some w)}
+      in v \<in> fst ` (max_by_key votes snd)
+    else True)"
+
 definition proved_safe_at_abs where
   -- {* Any value that has been proved safe at ballot b can be voted for in ballot b. *}
   "proved_safe_at_abs q b v \<equiv>
     q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
     (if \<exists> a \<in> q . \<exists> b\<^sub>2 . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None
-    then \<exists> a \<in> q . vote a (Max {b\<^sub>2 . \<exists> a \<in> q . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None}) = Some v
+    then let max_bal = Max {b\<^sub>2 . \<exists> a \<in> q . b\<^sub>2 < b \<and> vote a b\<^sub>2 \<noteq> None}
+      in \<exists> a \<in> q . vote a max_bal = Some v
     else True)"
 
 definition chosen_at where
