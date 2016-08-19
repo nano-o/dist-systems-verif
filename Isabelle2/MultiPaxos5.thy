@@ -74,34 +74,34 @@ record 'v state =
  
 subsection {* A few functions to export to Scala for use by the runtime. *}
 
-definition replicaCount where "replicaCount s \<equiv> length (acceptors s)"
+definition def_replicaCount where "def_replicaCount s \<equiv> length (acceptors s)"
 
-definition get_ballot where "get_ballot s \<equiv> ballot s"
+definition def_getBallot where "def_getBallot s \<equiv> ballot s"
 
-definition is_leader where "is_leader s \<equiv> leader s"
+definition def_isLeader where "def_isLeader s \<equiv> leader s"
 
-definition get_leader where 
-  "get_leader s \<equiv> case ballot s of 0 \<Rightarrow> None | b \<Rightarrow> Some (b mod (replicaCount s))"
+definition def_getLeader where 
+  "def_getLeader s \<equiv> case ballot s of 0 \<Rightarrow> None | b \<Rightarrow> Some (b mod (def_replicaCount s))"
 
-definition get_next_instance where
-  "get_next_instance s \<equiv> next_inst s"
+definition def_getNextInstance where
+  "def_getNextInstance s \<equiv> next_inst s"
 
-definition get_firstUncommitted where
-  "get_firstUncommitted s = firstUncommitted s"
+definition def_getFirstUncommitted where
+  "def_getFirstUncommitted s = firstUncommitted s"
 
-definition get_request::"inst \<Rightarrow> 'v state \<Rightarrow> 'v cmd option" where
-  "get_request i s \<equiv> val (instances s $ i)"
+definition def_getRequest::"inst \<Rightarrow> 'v state \<Rightarrow> 'v cmd option" where
+  "def_getRequest i s \<equiv> val (instances s $ i)"
 
-definition leader_of_bal::"nat \<Rightarrow> nat \<Rightarrow> nat" where
-  "leader_of_bal b n \<equiv> case b of 0 \<Rightarrow> 0 | bs \<Rightarrow> (bs mod n)" 
+definition def_leaderOfBal::"nat \<Rightarrow> nat \<Rightarrow> nat" where
+  "def_leaderOfBal b n \<equiv> case b of 0 \<Rightarrow> 0 | bs \<Rightarrow> (bs mod n)" 
 
-definition is_decided where "is_decided i s \<equiv> i < firstUncommitted s"
+definition def_isDecided where "def_isDecided i s \<equiv> (status (instances s $ i) = 2)"
 
-definition get_vote_num where
-  "get_vote_num i s \<equiv> length (accepts (instances s $ i))"
+definition def_getVoteNum where
+  "def_getVoteNum i s \<equiv> length (accepts (instances s $ i))"
 
-definition get_status :: "inst \<Rightarrow> 'v state \<Rightarrow> nat" where
-  "get_status i s \<equiv> status (instances s $ i)"
+definition def_getStatus :: "inst \<Rightarrow> 'v state \<Rightarrow> nat" where
+  "def_getStatus i s \<equiv> status (instances s $ i)"
 
 subsection {* Some auxiliary functions. *}
 
@@ -118,7 +118,7 @@ definition nextBallot :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 
   -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
   where "nextBallot a b N \<equiv> generateBallot a (b + N) N"
 
-definition send_all where "send_all acc mesg s \<equiv> image (\<lambda> a2 . Packet acc a2 mesg) (set (acceptors s) - {acc})"
+definition send_all where "send_all acc mesg s \<equiv> map (\<lambda> a2 . Packet acc a2 mesg) (remove1 acc (acceptors s))"
 
 definition update_decided where 
   "update_decided i v s  \<equiv> s\<lparr>
@@ -133,7 +133,7 @@ text {* If we had finfun_Ex we could do this better.
 definition quorum_received where
   "quorum_received b s \<equiv> 
     let at_b_i = onebs s $ b $ 0
-    in 2 * length at_b_i > (replicaCount s)"
+    in 2 * length at_b_i > (def_replicaCount s)"
 
 subsection {* Initialization of the state. *}
 
@@ -155,47 +155,47 @@ definition init_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v state" where
 
 subsection {* Functions that handle internal and external messages. *} 
 
-definition addRequest where
-  "addRequest v s \<equiv> (let pCmds = propCmds s; 
+definition def_addRequest where
+  "def_addRequest v s \<equiv> (let pCmds = propCmds s; 
     newCmds = (if List.member pCmds v then pCmds else (pCmds @ [v])) in
       s\<lparr>propCmds := newCmds\<rparr>)"
 
-definition onRequest where "onRequest v s \<equiv> addRequest v s"
+definition def_onRequest where "def_onRequest v s \<equiv> def_addRequest v s"
 
-definition send_2a where
-  "send_2a v s \<equiv>
+definition def_send2a where
+  "def_send2a v s \<equiv>
     let
       a = id s;
       inst = (next_inst s);
       b = (ballot s);
       msg = Phase2a inst b v a;
-      s1 = addRequest v s;
+      s1 = def_addRequest v s;
       new_state = s1\<lparr>next_inst := (inst + 1),
         instances := (instances s1)(inst $:= (instances s1 $ inst)\<lparr>view := b, accepts := [a], status := 1, val := (Some v)\<rparr>)
        \<rparr>
     in
       (new_state, send_all a msg s)"
 
-definition propose :: "'v \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet set)" where
+definition def_propose :: "'v \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
-  "propose v s \<equiv> (let a = id s in if (leader s) then (send_2a (Cmd v) s)
-      else (s, {Packet a (leader_of_bal (ballot s) (replicaCount s)) (Fwd v)}))"
+  "def_propose v s \<equiv> (let a = id s in if (leader s) then (def_send2a (Cmd v) s)
+      else (s, [Packet a (def_leaderOfBal (ballot s) (def_replicaCount s)) (Fwd v)]))"
  
 (* What if the target process is not the leader anymore? TODO: Then let's forward it again. *)
-definition receive_fwd  :: "'v \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet set)" where
-  "receive_fwd v s \<equiv> (let a = id s in
-    (if (leader_of_bal (ballot s) (replicaCount s) = a \<and> leader s) then send_2a (Cmd v) s else (s, {})))"
+definition def_receiveFwd  :: "'v \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
+  "def_receiveFwd v s \<equiv> (let a = id s in
+    (if (def_leaderOfBal (ballot s) (def_replicaCount s) = a \<and> leader s) then def_send2a (Cmd v) s else (s, [])))"
 
-definition send_1a :: "'v state \<Rightarrow> ('v state \<times> 'v packet set)" where
+definition def_send1a :: "'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
   -- {* a tries to become the leader *}
-  "send_1a s \<equiv>
+  "def_send1a s \<equiv>
     (let a = id s;
-        b = nextBallot a (ballot s) (replicaCount s);
+        b = nextBallot a (ballot s) (def_replicaCount s);
         msg_1a = Phase1a a b in
       (s\<lparr>ballot := b\<rparr>, send_all a msg_1a s))"
 
-definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet set)" where
-  "receive_1a l b s \<equiv>
+definition def_receive1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
+  "def_receive1a l b s \<equiv>
     (let a = id s; bal = ballot s in
       (if (bal < b)
        then
@@ -206,8 +206,8 @@ definition receive_1a :: "acc \<Rightarrow> bal \<Rightarrow> 'v state \<Rightar
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := b, leader := False\<rparr>(*Modified*)
           in
-          (state, {packet}))
-       else (s, {})))"
+          (state, [packet]))
+       else (s, [])))"
 
 definition update_onebs :: 
   "'v state \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f (bal \<times> ('v cmd option))) \<Rightarrow> 'v state" where
@@ -240,8 +240,8 @@ text {*
 
   For now we propose values to all the instances ever started.
 *}
-definition receive_1b :: "(inst \<Rightarrow>f (bal \<times> ('v cmd option))) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet set)" where
- "receive_1b last_vs bal a2 s \<equiv> (let a = id s in
+definition def_receive1b :: "(inst \<Rightarrow>f (bal \<times> ('v cmd option))) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
+ "def_receive1b last_vs bal a2 s \<equiv> (let a = id s in
     if (bal = ballot s)
     then
       (let s1 = update_onebs s bal a2 last_vs
@@ -249,7 +249,7 @@ definition receive_1b :: "(inst \<Rightarrow>f (bal \<times> ('v cmd option))) \
           then (let
               onebs_bal = onebs s1 $ bal;
               highestVoted = highest_voted onebs_bal;
-              max_i = let l = (finfun_to_list onebs_bal) in (if l = [] then 0 else Max (set l));
+              max_i = let l = (finfun_to_list onebs_bal) in (if l = [] then 0 else hd (rev l));
               maxInst = (next_inst s1);
               (*Modified*)
               s2 = s1\<lparr>leader := True, next_inst := (if max_i + 1 < maxInst then maxInst else max_i + 1)\<rparr>;
@@ -261,53 +261,53 @@ definition receive_1b :: "(inst \<Rightarrow>f (bal \<times> ('v cmd option))) \
                   None \<Rightarrow> Phase2a i bal NoOp a
                 | Some v \<Rightarrow> Phase2a i bal v a) twoa_is;
               pckts = map (\<lambda> m . send_all a m s3) msgs
-            in (s3, fold (op \<union>) pckts {}) )
-          else (s1, {}) ) )
-    else (s, {}))"
+            in (s3, fold (op @) pckts []))
+          else (s1, []) ) )
+    else (s, []))"
 
 
-definition receive_2_first  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> 'v state" where
- "receive_2_first i b v l s \<equiv>
+definition def_receive2_first  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> 'v state" where
+ "def_receive2_first i b v l s \<equiv>
     (let bal = (ballot s) in (
       if (bal \<le> b) then 
-        (let a = id s; nas = replicaCount s; nextInst = (next_inst s) in
+        (let a = id s; nas = def_replicaCount s; nextInst = (next_inst s) in
             (s\<lparr>ballot := b, next_inst := (if (i + 1) < nextInst then nextInst else (i + 1)),
               instances := (instances s)(i $:= (instances s $ i)\<lparr>view := b, accepts := [a,l],
                 status := 2, val := (Some v)\<rparr>)\<rparr>))
      else s))"
 
-definition receive_2_addl  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> 'v state" where
- "receive_2_addl i b v a2 s \<equiv>
-    (let a = id s; bal = ballot s; accs = (accepts (instances s $ i)); nas = (replicaCount s) in
+definition def_receive2_addl  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> 'v state" where
+ "def_receive2_addl i b v a2 s \<equiv>
+    (let a = id s; bal = ballot s; accs = (accepts (instances s $ i)); nas = (def_replicaCount s) in
     if (List.member accs a2) then s 
-    else (let s2 = update_accepts i (a2 # accs) s; votes = (get_vote_num i s2) in (
+    else (let s2 = update_accepts i (a2 # accs) s; votes = (def_getVoteNum i s2) in (
       if (2 * votes \<le> nas) then s2
       else (update_decided i v s2)))
     )"    
             
-definition receive_2 :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> 'v state" where
-  "receive_2 i b v l s \<equiv>
-  (if ((get_status i s) > 0) (* This is not the first message from the instance *)
-     then (receive_2_addl i b v l s) 
+definition def_receive2 :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> 'v state" where
+  "def_receive2 i b v l s \<equiv>
+  (if ((def_getStatus i s) > 0) (* This is not the first message from the instance *)
+     then (def_receive2_addl i b v l s) 
   else (* This is the first message, treat like a propose *)
-     (receive_2_first i b v l s)
+     (def_receive2_first i b v l s)
   )"
 
-definition receive_2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet set)" where
-  "receive_2a i b v l s \<equiv> 
+definition def_receive2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
+  "def_receive2a i b v l s \<equiv> 
   if (ballot s \<le> b) then (let a = id s in
-    (receive_2 i b v l s, send_all a (Phase2b i b a v) s))
-  else (s, {})"
+    (def_receive2 i b v l s, send_all a (Phase2b i b a v) s))
+  else (s, [])"
 
-definition receive_2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet set)" where
-  "receive_2b i b a2 v s \<equiv> (receive_2 i b v a2 s, {})"
+definition def_receive2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
+  "def_receive2b i b a2 v s \<equiv> (def_receive2 i b v a2 s, [])"
 
 text {* output transition could return an option *}
-definition learn :: "inst \<Rightarrow> 'v  \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet set) option" where 
-  "learn i v s \<equiv> 
-    case (get_request i s) of None \<Rightarrow> None |
+definition def_learn :: "inst \<Rightarrow> 'v  \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list) option" where 
+  "def_learn i v s \<equiv> 
+    case (def_getRequest i s) of None \<Rightarrow> None |
       Some cm \<Rightarrow> (case cm of NoOp \<Rightarrow> None 
-        | Cmd c \<Rightarrow> (if v = c then Some (s, {}) else None))"
+        | Cmd c \<Rightarrow> (if v = c then Some (s, []) else None))"
 
 subsection {* The I/O-automata *}
 
@@ -438,40 +438,40 @@ subsection {* Code generation *}
 
 text {* We need to rename a few modules to let the Scala compiler resolve circular dependencies. *}
 code_identifier
-  code_module Code_Numeral \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Groups \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Rings \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Optiona \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module List \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module FinFun \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module FSet \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Cardinality \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Fun \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module HOL \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Product_Type \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Phantom_Type \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module String \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Orderings \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Num \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Finite_Set \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Set \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Nat \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module LinorderOption \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Divides \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Serialization  \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Conditionally_Complete_Lattices \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Complete_Lattices \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Complete_Partial_Order \<rightharpoonup> (Scala) MicroCheckerLib
-| code_module Lattices \<rightharpoonup> (Scala) MicroCheckerLib
+  code_module Code_Numeral \<rightharpoonup> (Scala) MPLib
+| code_module Groups \<rightharpoonup> (Scala) MPLib
+| code_module Rings \<rightharpoonup> (Scala) MPLib
+| code_module Optiona \<rightharpoonup> (Scala) MPLib
+| code_module List \<rightharpoonup> (Scala) MPLib
+| code_module FinFun \<rightharpoonup> (Scala) MPLib
+| code_module FSet \<rightharpoonup> (Scala) MPLib
+| code_module Cardinality \<rightharpoonup> (Scala) MPLib
+| code_module Fun \<rightharpoonup> (Scala) MPLib
+| code_module HOL \<rightharpoonup> (Scala) MPLib
+| code_module Product_Type \<rightharpoonup> (Scala) MPLib
+| code_module Phantom_Type \<rightharpoonup> (Scala) MPLib
+| code_module String \<rightharpoonup> (Scala) MPLib
+| code_module Orderings \<rightharpoonup> (Scala) MPLib
+| code_module Num \<rightharpoonup> (Scala) MPLib
+| code_module Finite_Set \<rightharpoonup> (Scala) MPLib
+| code_module Set \<rightharpoonup> (Scala) MPLib
+| code_module Nat \<rightharpoonup> (Scala) MPLib
+| code_module LinorderOption \<rightharpoonup> (Scala) MPLib
+| code_module Divides \<rightharpoonup> (Scala) MPLib
+| code_module Serialization  \<rightharpoonup> (Scala) MPLib
+| code_module Conditionally_Complete_Lattices \<rightharpoonup> (Scala) MPLib
+| code_module Complete_Lattices \<rightharpoonup> (Scala) MPLib
+| code_module Complete_Partial_Order \<rightharpoonup> (Scala) MPLib
+| code_module Lattices \<rightharpoonup> (Scala) MPLib
 
 fun processExternalEvent where
-  "processExternalEvent (Phase1a l b) s = receive_1a l b s"
-| "processExternalEvent (Phase1b last_vote b a) s = receive_1b last_vote b a s "
-| "processExternalEvent (Phase2a i b cm l) s = receive_2a i b cm l s"
-| "processExternalEvent (Phase2b i b a cm) s = receive_2b i b a cm s"
-| "processExternalEvent (Fwd v) s = receive_fwd v s"
+  "processExternalEvent (Phase1a l b) s = def_receive1a l b s"
+| "processExternalEvent (Phase1b last_vote b a) s = def_receive1b last_vote b a s "
+| "processExternalEvent (Phase2a i b cm l) s = def_receive2a i b cm l s"
+| "processExternalEvent (Phase2b i b a cm) s = def_receive2b i b a cm s"
+| "processExternalEvent (Fwd v) s = def_receiveFwd v s"
 
-export_code learn onRequest send_1a propose init_state get_ballot is_leader get_leader 
-  get_request propose processExternalEvent in Scala file "MultiPaxos5.scala"
+export_code def_learn def_onRequest def_send1a def_propose init_state def_getBallot def_isLeader def_getLeader def_getNextInstance 
+  def_getFirstUncommitted def_getRequest def_leaderOfBal def_isDecided def_getStatus processExternalEvent in Scala file "MultiPaxos5.scala"
 
 end
