@@ -13,13 +13,35 @@ value that was @{term "ballot_array.safe_at v b"} before is still @{term "ballot
 
 subsection {* Correctness of the @{term proved_safe_at} computation *}
 
+context ballot_array
+begin
+
+lemma votes_finite:
+  fixes votes  a bound
+  defines "votes \<equiv> {(v,b) . b < bound \<and> vote a b = Some v}"
+  shows "finite votes" 
+proof -
+  have 1:"finite (S \<bind> f)" if "finite S" and "\<And> x . x \<in> S \<Longrightarrow> finite (f x)" for S f
+    by (simp add: bind_UNION that)
+  have 2:"votes = {b . b < bound} \<bind> (\<lambda> b . case vote a b of Some v \<Rightarrow> {(v,b)} | None  \<Rightarrow> {})"
+    (is "?votes = Set.bind ?bals ?f")
+    by (auto simp add: Set.bind_def votes_def split!:option.split)
+  have 3:"finite ?bals"
+    by simp 
+  have 4:"finite (?f b)" for b by (simp split!:option.split)
+  show ?thesis
+    by (metis (no_types, lifting) 2 3 1 4)
+qed
+
+end
+
 locale ballot_array_props = ballot_array quorums + quorums quorums for quorums
 begin
 
 context 
 begin 
 
-lemma "safe_at v (bot::nat)"
+lemma "safe_at v (0::nat)"
 by (auto simp add:safe_at_def)
 
 (* Only used in safe \<Rightarrow> agreement *)
