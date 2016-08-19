@@ -23,12 +23,15 @@ record ('v,'a,'l) ampr1_state =
   learned :: "'l \<Rightarrow> inst \<rightharpoonup> 'v"
   leader :: "'a \<Rightarrow> bool"
 
+global_interpretation dsa:distributed_safe_at quorums ballot vote for quorums ballot vote 
+  defines acc_max = dsa.acc_max and max_quorum_votes = dsa.max_quorum_votes .
+
 locale ampr1_ioa = IOA +
   fixes quorums::"'a set set" and leader :: "bal \<Rightarrow> 'a"
   -- {* @{term leader} determines the leader of a ballot. *}
 begin
 
-interpretation dsa:distributed_safe_at quorums ballot vote for ballot vote .
+(* interpretation dsa:distributed_safe_at quorums ballot vote for ballot vote . *)
 
 datatype ('vv,'aa,'ll) action =
   Propose 'vv

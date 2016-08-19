@@ -10,7 +10,7 @@ definition accs where "accs \<equiv> {1..n}"
 
 definition leader where "leader (b::nat) \<equiv> (b mod n) + 1"
                       
-global_interpretation card_quorums accs 
+global_interpretation card_quorums accs
   defines qs = "quorums" and num_accs = "nas"
   -- {* @{term num_accs} is there just for code generation *}
 apply (unfold_locales)
@@ -19,9 +19,12 @@ apply (simp add: accs_def)
 done
 
 global_interpretation ampr2_ioa qs leader
-  defines ampr2_start = start .
+  defines ampr2_start = start (*and ampr2_acc_max = distributed_safe_at.acc_max*) .
 
 export_code ampr2_start in SML
+export_code propose in SML
+export_code acc_max in Scala
+export_code join_ballot in Scala
 
 value "ampr2_start::(nat, nat, nat) ampr2_state set"
 

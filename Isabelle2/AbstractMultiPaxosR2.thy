@@ -24,7 +24,7 @@ record ('v,'a,'l) ampr2_state =
   learned :: "'l \<Rightarrow>f inst \<Rightarrow>f 'v option"
   leader :: "'a \<Rightarrow>f bool"
 
-locale ampr2_ioa = IOA + ampr1:ampr1_ioa quorums leader for quorums :: "'a set set" and leader
+locale ampr2_ioa = ampr1:ampr1_ioa quorums leader for quorums :: "'a set set" and leader
 begin
 
 definition asig where
@@ -44,29 +44,32 @@ subsection {* The transitions *}
 definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
 
-term distributed_safe_at.acc_max
 lift_definition finfun_acc_max :: "('b \<Rightarrow> nat \<Rightarrow>f 'c option) \<Rightarrow> 'b \<Rightarrow> nat \<Rightarrow> ('c \<times> nat) option"
-  is distributed_safe_at.acc_max .
+  is dsa.acc_max .
 
-term "vote s $ a $ i"
-value "\<lambda> s i . finfun_acc_max (\<lambda> a . vote s $ a $ i)"
-
+text {* TODO: how to define oneb' as a finfun?
+One solution would be to recurse over the domain of vote s a using finfun_to_list.
+But, it's tricky. First, we need the list of all instances in which at least one vote was cast below b. *}
 definition join_ballot where
-  "join_ballot a b s s' \<equiv> 
+  "join_ballot a b s s' \<equiv>
     let onebs' = \<lambda> i . finfun_acc_max (\<lambda> a . vote s $ a $ i) a b
     in
-      b > (ballot s $ a) 
+      b > (ballot s $ a)
       \<and> s' = s\<lparr>ballot := (ballot s)(a $:= b),
         leader := (ampr2_state.leader s)(a $:= False)\<rparr>"
 
-definition join_ballot where
-  "join_ballot a b s s' \<equiv> 
-    let onebs' = \<lambda> i . finfun_acc_max (\<lambda> a . vote s $ a $ i) a b
+text {* First tentative. Is executable (see the Code theory). *}
+definition join_ballot2 where
+  "join_ballot2 a b s s' \<equiv>
+    let 
+      is = finfun_to_list (vote s $ a);
+      onebs' = \<lambda> i . finfun_acc_max (\<lambda> a . vote s $ a $ i) a b;
+      onebs'2 = fold (\<lambda> i ff . ff(i $:= onebs' i)) is (K$ None)
     in
-      b > (ballot s a) 
-      \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
-        onebs := (onebs s)(a := (onebs s a)(b $:= onebs')),
-        leader := (ampr2_state.leader s)(a := False)\<rparr>"
+      b > (ballot s $ a) 
+      \<and> s' = s\<lparr>ballot := (ballot s)(a $:= b),
+        onebs := (onebs s)(a $:= (onebs s $ a)(b $:= Some onebs'2)),
+        leader := (ampr2_state.leader s)(a $:= False)\<rparr>"
 
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in 
