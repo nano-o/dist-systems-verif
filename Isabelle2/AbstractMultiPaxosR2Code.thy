@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR2Code
-imports AbstractMultiPaxosR2 "~~/src/HOL/Library/FinFun_Syntax"
+imports AbstractMultiPaxosR2
 begin
 
 definition n :: nat where "n \<equiv> 3"

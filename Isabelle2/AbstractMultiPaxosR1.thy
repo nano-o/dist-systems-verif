@@ -53,10 +53,10 @@ definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
 
 definition join_ballot where
-  "join_ballot a b s s' \<equiv> 
+  "join_ballot a b s s' \<equiv>
     let onebs' = \<lambda> i . dsa.acc_max (vote s i) a b
     in
-      b > (ballot s a) 
+      b > (ballot s a)
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
         onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')),
         leader := (ampr1_state.leader s)(a := False)\<rparr>"
@@ -67,14 +67,12 @@ definition acquire_leadership where
     \<and> q \<in> quorums
     \<and> \<not> ampr1_state.leader s a
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
-    \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True), 
+    \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True),
         suggestion := \<lambda> i . (suggestion s i)(b :=
-          let 
-            a_max = \<lambda> a . the (onebs s a b) i;
-            m = dsa.max_quorum_votes q a_max 
-          in
-            Some (fst (the_elem m))) \<rparr>"
-  -- {* This is well-defined only when the array is conservative. *}
+          let a_max = \<lambda> a . the (onebs s a b) i; m = dsa.max_quorum_votes q a_max
+          in if m = {} then None else Some (fst (the_elem m)))\<rparr>"
+  -- {* This is well-defined only when m has at most cardinality one (i.e. the array is conservative).
+  When the suggestion is set to None, it means that any value is safe. *}
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s

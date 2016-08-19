@@ -11,6 +11,8 @@ locale ampr1_proof = IOA + quorums quorums + ampr1_ioa quorums for
   defines "the_ioa \<equiv> ioa"
 begin
 
+interpretation dsa:distributed_safe_at quorums ballot vote for ballot vote .
+
 subsection {* Automation setup *}
 
 lemmas ioa_defs =
@@ -97,6 +99,7 @@ qed
 declare conservative[invs]
 
 lemma trans_imp_prefix_order:
+    -- {* This is used to show that safe_at is monotonic *}
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t"
   shows "is_prefix (ballot s) (ballot t) (vote s i) (vote t i)" using assms
   apply (simp add:inv_proofs_defs)
@@ -115,75 +118,134 @@ by (metis ballot_array_prefix_axioms_def ballot_array_prefix_def quorums_axioms 
 definition inv3 where inv3_def[inv_proofs_defs]:
   "inv3 s \<equiv> \<forall> a b . case onebs s a b of None \<Rightarrow> True
     | Some maxs \<Rightarrow> 
-      (\<forall> i . maxs i = distributed_safe_at.acc_max (vote s i) a b)
+      (\<forall> i . maxs i = dsa.acc_max (vote s i) a b)
       \<and> (ballot s a \<ge> b)"
 
-lemma inv3:
-  "invariant the_ioa inv3"
-apply (rule invariantI)
-apply (force simp add:inv_proofs_defs)
-apply instantiate_invs_2
-apply (unfold_to_trans_rel)
-apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
-          apply (auto simp add:inv_proofs_defs  split:option.splits)[2]
+lemma inv3: "invariant the_ioa inv3"
+  apply (rule invariantI)
+   apply (force simp add:inv_proofs_defs)
+  apply instantiate_invs_2
+  apply (unfold_to_trans_rel)
+  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
+        apply (auto simp add:inv_proofs_defs  split:option.splits)[2]
       defer defer apply (auto simp add:inv_proofs_defs  split:option.splits)[3]
-    defer
-    subgoal premises prems for s t act a i v
-    proof -
-      { fix a2 b maxs
-        assume a1:"onebs s a2 b = Some maxs"
-        from a1 prems(1) have 1:"\<And> j . maxs j = distributed_safe_at.acc_max (vote s j) a2 b" 
-          by (simp add:inv3_def split:option.splits if_split if_split_asm)
-        from a1 \<open>inv3 s\<close> \<open>do_vote a i v s t\<close> have 2:"ballot t a2 \<ge> b" by (simp add:inv3_def split:option.splits)
-        { fix j assume "j \<noteq> i \<or> a \<noteq> a2"
-          hence "maxs j = distributed_safe_at.acc_max (vote t j) a2 b" using 1 \<open>do_vote a i v s t\<close> by (auto simp add:distributed_safe_at.acc_max_def) }
-        note 3 = this
-        { fix j assume "j = i \<and> a = a2"
-          hence "maxs j = distributed_safe_at.acc_max (vote t j) a2 b" using 1 \<open>do_vote a i v s t\<close> a1 2 apply (simp add:distributed_safe_at.acc_max_def)
-            by (smt Collect_cong ampr1_state.select_convs(2) ampr1_state.surjective ampr1_state.update_convs(3) dual_order.strict_trans1 neq_iff split_cong) }
-        note this 2 3 }
-      thus ?thesis apply (simp add:inv3_def split:option.splits) 
-        by (metis (no_types, lifting) ampr1_ioa.do_vote_def ampr1_state.select_convs(5) ampr1_state.surjective ampr1_state.update_convs(3) \<open>do_vote a i v s t\<close>)
-    qed
-    apply (auto simp add:inv_proofs_defs  split!:option.splits)
-    by (metis less_trans nat_less_le)
+   defer
+  subgoal premises prems for s t act a i v
+  proof -
+    { fix a2 b maxs
+      assume a1:"onebs s a2 b = Some maxs"
+      from a1 prems(1) have 1:"\<And> j . maxs j = dsa.acc_max (vote s j) a2 b" 
+        by (simp add:inv3_def split:option.splits if_split if_split_asm)
+      from a1 \<open>inv3 s\<close> \<open>do_vote a i v s t\<close> have 2:"ballot t a2 \<ge> b" by (simp add:inv3_def split:option.splits)
+      { fix j assume "j \<noteq> i \<or> a \<noteq> a2"
+        hence "maxs j = dsa.acc_max (vote t j) a2 b" using 1 \<open>do_vote a i v s t\<close> by (auto simp add:dsa.acc_max_def) }
+      note 3 = this
+      { fix j assume "j = i \<and> a = a2"
+        hence "maxs j = dsa.acc_max (vote t j) a2 b" using 1 \<open>do_vote a i v s t\<close> a1 2 apply (simp add:dsa.acc_max_def)
+          by (smt Collect_cong ampr1_state.select_convs(2) ampr1_state.surjective ampr1_state.update_convs(3) dual_order.strict_trans1 neq_iff split_cong) }
+      note this 2 3 }
+    thus ?thesis apply (simp add:inv3_def split:option.splits) 
+      by (metis (no_types, lifting) ampr1_ioa.do_vote_def ampr1_state.select_convs(5) ampr1_state.surjective ampr1_state.update_convs(3) \<open>do_vote a i v s t\<close>)
+  qed
+  apply (auto simp add:inv_proofs_defs  split!:option.splits)
+  by (metis less_trans nat_less_le)
 declare inv3[invs]
 
 (* nitpick[no_assms, show_consts, verbose, card 'a = 3, card 'v = 2, card nat = 2, card "'v option" = 3, card "nat option" = 3,
     card "('v \<times> nat) option" = 5, card "'v \<times> nat" = 4, card unit = 1, card "('v, 'a) ampr1_state" = 32, card 'l = 1, expect=none]  *)
 
+definition inv5 where inv5_def[inv_proofs_defs]:
+  "inv5 s \<equiv> \<forall> a b f i . onebs s a b = Some f \<and> f i \<noteq> None \<longrightarrow> (\<exists> b' < b . vote s i a b' \<noteq> None)"
+lemma inv5:"invariant the_ioa inv5"
+  apply (rule invariantI)
+   apply (force simp add:inv_proofs_defs)
+  apply instantiate_invs_2
+  apply (unfold_to_trans_rel)
+  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
+        apply (auto simp add:inv_proofs_defs  split:option.splits)[2] defer defer 
+      apply (auto simp add:inv_proofs_defs  split:option.splits)[3] defer
+   apply (simp add:inv5_def split!:option.splits)
+   apply metis 
+  subgoal premises prems for s t x a b
+  proof -
+    show ?thesis using \<open>join_ballot a b s t\<close> \<open>inv5 s\<close> distributed_safe_at.acc_max_is_a_vote
+      apply (auto simp add:inv5_def split!:option.splits)
+      subgoal proof -
+        fix i :: nat and aa :: 'v and ba :: nat
+        assume a1: "dsa.acc_max (vote s i) a b = Some (aa, ba)"
+        have "\<forall>n f a. \<exists>na. (na < n \<or> dsa.acc_max f a n = None) \<and> (f a na \<noteq> (None::'v option) \<or> dsa.acc_max f a n = None)"
+          by (simp add: dsa.acc_max_code)
+        then show "\<exists>n<b. \<exists>v. vote s i a n = Some v"
+          using a1 by (metis (no_types) not_Some_eq)
+      qed
+       apply blast
+      apply blast 
+      done
+  qed
+  done
+declare inv5[invs]
+
+definition inv4 where inv4_def[inv_proofs_defs]:
+  "inv4 s \<equiv> \<forall> i b q . (q \<in> quorums \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)) \<longrightarrow> (
+    let a_max = \<lambda> a . the (onebs s a b) i; m = dsa.max_quorum_votes q a_max
+    in \<exists> a \<in> q . the (onebs s a b) i \<noteq> None \<longrightarrow> (\<exists> x . m = {x}))"
+
+lemma inv4: "invariant the_ioa inv4"
+proof -
+  { fix i b q a b' w and s::"('v,'a,'l)ampr1_state"
+    assume "q \<in> quorums" and "inv3 s" and 1:"\<And> a . a \<in> q \<Longrightarrow> onebs s a b \<noteq> None"
+    and 3:"ballot_array.conservative_array (vote s i)"
+    and 4:"b' < b" and 5:"vote s i a b' = Some w" and 6:"a \<in> q"
+    define a_max where "a_max \<equiv> \<lambda> a . the (onebs s a b) i"
+    define m where "m \<equiv> dsa.max_quorum_votes q a_max"
+    interpret p:dsa_properties quorums "ballot s" "vote s i" by unfold_locales
+    have 2:"a_max a = dsa.acc_max (vote s i) a b" if "a \<in> q" for a using \<open>inv3 s\<close> 1 that
+      by (simp add:inv3_def a_max_def split!:option.splits)
+    have "\<exists> x . m = {x}" using p.max_vote_unique[OF 4 6 5 3 \<open>q \<in> quorums\<close>] 2
+      by (fastforce simp add:m_def a_max_def dsa.max_quorum_votes_def split!:option.splits) }
+  hence "inv4 s" if "inv3 s" and "inv5 s" and "conservative_array s" for s::"('v,'a,'l)ampr1_state" using that
+    apply (auto simp add:inv4_def inv3_def inv5_def  split!:option.splits) 
+  oops
+
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
 declare ballot_array.safe_def[inv_proofs_defs]
 
 lemma aqcuire_leadership_ok:
+  fixes a q s t i v safe_at 
+  defines "safe_at w \<equiv> ballot_array.safe_at quorums (ballot t) (vote t i) w (ballot t a)"
   assumes "acquire_leadership a q s t" and "inv3 s" and "safe s" and "conservative_array t"
-  shows "let safe_at = \<lambda> v . ballot_array.safe_at quorums (ballot t) (vote t i) v (ballot t a) in
-    case suggestion t i (ballot t a) of Some v \<Rightarrow> safe_at v | None \<Rightarrow> safe_at v" sorry
+  shows "case suggestion t i (ballot t a) of Some v \<Rightarrow> safe_at v | None \<Rightarrow> safe_at v"
+    -- {* Note that all values are safe when the suggestion in None. *}
 proof -
   let ?b = "ballot s a"
-  have 2:"?b = ballot t a" using assms(1) by (auto simp add:inv_proofs_defs)let ?proved_safe_at = "distributed_safe_at.proved_safe_at quorums (ballot t) (vote t i) q ?b"
-  have 5:"case suggestion t i (ballot t a) of Some v \<Rightarrow>  ?proved_safe_at v | None \<Rightarrow> ?proved_safe_at  v"
+  have 2:"?b = ballot t a" using \<open>acquire_leadership a q s t\<close> by (auto simp add:inv_proofs_defs safe_at_def) 
+  define proved_safe_at where "proved_safe_at = dsa.proved_safe_at (ballot t) (vote t i) q ?b"
+  have 5:"case suggestion t i (ballot t a) of Some v \<Rightarrow>  proved_safe_at v | None \<Rightarrow> proved_safe_at  v"
   proof -  
-    have "q \<in> quorums" by (metis acquire_leadership_def assms(1)) 
+    have "q \<in> quorums" by (metis acquire_leadership_def \<open>acquire_leadership a q s t\<close>) 
     moreover
-    have "\<And> a2 . a2 \<in> q \<Longrightarrow> ?b \<le> ballot t a2" using assms(1,2) apply (auto simp add:inv_proofs_defs) by (metis (no_types, lifting) option.simps(5))
+    have "\<And> a2 . a2 \<in> q \<Longrightarrow> ?b \<le> ballot t a2" using \<open>acquire_leadership a q s t\<close> \<open>inv3 s\<close> 
+      apply (auto simp add:inv_proofs_defs) by (metis (no_types, lifting) option.simps(5))
     moreover
-    have "distributed_safe_at.max_quorum_votes q (\<lambda> a2 . the (onebs t a2 ?b) i) = 
-      distributed_safe_at.max_quorum_votes q (\<lambda> a2 . distributed_safe_at.acc_max (vote t i) a2 ?b)"
+    have "dsa.max_quorum_votes q (\<lambda> a2 . the (onebs t a2 ?b) i) = 
+      dsa.max_quorum_votes q (\<lambda> a2 . dsa.acc_max (vote t i) a2 ?b)"
     proof -
-      have "distributed_safe_at.max_quorum_votes q (\<lambda> a2 . the (onebs s a2 ?b) i) = 
-        distributed_safe_at.max_quorum_votes q (\<lambda> a2 . distributed_safe_at.acc_max (vote s i) a2 ?b)"
+      have "dsa.max_quorum_votes q (\<lambda> a2 . the (onebs s a2 ?b) i) = 
+        dsa.max_quorum_votes q (\<lambda> a2 . dsa.acc_max (vote s i) a2 ?b)"
       proof -
-        have "\<And> a2 . a2 \<in> q \<Longrightarrow> case onebs s a2 ?b of 
-                  Some f \<Rightarrow> f i = distributed_safe_at.acc_max (vote s i) a2 ?b 
-                | None \<Rightarrow> False" using assms by (auto simp add:inv_proofs_defs split:option.splits)
-        thus ?thesis oops (* TODO *)
+        have "case onebs s a2 ?b of Some f \<Rightarrow> f i = dsa.acc_max (vote s i) a2 ?b 
+              | None \<Rightarrow> False" if "a2 \<in> q" for a2 using \<open>acquire_leadership a q s t\<close> \<open>inv3 s\<close> that
+          by (auto simp add:inv_proofs_defs split:option.splits)
+        hence "the (onebs s a2 ?b) i = dsa.acc_max (vote s i) a2 ?b" if "a2 \<in> q" for a2 using that
+          by (smt option.case_eq_if)
+        thus ?thesis by (auto simp add:dsa.max_quorum_votes_def split!:option.splits)
       qed
-      thus ?thesis using assms(1) by (auto simp add:inv_proofs_defs)
-    qed
-    ultimately show ?thesis using assms(1) by (auto simp add:distributed_safe_at.proved_safe_at_def split:option.splits)
+      thus ?thesis using \<open>acquire_leadership a q s t\<close> by (auto simp add:inv_proofs_defs)
+    qed                                         
+    ultimately show ?thesis using \<open>acquire_leadership a q s t\<close> 
+      apply (auto simp add:dsa.proved_safe_at_def proved_safe_at_def split:option.splits)
   qed
-  have 6:"safe t" using assms(1) assms(3) by (auto simp add:inv_proofs_defs)
+  have 6:"safe t" using \<open>acquire_leadership a q s t\<close> \<open>safe s\<close> by (auto simp add:inv_proofs_defs)
   interpret p:dsa_properties "ballot t" "vote t i" quorums by unfold_locales
   show ?thesis using 2 5 6 p.proved_safe_at_imp_safe_at assms(4) by (metis option.case_eq_if option.distinct(1) option.sel p.safe_def)
 qed

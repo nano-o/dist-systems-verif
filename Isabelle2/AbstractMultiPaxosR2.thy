@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR2
-imports  AbstractMultiPaxosR1 "~~/src/HOL/Library/FinFun_Syntax"
+imports  AbstractMultiPaxosR1 "~~/src/HOL/Library/FinFun"
 begin
 
 text {*
@@ -12,6 +12,8 @@ text {*
 7) Per-acceptor state.
 8) finfuns.
 *}
+
+unbundle finfun_syntax
 
 record ('v,'a,'l) ampr2_state =
   propCmd :: "'v set"
