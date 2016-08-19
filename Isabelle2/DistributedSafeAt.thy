@@ -62,19 +62,7 @@ proof -
   proof -
     have 1:"votes \<noteq> {}" (is "?votes \<noteq> {}") using assms
       by (auto simp add:acc_max_def votes_def split!: if_split_asm)
-    have 2:"finite votes" 
-    proof -
-      have 1:"finite (S \<bind> f)" if "finite S" and "\<And> x . x \<in> S \<Longrightarrow> finite (f x)" for S f
-        by (simp add: bind_UNION that)
-      have 2:"?votes = {b . b < bound} \<bind> (\<lambda> b . case vote a b of Some v \<Rightarrow> {(v,b)} | None  \<Rightarrow> {})"
-        (is "?votes = Set.bind ?bals ?f")
-        by (auto simp add: Set.bind_def votes_def split!:option.split)
-      have 3:"finite ?bals"
-        by simp 
-      have 4:"finite (?f b)" for b by (simp split!:option.split)
-      show ?thesis
-        by (metis (no_types, lifting) 2 3 1 4)
-    qed
+    have 2:"finite votes" using votes_finite by (auto simp add:votes_def)
     have 3:"snd x \<noteq> snd y" if "x \<in> ?votes" and "y \<in> ?votes" and "x \<noteq> y" for x y
       by (metis (mono_tags, lifting) votes_def BNF_Def.Collect_case_prodD option.simps(1) prod_eq_iff that)
     show ?thesis using that max_by_key_ordered 1 2 3
@@ -98,11 +86,44 @@ proof -
     by (metis option.inject option.simps(3) prod.inject the_elem_eq)
 qed
 
+lemma acc_max_is_a_vote:
+  assumes "acc_max a bound = Some (v,b)"
+  shows "vote a b = Some v" 
+proof -
+  have "max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd = {(v,b)}"
+    by (simp add: acc_max_is_max_by_key assms)
+  moreover have "{(v,b) . b < bound \<and> vote a b = Some v} \<noteq> {}" using assms 
+    by (auto simp add:acc_max_def split!:if_splits)
+  ultimately show ?thesis using votes_finite max_by_key_in_and_ge(2)[of "{(v, b). b < bound \<and> vote a b = Some v}"] by blast
+qed
+
 end
 
 locale dsa_properties = quorums quorums + distributed_safe_at quorums ballot vote 
   for quorums ballot vote
 begin
+
+lemma max_vote_unique:
+  assumes "b' < b" and "a \<in> q" and "vote a b' = Some w" and "conservative_array" and "q \<in> quorums"
+  obtains x where "max_quorum_votes q (\<lambda> a . acc_max a b) = {x}"
+proof -
+  let ?votes = "Union ((\<lambda> a . option_as_set ((\<lambda> a . acc_max a b) a)) ` q)"
+  have "finite ?votes" using quorums_axioms apply (simp add:option_as_set_def quorums_def)
+    by (simp add: \<open>q \<in> quorums\<close> option.case_eq_if)
+  have "finite q" using \<open>q \<in> quorums\<close> quorums_axioms
+     by (simp add: quorums_def)
+  have "?votes \<noteq> {}" using assms(1-3) \<open>finite q\<close> acc_max_singleton 
+    apply (auto simp add:option_as_set_def split!:option.splits)
+    using acc_max_def by auto 
+  have "vote a b' = Some v" if "(v,b') \<in> option_as_set (acc_max a b)" for a v b' using that acc_max_is_a_vote
+    by (auto simp add:option_as_set_def split!:option.splits)
+  hence "\<exists> a . vote a b' = Some v" if "(v,b') \<in> ?votes" for v b' using that by blast
+  hence "snd x \<noteq> snd y" if "x \<in> ?votes" and "y \<in> ?votes" and "x \<noteq> y" for x y using \<open>conservative_array\<close> that
+    apply (simp add:conservative_array_def conservative_def split!:option.splits)
+    by (metis old.prod.exhaust snd_conv) 
+  thus ?thesis using that using max_by_key_ordered[where ?f="snd" and ?S="?votes"] \<open>finite ?votes\<close> \<open>?votes \<noteq> {}\<close> 
+    apply (simp add:max_quorum_votes_def) by blast
+qed
 
 context begin
 
@@ -110,10 +131,10 @@ private lemma l1:
   assumes "proved_safe_at q b v"
   shows "proved_safe_at_abs q b v"
 proof -
-  have "v \<in> fst ` (max_by_key {} snd)" if "\<exists> a \<in> q . \<exists> b' < b . vote a b' \<noteq> None"
+  have "v \<in> fst ` (max_by_key {} snd)" if "\<exists> a \<in> q . \<exists> b' < b . vote a b' \<noteq> None" oops
 
 private
-lemma l1: assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_abs q b v" sorry
+lemma l1: assumes "proved_safe_at q b v" and "conservative_array" shows "proved_safe_at_abs q b v" oops
 nitpick[verbose, card 'a = 3, card nat = 2, card 'b = 3, card "nat option" = 3, card "'b option" = 4, card "('b \<times> nat) option" = 7,
   card "'b \<times> nat" = 6, expect=none]
 proof -
