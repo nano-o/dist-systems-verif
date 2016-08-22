@@ -19,12 +19,17 @@ apply (simp add: accs_def)
 done
 
 global_interpretation ampr2_ioa qs leader
-  defines ampr2_start = start (*and ampr2_acc_max = distributed_safe_at.acc_max*) .
+  defines ampr2_start = start (*and ampr2_acc_max = distributed_safe_at.acc_max*) 
+  and ampr2_join_ballot = join_ballot
+    and ampr2_acquire_leadership = acquire_leadership
+  .
 
 export_code ampr2_start in SML
 export_code propose in SML
 export_code acc_max in Scala
 export_code join_ballot in Scala
+export_code ampr2_join_ballot in Scala
+export_code ampr2_acquire_leadership in Scala
 
 value "ampr2_start::(nat, nat, nat) ampr2_state set"
 

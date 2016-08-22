@@ -15,6 +15,92 @@ text {*
 
 unbundle finfun_syntax
 
+abbreviation flip where "flip f \<equiv> \<lambda> x y . f y x"
+  
+experiment 
+  fixes onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option)"
+  fixes b :: bal
+  fixes q :: "'a set"
+begin
+
+definition x1 where "x1 \<equiv> (flip finfun_apply b) o$ onebs"
+  
+definition x2 where "x2 \<equiv>
+  Finite_Set.fold (\<lambda> a ff . union o$ ($ option_as_set o$ (x1 $ a), ff $) )
+  (K$ {}) q"
+  
+    (*
+  define x3 where "x3 \<equiv> (flip max_by_key snd) o$ x2"
+  fix s :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
+  define x4 where "x4 \<equiv> ($ x3, s $)"
+  define x5 where "x5 \<equiv> (\<lambda> (mb, ff) . ff(b $:= Some (fst (the_elem mb)))) o$ x4"
+*)
+  
+end
+  
+locale test = 
+  fixes onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option)"
+  fixes b :: bal
+  fixes q :: "'a set"
+begin
+
+definition x1 where "x1 \<equiv> ((flip finfun_apply) b) o$ onebs"
+  
+definition x2 where "x2 \<equiv>
+  Finite_Set.fold (\<lambda> a ff . (op \<union>) o$ ($ option_as_set o$ (x1 $ a), ff $) )
+  (K$ {}) q"
+  
+    (*
+  define x3 where "x3 \<equiv> (flip max_by_key snd) o$ x2"
+  fix s :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
+  define x4 where "x4 \<equiv> ($ x3, s $)"
+  define x5 where "x5 \<equiv> (\<lambda> (mb, ff) . ff(b $:= Some (fst (the_elem mb)))) o$ x4"
+*)
+  
+end
+
+global_interpretation t:test onebs b q for onebs b q .
+export_code test.x1 in SML
+
+end
+
+section {* A test *}
+
+definition acc_max_2 where
+  "acc_max_2 (bound::nat) votes \<equiv> 
+    if (\<exists> b < bound . votes b \<noteq> None)
+    then Some (the_elem (max_by_key {(v,b) . b < bound \<and> votes b = Some v} snd))
+    else None"
+
+lemma acc_max_2_code[code]:
+  "acc_max_2 bound votes = (
+    if (\<exists> b \<in> {0..<bound} . votes b \<noteq> None)
+    then let votes = ((\<lambda> b . votes b \<bind> (\<lambda> v . Some (v,b))) ` {0..<bound}) \<bind> option_as_set in
+      Some (the_elem (max_by_key votes snd))
+    else None)" sorry
+
+context
+begin
+
+text {* The restriction operator is not executable, so does not work. *}
+
+private
+lemma acc_max_2_code_2: 
+  "acc_max_2 bound votes = (
+    if (\<exists> b \<in> {0..<bound} . votes b \<noteq> None)
+    then let votes = ran ((\<lambda> b . votes b \<bind> (\<lambda> v . Some (v,b))) |` {0..<bound}) in
+      Some (the_elem (max_by_key votes snd))
+    else None)" oops
+end
+
+lemma "acc_max_2 b (vote s i a) = acc_max (vote s i) a b"
+  by (auto simp add:acc_max_2_def acc_max_def distributed_safe_at.acc_max_def)
+
+lift_definition finfun_acc_max_2 :: "nat \<Rightarrow> (nat \<Rightarrow>f 'c option) \<Rightarrow> ('c \<times> nat) option"
+  is acc_max_2 .
+
+section {* The IOA *}
+
 record ('v,'a,'l) ampr2_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow>f bal"
@@ -44,43 +130,50 @@ subsection {* The transitions *}
 definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
 
-lift_definition finfun_acc_max :: "('b \<Rightarrow> nat \<Rightarrow>f 'c option) \<Rightarrow> 'b \<Rightarrow> nat \<Rightarrow> ('c \<times> nat) option"
-  is dsa.acc_max .
-
-text {* TODO: how to define oneb' as a finfun?
-One solution would be to recurse over the domain of vote s a using finfun_to_list.
-But, it's tricky. First, we need the list of all instances in which at least one vote was cast below b. *}
 definition join_ballot where
   "join_ballot a b s s' \<equiv>
-    let onebs' = \<lambda> i . finfun_acc_max (\<lambda> a . vote s $ a $ i) a b
+    let onebs'  = (finfun_acc_max_2 b) o$ (vote s $ a)
     in
       b > (ballot s $ a)
       \<and> s' = s\<lparr>ballot := (ballot s)(a $:= b),
+        onebs := (onebs s)(a $:= (onebs s $ a)(b $:= Some onebs')),
         leader := (ampr2_state.leader s)(a $:= False)\<rparr>"
 
-text {* First tentative. Is executable (see the Code theory). *}
-definition join_ballot2 where
-  "join_ballot2 a b s s' \<equiv>
-    let 
-      is = finfun_to_list (vote s $ a);
-      onebs' = \<lambda> i . finfun_acc_max (\<lambda> a . vote s $ a $ i) a b;
-      onebs'2 = fold (\<lambda> i ff . ff(i $:= onebs' i)) is (K$ None)
-    in
-      b > (ballot s $ a) 
-      \<and> s' = s\<lparr>ballot := (ballot s)(a $:= b),
-        onebs := (onebs s)(a $:= (onebs s $ a)(b $:= Some onebs'2)),
-        leader := (ampr2_state.leader s)(a $:= False)\<rparr>"
+
+notepad begin
+  fix onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option)"
+  fix b :: bal
+  define x1 where "x1 \<equiv> ((flip finfun_apply) b) o$ onebs"
+  fix q :: "'a set"
+  define x2 where "x2 \<equiv>
+    Finite_Set.fold (\<lambda> a ff . (\<lambda> (x,y) . x \<union> y) o$ ($ option_as_set o$ (x1 $ a), ff $) )
+      (K$ {}) q"
+  define x3 where "x3 \<equiv> (flip max_by_key snd) o$ x2"
+  fix s :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
+  define x4 where "x4 \<equiv> ($ x3, s $)"
+  define x5 where "x5 \<equiv> (\<lambda> (mb, ff) . ff(b $:= Some (fst (the_elem mb)))) o$ x4"
+    
+end
 
 definition acquire_leadership where
-  "acquire_leadership a q s s' \<equiv> let b = ballot s a in 
+  "acquire_leadership a q (s::('v,'a,'l) ampr2_state) s' \<equiv> let b = ballot s $ a in
     leader b = a
     \<and> q \<in> quorums
-    \<and> \<not> ampr2_state.leader s a 
-    \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
-    \<and> s' = s\<lparr>leader := (ampr2_state.leader s)(a := True), 
-        suggestion := \<lambda> i . (suggestion s $ i)(b :=
-          let m = distributed_safe_at.max_pair q (\<lambda> a . the (onebs s a b) i) in
-            map_option fst m)\<rparr>"
+    \<and> \<not> ampr2_state.leader s $ a 
+    \<and> (\<forall> a \<in> q . onebs s $ a $ b \<noteq> None)
+    \<and> (let 
+        the_onebs = (finfun_comp the) o$ onebs s;
+        votes_at_b = ((flip finfun_apply) b) o$ the_onebs;
+        votes_per_inst = 
+          Finite_Set.fold (\<lambda> a ff . (\<lambda> (x,y) . x \<union> y) o$ 
+              ($ option_as_set o$ (votes_at_b $ a), ff $) )
+            (K$ {}) q;
+        maxs = (flip max_by_key snd) o$ votes_per_inst;
+        sugg = \<lambda> m::('v\<times>nat) set . if m = {} then None else Some (fst (the_elem m));
+        suggestion = (\<lambda> (m, ff) . ff(b $:= if m = {} then None else Some (fst (the_elem m)))) 
+          o$ ($ maxs, suggestion s $)
+      in  s' = s\<lparr>leader := (ampr2_state.leader s)(a $:= True),
+        suggestion := suggestion\<rparr>)"
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
