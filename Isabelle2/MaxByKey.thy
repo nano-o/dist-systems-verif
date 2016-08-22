@@ -1,15 +1,16 @@
-section {* A few lemmas about Max *}
+chapter {* Maximals elements over a set. *}
+
+text {* Maximal elements over a set of elements whose position in a linear order is given by 
+an auxiliary function *}
 
 theory MaxByKey
 imports Main
 begin
 
-subsection {* Max by key *}
-
 context begin
 
-definition max_by_key where
-  -- {* Executable version *}
+definition max_by_key :: "'a set \<Rightarrow> ('a \<Rightarrow> 'b::linorder) \<Rightarrow> 'a set" where
+  -- {* @{term max_by_key} is executable *}
   "max_by_key S f \<equiv> {x \<in> S . f x = Max (f ` S)}"
 
 lemma fixes X::"nat set" assumes "finite X" and "X \<noteq> {}"
