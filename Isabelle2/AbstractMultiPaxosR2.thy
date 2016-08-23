@@ -14,55 +14,9 @@ text {*
 *}
 
 unbundle finfun_syntax
+unbundle lifting_syntax
 
-abbreviation flip where "flip f \<equiv> \<lambda> x y . f y x"
-  
-experiment 
-  fixes onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option)"
-  fixes b :: bal
-  fixes q :: "'a set"
-begin
-
-definition x1 where "x1 \<equiv> (flip finfun_apply b) o$ onebs"
-  
-definition x2 where "x2 \<equiv>
-  Finite_Set.fold (\<lambda> a ff . union o$ ($ option_as_set o$ (x1 $ a), ff $) )
-  (K$ {}) q"
-  
-    (*
-  define x3 where "x3 \<equiv> (flip max_by_key snd) o$ x2"
-  fix s :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
-  define x4 where "x4 \<equiv> ($ x3, s $)"
-  define x5 where "x5 \<equiv> (\<lambda> (mb, ff) . ff(b $:= Some (fst (the_elem mb)))) o$ x4"
-*)
-  
-end
-  
-locale test = 
-  fixes onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option)"
-  fixes b :: bal
-  fixes q :: "'a set"
-begin
-
-definition x1 where "x1 \<equiv> ((flip finfun_apply) b) o$ onebs"
-  
-definition x2 where "x2 \<equiv>
-  Finite_Set.fold (\<lambda> a ff . (op \<union>) o$ ($ option_as_set o$ (x1 $ a), ff $) )
-  (K$ {}) q"
-  
-    (*
-  define x3 where "x3 \<equiv> (flip max_by_key snd) o$ x2"
-  fix s :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
-  define x4 where "x4 \<equiv> ($ x3, s $)"
-  define x5 where "x5 \<equiv> (\<lambda> (mb, ff) . ff(b $:= Some (fst (the_elem mb)))) o$ x4"
-*)
-  
-end
-
-global_interpretation t:test onebs b q for onebs b q .
-export_code test.x1 in SML
-
-end
+definition flip_def[simp]:"flip f \<equiv> \<lambda> x y . f y x"
 
 section {* A test *}
 
@@ -96,6 +50,51 @@ end
 lemma "acc_max_2 b (vote s i a) = acc_max (vote s i) a b"
   by (auto simp add:acc_max_2_def acc_max_def distributed_safe_at.acc_max_def)
 
+
+subsection {* Implementing the @{text acquire_leadership} action*}
+
+locale acquire_leadership = 
+  fixes onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option"
+  fixes b :: bal
+begin
+  
+definition onebs' where "onebs' \<equiv> (\<lambda> ff1 . (\<lambda> off2 . the off2) o$ ff1) o$ onebs"
+
+definition votes_at_b where "votes_at_b \<equiv> ((flip finfun_apply) b) o$ onebs'"
+  
+definition fold_fun where "fold_fun a ff \<equiv> 
+  (case_prod union) o$ ($ option_as_set o$ (votes_at_b $ a), ff $)"
+
+definition inst_votes where "inst_votes q \<equiv>
+  Finite_Set.fold fold_fun (K$ {}) q"
+
+lemma inst_votes_code[code]:"inst_votes (set xs) = fold fold_fun xs (K$ {})"
+proof (induct xs)
+  case Nil
+  then show ?case by (auto simp add:inst_votes_def)
+next
+  case (Cons a xs)
+  interpret folding_idem "fold_fun" "K$ {}"
+    apply (unfold_locales)
+    by (auto simp add:fun_eq_iff expand_finfun_eq fold_fun_def)
+  show ?case using insert_idem
+    by (metis (mono_tags, lifting) Cons.hyps List.finite_set comp_fun_commute eq_fold fold_commute_apply fold_simps(2) list.simps(15) inst_votes_def) 
+qed
+
+definition maxs where "maxs q \<equiv> (flip max_by_key snd) o$ inst_votes q"
+
+definition the_suggestion :: "('v\<times>bal) set \<Rightarrow> 'v option" where "the_suggestion m \<equiv> 
+  if m = {} then None else Some (fst (the_elem m))"
+
+definition suggestion :: "nat \<Rightarrow>f nat \<Rightarrow>f 'v option \<Rightarrow> 'a set \<Rightarrow> nat \<Rightarrow>f nat \<Rightarrow>f 'v option" 
+  where "suggestion old q \<equiv> (\<lambda> (m, ff) . ff(b $:= the_suggestion m))
+    o$ ($ maxs q, old $)"
+  
+end
+
+global_interpretation al:acquire_leadership onebs b
+  for onebs b .
+
 lift_definition finfun_acc_max_2 :: "nat \<Rightarrow> (nat \<Rightarrow>f 'c option) \<Rightarrow> ('c \<times> nat) option"
   is acc_max_2 .
 
@@ -105,6 +104,7 @@ record ('v,'a,'l) ampr2_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow>f bal"
   vote :: "'a \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
+  vote2 :: "'a \<Rightarrow>f bal \<Rightarrow>f inst \<Rightarrow>f 'v option"
   suggestion :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
   onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option"
   learned :: "'l \<Rightarrow>f inst \<Rightarrow>f 'v option"
@@ -139,57 +139,71 @@ definition join_ballot where
         onebs := (onebs s)(a $:= (onebs s $ a)(b $:= Some onebs')),
         leader := (ampr2_state.leader s)(a $:= False)\<rparr>"
 
-
-notepad begin
-  fix onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option)"
-  fix b :: bal
-  define x1 where "x1 \<equiv> ((flip finfun_apply) b) o$ onebs"
-  fix q :: "'a set"
-  define x2 where "x2 \<equiv>
-    Finite_Set.fold (\<lambda> a ff . (\<lambda> (x,y) . x \<union> y) o$ ($ option_as_set o$ (x1 $ a), ff $) )
-      (K$ {}) q"
-  define x3 where "x3 \<equiv> (flip max_by_key snd) o$ x2"
-  fix s :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
-  define x4 where "x4 \<equiv> ($ x3, s $)"
-  define x5 where "x5 \<equiv> (\<lambda> (mb, ff) . ff(b $:= Some (fst (the_elem mb)))) o$ x4"
-    
-end
-
 definition acquire_leadership where
   "acquire_leadership a q (s::('v,'a,'l) ampr2_state) s' \<equiv> let b = ballot s $ a in
     leader b = a
     \<and> q \<in> quorums
     \<and> \<not> ampr2_state.leader s $ a 
     \<and> (\<forall> a \<in> q . onebs s $ a $ b \<noteq> None)
-    \<and> (let 
-        the_onebs = (finfun_comp the) o$ onebs s;
-        votes_at_b = ((flip finfun_apply) b) o$ the_onebs;
-        votes_per_inst = 
-          Finite_Set.fold (\<lambda> a ff . (\<lambda> (x,y) . x \<union> y) o$ 
-              ($ option_as_set o$ (votes_at_b $ a), ff $) )
-            (K$ {}) q;
-        maxs = (flip max_by_key snd) o$ votes_per_inst;
-        sugg = \<lambda> m::('v\<times>nat) set . if m = {} then None else Some (fst (the_elem m));
-        suggestion = (\<lambda> (m, ff) . ff(b $:= if m = {} then None else Some (fst (the_elem m)))) 
-          o$ ($ maxs, suggestion s $)
-      in  s' = s\<lparr>leader := (ampr2_state.leader s)(a $:= True),
-        suggestion := suggestion\<rparr>)"
+    \<and> s' = s\<lparr>leader := (ampr2_state.leader s)(a $:= True),
+        suggestion := al.suggestion (onebs s) b (suggestion s) q\<rparr>"
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
-        \<and> ballot s a = b
-        \<and> ampr2_state.leader s a
-        \<and> (suggestion s $ i) b = None
-        \<and> s' = s\<lparr>suggestion := (suggestion s)(i $:= (suggestion s $ i)(b \<mapsto> v))\<rparr>"
+        \<and> ballot s $ a = b
+        \<and> ampr2_state.leader s $ a
+        \<and> (suggestion s $ i) $ b = None
+        \<and> s' = s\<lparr>suggestion := (suggestion s)(i $:= (suggestion s $ i)(b $:= Some v))\<rparr>"
 
 definition do_vote where
-  "do_vote a i v s s' \<equiv> let b = ballot s a in
-          vote s a i b = None
-        \<and> (suggestion s $ i) b = Some v
-        \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(i := (vote s a i)(b := Some v)))\<rparr>"
+  "do_vote a i v s s' \<equiv> let b = ballot s $ a in
+          vote s $ a $ i $ b = None
+        \<and> (suggestion s $ i) $ b = Some v
+        \<and> s' = s\<lparr>vote := (vote s)(a $:= (vote s $ a)(i $:= (vote s $ a $ i)(b $:= Some v)))\<rparr>"
 
-abbreviation chosen where
-  "chosen s i v \<equiv> ballot_array.chosen quorums (\<lambda> a . vote s a i) v"
+term finfun_Ex
+
+definition voted_v where "voted_v (s::('v,'a,'l) ampr2_state) i b v \<equiv>
+  (\<lambda> ff1 . ff1 $ i $ b = Some v) o$ vote s"
+  
+definition voted_v_2 where "voted_v_2 (s::('v,'a,'l) ampr2_state) i q v \<equiv>
+  vote s"
+
+text {* Proving a code equation for that seems tough... *}
+
+definition flip_binary_finfun :: "'a \<Rightarrow>f 'b \<Rightarrow>f 'c \<Rightarrow> 'b \<Rightarrow>f 'a \<Rightarrow>f 'c" where
+  "flip_binary_finfun ff \<equiv> Abs_finfun (\<lambda> b . Abs_finfun (\<lambda> a . (ff $ a $ b)))"
+  
+lift_definition flip_binary_finfun_2 :: "'a \<Rightarrow>f 'b \<Rightarrow>f 'c \<Rightarrow> 'b \<Rightarrow>f 'a \<Rightarrow>f 'c"
+  is "\<lambda> f . \<lambda> x y . f y x" oops
+  
+notepad begin
+  fix votes :: "'a \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
+  fix i :: inst
+  fix q :: "'a set"
+  fix v :: 'v
+  define at_i where "at_i \<equiv> (flip op$ i) o$ votes"
+  define per_bal where "per_bal \<equiv> flip_binary_finfun at_i"
+  define decision_at_bal where "decision_at_bal \<equiv> 
+    (\<lambda> ff . finfun_All ((\<lambda> vo . vo = Some v) o$ ff)) o$ per_bal"
+  define decided where "decided \<equiv> finfun_Ex decision_at_bal"
+end
+  
+definition chosen where
+  "chosen s i v \<equiv> \<exists> b . \<exists> q \<in> quorums . finfun_All (voted_v s i b v)"
+  
+notepad begin
+  fix votes :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a \<Rightarrow>f 'v option"
+  fix i :: inst
+  fix q :: "'a set"
+  fix v :: 'v
+  define at_i :: "bal \<Rightarrow>f 'a \<Rightarrow>f 'v option" where 
+    "at_i \<equiv> votes $ i"
+  define decision_at_bal where "decision_at_bal \<equiv> 
+    (\<lambda> ff . finfun_All ((\<lambda> vo . vo = Some v) o$ ff)) o$ at_i"
+    -- {* TODO: forall in quorum! *}
+  define decided where "decided \<equiv> finfun_Ex decision_at_bal"
+end
 
 definition learn where
   "learn l i v s s' \<equiv> chosen s i v \<and> s' = s\<lparr>learned := (learned s)(l := (learned s l)(i := Some v))\<rparr>"
