@@ -14,6 +14,8 @@ subsection {* Local state and transitions *}
 
 datatype 'v inst_status =
   Decided 'v | Proposed 'v | Free
+  -- {* An instance is in status @{term Free} locally when the acceptor has not itself proposed 
+  or seen a decision in that instance; but, another acceptor might have proposed something. *}
 
 record ('a, 'v) local_state =
   -- {* The local state of an acceptor. *}
@@ -21,37 +23,36 @@ record ('a, 'v) local_state =
   acceptors :: "'a set"
   ballot :: bal
   log :: "inst \<Rightarrow>f 'v inst_status"
-  last_voted :: bal
     -- {* Last ballot in which the acceptor voted. *}
-  votes :: "inst \<Rightarrow>f 'v option"
-  onebs :: "bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option"
+  votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
+  onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option) option"
     -- {* The oneb messages received when the acceptor tries to acquire leadership. *}
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a set"
-    -- {* the twob messages received when the acceptor is a leader. *}
+    -- {* the twob messages received (they are broadcast). *}
 
 datatype ('a,'v) msg =
-  Phase1a 'a bal
+  Phase1a bal
   | Phase1b 'a bal "inst \<Rightarrow>f ('v \<times> bal) option"
-  | Phase2a 'a inst bal 'v
+  | Phase2a inst bal 'v
   | Phase2b 'a inst bal
   | Decision inst 'v
   | Fwd 'v
 
 datatype ('a,'v) packet =
-  Packet 'a 'a  "('a,'v) msg"
+  Packet 'a  "('a,'v) msg"
 
 definition send_all where
-  "send_all s m \<equiv> (\<lambda> a . Packet (id s) a m) ` (acceptors s - {id s})"
+  "send_all s m \<equiv> (\<lambda> a . Packet a m) ` (acceptors s - {id s})"
   
 locale local_defs =
   fixes leader :: "bal \<Rightarrow> 'a"
+  and next_bal :: "bal \<Rightarrow> 'a \<Rightarrow> bal"
   and quorums :: "'a set set"
 begin
 
 definition local_start where "local_start a as \<equiv>
   \<lparr>id = a, acceptors = as, ballot = 0, log = K$ Free,
-    last_voted = 0, votes = K$ None,
-    onebs = K$ None, twobs = K$ K$ {}\<rparr>"
+    votes = K$ None, onebs = K$ None, twobs = K$ K$ {}\<rparr>"
   
 end
 
@@ -72,14 +73,82 @@ definition do_2a where "do_2a s v \<equiv>
     b = ballot s;
     s' = s\<lparr>log := (log s)(i $:= Proposed v),
       twobs := (twobs s)(i $:= (twobs s $ i)(b $:= {id s}))\<rparr>;
-    msgs = send_all s (Phase2a (id s) i b v)
+    msgs = send_all s (Phase2a i b v)
   in (s', msgs)"
   
 definition propose where "propose s v \<equiv> 
   let l = leader (ballot s) in
     if l = id s 
     then do_2a s v
-    else (s, {Packet (id s) l (Fwd v)})"
+    else (s, {Packet l (Fwd v)})"
+  -- {* TODO: Here we loose the proposal if it happens during an unsuccessful
+  leadership acquisition attempt. *}
+
+definition receive_fwd where "receive_fwd s v \<equiv>
+  let l = leader (ballot s) in
+    if l = id s
+    then do_2a s v
+    else (s, {Packet l (Fwd v)})"
+  -- {* TODO: Here we loose the proposal if it happens during an unsuccessful
+  leadership acquisition attempt. *}
+  
+end
+
+notepad begin
+  fix onebs :: "bal \<Rightarrow>f (inst \<Rightarrow>f 'a \<Rightarrow>f ('v\<times>bal) option) option"
+  fix votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
+  fix b :: bal
+  fix a :: 'a
+  define at_b where "at_b \<equiv> onebs $ b"
+  define from_none where "from_none \<equiv> (\<lambda> vo . (K$ None)(a $:= vo)) o$ votes"
+  define from_existing where "from_existing \<equiv> (\<lambda> (ff,x) . ff(a $:= x)) o$ ($ the at_b, votes $)"
+  define new_onebs where "new_onebs \<equiv> 
+    case at_b of None \<Rightarrow> onebs(b $:= Some from_none)
+    | Some ff \<Rightarrow> onebs(b $:= Some from_existing)"
+end
+
+locale update_onebs =
+  fixes onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option) option"
+  and votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
+  and  b :: bal and a :: 'a
+begin 
+  abbreviation(input) at_b where "at_b \<equiv> onebs $ b"
+  abbreviation(input) from_none where "from_none \<equiv> (K$ K$ None)(a $:= votes)"
+  abbreviation(input) from_existing where "from_existing \<equiv> \<lambda> ff . ff(a $:= votes)"
+  definition new_onebs where "new_onebs \<equiv>
+    case at_b of None \<Rightarrow> onebs(b $:= Some from_none)
+    | Some ff \<Rightarrow> onebs(b $:= Some (from_existing ff))"
+end
+
+global_interpretation uonebs:update_onebs onebs votes b a for onebs votes b a 
+  defines new_onebs = update_onebs.new_onebs .
+
+context local_defs begin
+
+definition try_acquire_leadership where "try_acquire_leadership s \<equiv>
+  let
+    b = next_bal (ballot s) (id s);
+    s' = s\<lparr>onebs := new_onebs (onebs s) (votes s) b (id s), ballot := b\<rparr>;
+    msgs = send_all s (Phase1a b)
+  in (s, msgs)"
+
+definition receive_1a where "receive_1a s b \<equiv> if b > ballot s then
+      let 
+        msgs = {Packet (leader b) (Phase1b (id s) b (votes s))};
+        s' = s\<lparr>ballot := b\<rparr>
+      in (s', msgs)
+    else (s, {})"
+  
+definition receive_1b where "receive_1b s a b vs \<equiv>
+  let s' = s\<lparr>onebs := new_onebs (onebs s) vs b (id s)\<rparr>
+  in (if (set (finfun_to_list (the (onebs s' $ b))) = acceptors s) 
+    then let
+        x = True 
+      in (s', {}) 
+    else (s', {}))"
+    -- {* When leadership is acquired, then for each instance that is not locally decided and 
+    for which onebs are known, propose something. This is a problem because we need to 
+    get the set of votes per instance, which requires flipping the arguments of the onebs finfun. *}
   
 end
 
@@ -91,9 +160,16 @@ record ('a,'v) global_state =
 
 subsection {* Code generation *}
 
-global_interpretation local_defs a as leader quorums for a as leader quorums 
-  defines start = local_defs.local_start .
+global_interpretation ldefs:local_defs leader next_bal quorums for leader next_bal quorums 
+  defines start = local_defs.local_start
+    and do_2a = local_defs.do_2a
+    and propose = local_defs.propose
+    and receive_fwd = local_defs.receive_fwd
+    and try_acquire_leadership = local_defs.try_acquire_leadership
+    and receive_1a = local_defs.receive_1a
+  .
 
-export_code start in Scala
+export_code start do_2a propose receive_fwd 
+  try_acquire_leadership receive_1a in Scala
   
 end
