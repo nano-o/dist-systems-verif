@@ -10,9 +10,8 @@ definition accs where "accs \<equiv> {1..n}"
 
 definition leader where "leader (b::nat) \<equiv> (b mod n) + 1"
                       
-global_interpretation card_quorums accs
-  defines qs = "quorums" and num_accs = "nas"
-  -- {* @{term num_accs} is there just for code generation *}
+global_interpretation cq:card_quorums accs
+  defines qs = "cq.quorums" and nas = "cq.nas"
 apply (unfold_locales)
 apply (simp add: accs_def n_def)
 apply (simp add: accs_def)

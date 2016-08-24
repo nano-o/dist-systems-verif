@@ -1,5 +1,5 @@
 theory DistributedSafeAt
-imports BallotArrays BallotArrayProperties MaxByKey
+imports BallotArrays BallotArrayProperties "~~/src/HOL/Library/Monad_Syntax"
 begin
 
 subsection {* Computing safe values in a distributed implementation *}

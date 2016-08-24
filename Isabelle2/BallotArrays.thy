@@ -1,7 +1,7 @@
 section {* Definition of ballot arrays *}
 
 theory BallotArrays
-imports Main "~~/src/HOL/Library/Monad_Syntax" Quorums MaxByKey
+imports Main MaxByKey
 begin
 
 text {* A ballot array represents a history of execution of a Paxos-like algorithm, i.e. the current 

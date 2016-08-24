@@ -1,7 +1,7 @@
 chapter {* Maximals elements over a set. *}
 
 text {* Maximal elements over a set of elements whose position in a linear order is given by 
-an auxiliary function *}
+an auxiliary function. *}
 
 theory MaxByKey
 imports Main
@@ -144,11 +144,10 @@ end
 
 subsection {* Other properties *}
 
-context begin
+experiment begin
 
 text {* Used anywhere? *}
 
-private
 lemma Max_Max:
   assumes "finite Xs" and "Union Xs \<noteq> {}" and "\<And> X . X \<in> Xs \<Longrightarrow> X \<noteq> {} \<and> finite X"
   shows "Max (Max ` Xs) = Max (Union Xs)" (is "?A = ?B")
@@ -165,7 +164,6 @@ proof -
   show ?thesis by (smt 1 3 Max_ge Max_mono Sup_upper UnionE 0 antisym assms(1,3) finite_imageI image_iff) 
 qed
 
-private
 lemma Max_bot:"\<lbrakk>finite (S::'b::{linorder,order_bot} set); S \<noteq> {}; s \<in> S; Max S = bot\<rbrakk> \<Longrightarrow> s = bot"
 by (metis Max.coboundedI bot.extremum_uniqueI)
 

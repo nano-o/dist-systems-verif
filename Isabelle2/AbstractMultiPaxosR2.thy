@@ -14,7 +14,6 @@ text {*
 *}
 
 unbundle finfun_syntax
-unbundle lifting_syntax
 
 definition flip_def[simp]:"flip f \<equiv> \<lambda> x y . f y x"
 

@@ -6,10 +6,6 @@ section {* Definition of the Abstract MultiPaxos I/O-automaton *}
 
 subsection {* State and actions *}
 
-text {* The actions (labels on transitions) of the I/O-automaton *}
-
-text {* The states of the I/O-automaton *}
-
 record ('v,'a) amp_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> nat"
