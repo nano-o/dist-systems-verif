@@ -28,7 +28,7 @@ definition acc_max_2 where
 
 lemma acc_max_2_code[code]:
   "acc_max_2 bound votes = (
-    if (\<exists> b \<in> {0..<bound} . votes b \<noteq> None)
+    if (\<exists> b < bound . votes b \<noteq> None)
     then let votes = ((\<lambda> b . votes b \<bind> (\<lambda> v . Some (v,b))) ` {0..<bound}) \<bind> option_as_set in
       Some (the_elem (max_by_key votes snd))
     else None)" sorry
@@ -36,7 +36,8 @@ lemma acc_max_2_code[code]:
 experiment
 begin
 
-text {* The restriction operator is not executable, so does not work. *}
+text {* The restriction operator is not executable, so does not work. 
+TODO: could have used filter. *}
 
 lemma acc_max_2_code_2: 
   "acc_max_2 bound votes = (
@@ -44,6 +45,7 @@ lemma acc_max_2_code_2:
     then let votes = ran ((\<lambda> b . votes b \<bind> (\<lambda> v . Some (v,b))) |` {0..<bound}) in
       Some (the_elem (max_by_key votes snd))
     else None)" oops
+  
 end
 
 lemma "acc_max_2 b (vote s i a) = acc_max (vote s i) a b"
