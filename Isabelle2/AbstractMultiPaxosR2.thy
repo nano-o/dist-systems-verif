@@ -33,12 +33,11 @@ lemma acc_max_2_code[code]:
       Some (the_elem (max_by_key votes snd))
     else None)" sorry
 
-context
+experiment
 begin
 
 text {* The restriction operator is not executable, so does not work. *}
 
-private
 lemma acc_max_2_code_2: 
   "acc_max_2 bound votes = (
     if (\<exists> b \<in> {0..<bound} . votes b \<noteq> None)
@@ -50,6 +49,57 @@ end
 lemma "acc_max_2 b (vote s i a) = acc_max (vote s i) a b"
   by (auto simp add:acc_max_2_def acc_max_def distributed_safe_at.acc_max_def)
 
+lift_definition finfun_acc_max_2 :: "nat \<Rightarrow> (nat \<Rightarrow>f 'c option) \<Rightarrow> ('c \<times> nat) option"
+  is acc_max_2 .
+  -- {* Takes the ballot bound, and the votes per ballot. *}
+
+section {* The IOA *}
+
+record ('v,'a,'l) ampr2_state =
+  propCmd :: "'v set"
+  ballot :: "'a \<Rightarrow>f bal"
+  vote :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a \<Rightarrow>f 'v option"
+  suggestion :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
+  onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option"
+  learned :: "'l \<Rightarrow>f inst \<Rightarrow>f 'v option"
+  leader :: "'a \<Rightarrow>f bool"
+
+locale ampr2_ioa = ampr1:ampr1_ioa quorums leader for quorums :: "'a set set" and leader
+begin
+
+definition asig where
+  "asig \<equiv>
+    \<lparr> inputs = { ampr1.Propose c | c . True},
+      outputs = { ampr1.Learn i v l | i v l . True},
+      internals = {ampr1.Internal}\<rparr>"
+
+definition start where
+  -- {* The initial state *}
+  "start \<equiv> {\<lparr>propCmd = {}, ballot = K$ 0, vote = K$ K$ K$ None, 
+    suggestion = K$ K$ None, onebs = K$ K$ None, learned = K$ K$ None,
+    leader = (K$ False)(leader 0 $:= True)\<rparr>}"
+
+subsection {* The transitions *}
+
+definition propose where
+  "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
+
+notepad begin
+  fix vote::"inst \<Rightarrow>f bal \<Rightarrow>f 'a \<Rightarrow>f 'v option"
+  fix b :: bal
+  fix a :: 'a
+  define x1 where "x1 \<equiv> (op o$ (flip op$ a)) o$ vote"
+end
+  
+definition join_ballot where
+  "join_ballot a b s s' \<equiv>
+    let onebs'  = (finfun_acc_max_2 b) o$ ((op o$ (flip op$ a)) o$ (vote s))
+    in
+      b > (ballot s $ a)
+      \<and> s' = s\<lparr>ballot := (ballot s)(a $:= b),
+        onebs := (onebs s)(a $:= (onebs s $ a)(b $:= Some onebs')),
+        leader := (ampr2_state.leader s)(a $:= False)\<rparr>"
+end 
 
 subsection {* Implementing the @{text acquire_leadership} action*}
 
@@ -95,56 +145,15 @@ end
 global_interpretation al:acquire_leadership onebs b
   for onebs b .
 
-lift_definition finfun_acc_max_2 :: "nat \<Rightarrow> (nat \<Rightarrow>f 'c option) \<Rightarrow> ('c \<times> nat) option"
-  is acc_max_2 .
-
-section {* The IOA *}
-
-record ('v,'a,'l) ampr2_state =
-  propCmd :: "'v set"
-  ballot :: "'a \<Rightarrow>f bal"
-  vote :: "'a \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
-  vote2 :: "'a \<Rightarrow>f bal \<Rightarrow>f inst \<Rightarrow>f 'v option"
-  suggestion :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
-  onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option"
-  learned :: "'l \<Rightarrow>f inst \<Rightarrow>f 'v option"
-  leader :: "'a \<Rightarrow>f bool"
-
-locale ampr2_ioa = ampr1:ampr1_ioa quorums leader for quorums :: "'a set set" and leader
+context ampr2_ioa
 begin
-
-definition asig where
-  "asig \<equiv>
-    \<lparr> inputs = { ampr1.Propose c | c . True},
-      outputs = { ampr1.Learn i v l | i v l . True},
-      internals = {ampr1.Internal}\<rparr>"
-
-definition start where
-  -- {* The initial state *}
-  "start \<equiv> {\<lparr>propCmd = {}, ballot = K$ 0, vote = K$ K$ K$ None, 
-    suggestion = K$ K$ None, onebs = K$ K$ None, learned = K$ K$ None,
-    leader = (K$ False)(leader 0 $:= True)\<rparr>}"
-
-subsection {* The transitions *}
-
-definition propose where
-  "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
-
-definition join_ballot where
-  "join_ballot a b s s' \<equiv>
-    let onebs'  = (finfun_acc_max_2 b) o$ (vote s $ a)
-    in
-      b > (ballot s $ a)
-      \<and> s' = s\<lparr>ballot := (ballot s)(a $:= b),
-        onebs := (onebs s)(a $:= (onebs s $ a)(b $:= Some onebs')),
-        leader := (ampr2_state.leader s)(a $:= False)\<rparr>"
 
 definition acquire_leadership where
   "acquire_leadership a q (s::('v,'a,'l) ampr2_state) s' \<equiv> let b = ballot s $ a in
     leader b = a
     \<and> q \<in> quorums
     \<and> \<not> ampr2_state.leader s $ a 
-    \<and> (\<forall> a \<in> q . onebs s $ a $ b \<noteq> None)
+    \<and> (\<forall> a \<in> q . ampr2_state.onebs s $ a $ b \<noteq> None)
     \<and> s' = s\<lparr>leader := (ampr2_state.leader s)(a $:= True),
         suggestion := al.suggestion (onebs s) b (suggestion s) q\<rparr>"
 
@@ -157,17 +166,13 @@ definition suggest where "suggest a i b v s s' \<equiv>
 
 definition do_vote where
   "do_vote a i v s s' \<equiv> let b = ballot s $ a in
-          vote s $ a $ i $ b = None
+          vote s $ i $ b $ a = None
         \<and> (suggestion s $ i) $ b = Some v
-        \<and> s' = s\<lparr>vote := (vote s)(a $:= (vote s $ a)(i $:= (vote s $ a $ i)(b $:= Some v)))\<rparr>"
+        \<and> s' = s\<lparr>vote := (vote s)(i $:= (vote s $ i)(b $:= (vote s $ i $ b)(a $:= Some v)))\<rparr>"
 
-term finfun_Ex
+end 
 
-definition voted_v where "voted_v (s::('v,'a,'l) ampr2_state) i b v \<equiv>
-  (\<lambda> ff1 . ff1 $ i $ b = Some v) o$ vote s"
-  
-definition voted_v_2 where "voted_v_2 (s::('v,'a,'l) ampr2_state) i q v \<equiv>
-  vote s"
+experiment begin
 
 text {* Proving a code equation for that seems tough... *}
 
@@ -177,40 +182,41 @@ definition flip_binary_finfun :: "'a \<Rightarrow>f 'b \<Rightarrow>f 'c \<Right
 lift_definition flip_binary_finfun_2 :: "'a \<Rightarrow>f 'b \<Rightarrow>f 'c \<Rightarrow> 'b \<Rightarrow>f 'a \<Rightarrow>f 'c"
   is "\<lambda> f . \<lambda> x y . f y x" oops
   
-notepad begin
-  fix votes :: "'a \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
-  fix i :: inst
-  fix q :: "'a set"
-  fix v :: 'v
-  define at_i where "at_i \<equiv> (flip op$ i) o$ votes"
-  define per_bal where "per_bal \<equiv> flip_binary_finfun at_i"
-  define decision_at_bal where "decision_at_bal \<equiv> 
-    (\<lambda> ff . finfun_All ((\<lambda> vo . vo = Some v) o$ ff)) o$ per_bal"
-  define decided where "decided \<equiv> finfun_Ex decision_at_bal"
-end
+end 
+
+locale chosen_imp =
+  fixes vote :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a \<Rightarrow>f 'v option"
+  and i :: inst
+  (* and q :: "'a set" *)
+  and v :: 'v
+begin
+
+definition at_i :: "bal \<Rightarrow>f 'a \<Rightarrow>f 'v option" where
+  "at_i \<equiv> vote $ i"
   
-definition chosen where
-  "chosen s i v \<equiv> \<exists> b . \<exists> q \<in> quorums . finfun_All (voted_v s i b v)"
+definition decision_at_bal where "decision_at_bal \<equiv>
+  (finfun_All o (op o$ (op= (Some v)))) o$ at_i"
+  -- {* TODO: forall in quorum! *}
   
-notepad begin
-  fix votes :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a \<Rightarrow>f 'v option"
-  fix i :: inst
-  fix q :: "'a set"
-  fix v :: 'v
-  define at_i :: "bal \<Rightarrow>f 'a \<Rightarrow>f 'v option" where 
-    "at_i \<equiv> votes $ i"
-  define decision_at_bal where "decision_at_bal \<equiv> 
-    (\<lambda> ff . finfun_All ((\<lambda> vo . vo = Some v) o$ ff)) o$ at_i"
-    -- {* TODO: forall in quorum! *}
-  define decided where "decided \<equiv> finfun_Ex decision_at_bal"
+definition chosen where "chosen \<equiv> finfun_Ex decision_at_bal"
+  
 end
+
+global_interpretation ci:chosen_imp vote i v for vote::"inst \<Rightarrow>f bal \<Rightarrow>f 'a \<Rightarrow>f 'v option" 
+  and i and v::'v .
+term ci.chosen
+  -- {* TODO: How to get rid of the type parameters? *}
+
+context ampr2_ioa
+begin
 
 definition learn where
-  "learn l i v s s' \<equiv> chosen s i v \<and> s' = s\<lparr>learned := (learned s)(l := (learned s l)(i := Some v))\<rparr>"
+  "learn l i v s s' \<equiv> ci.chosen TYPE('a) TYPE('b) (vote s) i v 
+    \<and> s' = s\<lparr>learned := (learned s)(l $:= (learned s $ l)(i $:= Some v))\<rparr>"
 
 definition catch_up where
-  "catch_up l1 l2 i v s s' \<equiv> learned s l2 i = Some v
-    \<and> s' = s\<lparr>learned := (learned s)(l1 := (learned s l1)(i := Some v))\<rparr>"
+  "catch_up l1 l2 i v s s' \<equiv> learned s $ l2 $ i = Some v
+    \<and> s' = s\<lparr>learned := (learned s)(l1 $:= (learned s $ l1)(i $:= Some v))\<rparr>"
 
 fun trans_rel where
   "trans_rel r (ampr1.Propose c) r' = propose c r r'"
