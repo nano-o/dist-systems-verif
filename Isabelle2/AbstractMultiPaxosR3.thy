@@ -40,30 +40,46 @@ datatype ('a,'v) msg =
 datatype ('a,'v) packet =
   Packet 'a 'a  "('a,'v) msg"
 
+definition send_all where
+  "send_all s m \<equiv> (\<lambda> a . Packet (id s) a m) ` (acceptors s - {id s})"
+  
 locale local_defs =
-  fixes a::'a
-  and as::"'a set"
-  and leader ::"bal \<Rightarrow> 'a"
+  fixes leader :: "bal \<Rightarrow> 'a"
   and quorums :: "'a set set"
 begin
 
-definition local_start where "local_start \<equiv>
+definition local_start where "local_start a as \<equiv>
   \<lparr>id = a, acceptors = as, ballot = 0, log = K$ Free,
     last_voted = 0, votes = K$ None,
     onebs = K$ None, twobs = K$ K$ {}\<rparr>"
+  
+end
+
+fun last_contiguous :: "nat list \<Rightarrow> nat" where 
+  "last_contiguous [x] = x"
+| "last_contiguous (x#y#xs) = (if y = Suc x then last_contiguous (y#xs) else x)"
+  
+context local_defs
+begin
 
 definition next_inst where "next_inst s \<equiv>
-  finfun_to_list (log s)"
+  last_contiguous (finfun_to_list (log s))"
+  -- {* TODO: optimize using a definition with finfun_rec. *}
   
-definition do_2a where "do_2a s v \<equiv> 
-  let 
-    inst = 0
-  in True"
+definition do_2a where "do_2a s v \<equiv>
+  let
+    i = next_inst s;
+    b = ballot s;
+    s' = s\<lparr>log := (log s)(i $:= Proposed v),
+      twobs := (twobs s)(i $:= (twobs s $ i)(b $:= {id s}))\<rparr>;
+    msgs = send_all s (Phase2a (id s) i b v)
+  in (s', msgs)"
   
 definition propose where "propose s v \<equiv> 
-  if leader (ballot s) = id s 
-  then (s, {Fwd v})
-  else (s, {Fwd v})"
+  let l = leader (ballot s) in
+    if l = id s 
+    then do_2a s v
+    else (s, {Packet (id s) l (Fwd v)})"
   
 end
 
