@@ -2,22 +2,13 @@ theory AbstractMultiPaxosR2
 imports  AbstractMultiPaxosR1 "~~/src/HOL/Library/FinFun"
 begin
 
-text {*
-1) Acceptors vote for a suggestion, and leaders use the distributed implementation of the safe-at computation.
-2) Explicit 1b messages.
-3) Explicit learning.
-4) Catch-up.
-5) Localizing suggestions (the leader function).
-6) Explicit leadership acquisition.
-7) Per-acceptor state.
-8) finfuns.
-*}
+text {* An executable version of R1 using finfun. *}
 
 unbundle finfun_syntax
 
 definition flip_def[simp]:"flip f \<equiv> \<lambda> x y . f y x"
 
-section {* A test *}
+section {* A finfun-friendly definition of @{term acc_max} *}
 
 definition acc_max_2 where
   "acc_max_2 (bound::nat) votes \<equiv> 
@@ -31,6 +22,13 @@ lemma acc_max_2_code[code]:
     then let votes = ((\<lambda> b . votes b \<bind> (\<lambda> v . Some (v,b))) ` {0..<bound}) \<bind> option_as_set in
       Some (the_elem (max_by_key votes snd))
     else None)" sorry
+
+lemma "acc_max_2 b (vote s i a) = acc_max (vote s i) a b"
+  by (auto simp add:acc_max_2_def acc_max_def distributed_safe_at.acc_max_def)
+
+lift_definition finfun_acc_max_2 :: "nat \<Rightarrow> (nat \<Rightarrow>f 'c option) \<Rightarrow> ('c \<times> nat) option"
+  is acc_max_2 .
+  -- {* Takes the ballot bound, and the votes per ballot. *}
 
 experiment
 begin
@@ -46,13 +44,6 @@ lemma acc_max_2_code_2:
     else None)" oops
   
 end
-
-lemma "acc_max_2 b (vote s i a) = acc_max (vote s i) a b"
-  by (auto simp add:acc_max_2_def acc_max_def distributed_safe_at.acc_max_def)
-
-lift_definition finfun_acc_max_2 :: "nat \<Rightarrow> (nat \<Rightarrow>f 'c option) \<Rightarrow> ('c \<times> nat) option"
-  is acc_max_2 .
-  -- {* Takes the ballot bound, and the votes per ballot. *}
 
 section {* The IOA *}
 
@@ -80,7 +71,7 @@ definition start where
     suggestion = K$ K$ None, onebs = K$ K$ None, learned = K$ K$ None,
     leader = (K$ False)(leader 0 $:= True)\<rparr>}"
 
-subsection {* The transitions *}
+subsection {* propose and @{text join_ballot} *}
 
 definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
@@ -158,6 +149,8 @@ definition acquire_leadership where
     \<and> s' = s\<lparr>leader := (ampr2_state.leader s)(a $:= True),
         suggestion := al.suggestion (onebs s) b (suggestion s) q\<rparr>"
 
+subsection {* suggest and @{text do_vote}. *}
+  
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
         \<and> ballot s $ a = b
@@ -184,6 +177,8 @@ lift_definition flip_binary_finfun_2 :: "'a \<Rightarrow>f 'b \<Rightarrow>f 'c 
   is "\<lambda> f . \<lambda> x y . f y x" oops
   
 end 
+
+subsection {* The learn action. *}
 
 locale chosen_imp =
   fixes vote :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a \<Rightarrow>f 'v option"
@@ -214,6 +209,8 @@ begin
 definition learn where
   "learn l i v s s' \<equiv> ci.chosen TYPE('a) TYPE('b) (vote s) i v 
     \<and> s' = s\<lparr>learned := (learned s)(l $:= (learned s $ l)(i $:= Some v))\<rparr>"
+
+subsection {* catch_up and the full transition relation. *}
 
 definition catch_up where
   "catch_up l1 l2 i v s s' \<equiv> learned s $ l2 $ i = Some v
