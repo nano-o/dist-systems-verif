@@ -201,7 +201,7 @@ proof -
     interpret p:dsa_properties quorums "ballot s" "vote s i" by unfold_locales
     have 2:"a_max a = dsa.acc_max (vote s i) a b" if "a \<in> q" for a using \<open>inv3 s\<close> 1 that
       by (simp add:inv3_def a_max_def split!:option.splits)
-    have "\<exists> x . m = {x}" using p.max_vote_unique[OF 4 6 5 3 \<open>q \<in> quorums\<close>] 2
+    have "\<exists> x . m = {x}" using p.max_vote_unique[OF 4 6 5 3 \<open>q \<in> quorums\<close>] 2 oops
       by (fastforce simp add:m_def a_max_def dsa.max_quorum_votes_def split!:option.splits) }
   hence "inv4 s" if "inv3 s" and "inv5 s" and "conservative_array s" for s::"('v,'a,'l)ampr1_state" using that
     apply (auto simp add:inv4_def inv3_def inv5_def  split!:option.splits) 
@@ -355,7 +355,7 @@ apply (induct_tac rule:trans_cases, simp)
 apply (auto simp add:inv_proofs_defs split:option.splits)[3] defer
 apply (auto simp add:inv_proofs_defs split:option.splits)[1]
 apply (insert chosen_mono[simplified inv_proofs_defs])
-apply (auto simp add:inv4_def inv5_def  split:option.splits)
+apply (auto simp add:inv4_def inv5_def  split:option.splits) oops
 by (metis (mono_tags) ampr1_state.select_convs(3) ampr1_state.surjective ampr1_state.update_convs(3) fun_upd_same)
 declare inv4[invs]
 
@@ -376,7 +376,7 @@ proof -
     with \<open>inv4 s\<close> have "chosen s i v" and "chosen s i w" by (auto simp add:inv_proofs_defs split:option.splits)
     with \<open>safe s\<close> show "v = w" by (metis ballot_array_props.intro ballot_array_props.safe_imp_agreement quorums_axioms)
   qed
-  thus ?thesis using inv4 inv8_inv2_safe by (metis (mono_tags, lifting) IOA.invariant_def)
+  thus ?thesis using inv4 inv8_inv2_safe oops by (metis (mono_tags, lifting) IOA.invariant_def)
 qed
     
 end
