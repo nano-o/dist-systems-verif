@@ -1,7 +1,7 @@
 section {* Properties of ballot arrays. *}
 
 theory BallotArrayProperties
-imports Main BallotArrays Quorums 
+imports BallotArrays Quorums "~~/src/HOL/Library/Monad_Syntax"
 begin
 
 text {* 
