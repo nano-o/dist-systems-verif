@@ -153,14 +153,30 @@ locale receive_1b =
 begin
 
 definition per_inst where "per_inst \<equiv> op$ votes ` as"
-definition votes_per_inst where "votes_per_inst \<equiv> Finite_Set.fold
-  (\<lambda> ff1 ff2 . (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $) ) (K$ {}) per_inst"
-definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ votes_per_inst"
-definition to_propose where "to_propose \<equiv> (\<lambda> (is, m) . 
-    case is of Decided _ \<Rightarrow> None | _ \<Rightarrow> (
-      if m = {} then None else Some ((fst o the_elem) m)) ) 
-  o$ ($ log, max_per_inst $)"
+definition votes_per_inst where "votes_per_inst \<equiv> \<lambda> s . Finite_Set.fold
+  (\<lambda> ff1 ff2 . (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $) ) (K$ {}) s"
+lemma votes_per_inst_code[code]:
+  "votes_per_inst (set (x#xs)) = 
+    (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ x, votes_per_inst (set xs) $)"
+proof -
+  define f :: "'b \<Rightarrow>f 'c option \<Rightarrow> 'b \<Rightarrow>f 'c set \<Rightarrow> 'b \<Rightarrow>f 'c set"
+    where "f \<equiv> \<lambda> ff1 ff2 . (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $)"
+  interpret folding_idem f "K$ {}" 
+    apply (unfold_locales)
+     apply (auto simp add:f_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
+    done
+  let ?fold_expr = "\<lambda> s . Finite_Set.fold f (K$ {}) s"
+  from insert_idem[of "set xs" x] have "?fold_expr (set (x#xs)) = f x (?fold_expr (set xs))"
+    by (simp add:votes_per_inst_def option_as_set_def eq_fold split!:option.splits)
+  thus ?thesis by (auto simp add:votes_per_inst_def f_def)
+qed
   
+definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ (votes_per_inst per_inst)"
+definition to_propose where "to_propose \<equiv> (\<lambda> (is, m) .
+    case is of Decided _ \<Rightarrow> None | _ \<Rightarrow> (
+      if m = {} then None else Some ((fst o the_elem) m)) )
+  o$ ($ log, max_per_inst $)"
+
 end
 
 global_interpretation r1:receive_1b votes as log for votes as log
