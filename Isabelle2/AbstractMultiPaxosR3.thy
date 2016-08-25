@@ -247,13 +247,8 @@ subsection {* Code generation *}
 
 global_interpretation ldefs:local_defs leader next_bal quorums for leader next_bal quorums 
   defines start = local_defs.local_start
-    and do_2a = local_defs.do_2a
     and propose = local_defs.propose
-    and receive_fwd = local_defs.receive_fwd
     and try_acquire_leadership = local_defs.try_acquire_leadership
-    and receive_1a = local_defs.receive_1a
-    and receive_1b = local_defs.receive_1b
-    and receive_2b = local_defs.receive_2b
     and process_msg = local_defs.process_msg
   .
 
