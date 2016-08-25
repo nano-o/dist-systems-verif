@@ -172,31 +172,37 @@ proof -
 qed
   
 definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ (votes_per_inst per_inst)"
-definition to_propose where "to_propose \<equiv> (\<lambda> (is, m) .
-    case is of Decided _ \<Rightarrow> None | _ \<Rightarrow> (
-      if m = {} then None else Some ((fst o the_elem) m)) )
+  
+definition new_log where "new_log \<equiv> (\<lambda> (is, m) .
+    case is of Decided _ \<Rightarrow> is | _ \<Rightarrow> (
+      if m = {} then Free else Proposed ((fst o the_elem) m)) )
   o$ ($ log, max_per_inst $)"
+  
+definition msgs where "msgs \<equiv> 
+  let 
+    is = finfun_to_list new_log;
+    to_propose = map (\<lambda> i . (i, the_elem (max_per_inst $ i))) is;
+    msg_list = map (\<lambda> (i,v,b) . (Phase2a i b v)) to_propose
+  in set msg_list"
 
 end
 
 global_interpretation r1:receive_1b votes as log for votes as log
-  defines to_propose = "receive_1b.to_propose"
+  defines new_log = "receive_1b.new_log"
+    and msgs = "receive_1b.msgs"
   .
-
-export_code to_propose in Scala
 
 context local_defs begin
 
-definition receive_1b where "receive_1b s a b vs \<equiv>
+definition receive_1b where "receive_1b s b vs \<equiv>
   let s' = s\<lparr>onebs := new_onebs (onebs s) vs b (id s)\<rparr>
   in (if (set (finfun_to_list (the (onebs s' $ b))) = acceptors s) 
     then let
-        x = True 
-      in (s', {}) 
+        s' = s\<lparr>log := new_log (the (onebs s $ b)) (acceptors s) (log s)\<rparr>;
+        msgs = msgs (the (onebs s $ b)) (acceptors s) (log s)
+      in (s', (send_all s) ` msgs) 
     else (s', {}))"
-    -- {* When leadership is acquired, then for each instance that is not locally decided and 
-    for which onebs are known, propose something. This is a problem because we need to 
-    get the set of votes per instance, which requires flipping the arguments of the onebs finfun. *}
+
   
 end
 
@@ -215,9 +221,10 @@ global_interpretation ldefs:local_defs leader next_bal quorums for leader next_b
     and receive_fwd = local_defs.receive_fwd
     and try_acquire_leadership = local_defs.try_acquire_leadership
     and receive_1a = local_defs.receive_1a
+    and receive_1b = local_defs.receive_1b
   .
 
 export_code start do_2a propose receive_fwd 
-  try_acquire_leadership receive_1a in Scala
+  try_acquire_leadership receive_1a receive_1b in Scala
   
 end
