@@ -1,7 +1,7 @@
 section {* Definition of ballot arrays *}
 
 theory BallotArrays
-imports Main MaxByKey
+imports Main MaxByKey Utils
 begin
 
 text {* A ballot array represents a history of execution of a Paxos-like algorithm, i.e. the current 
@@ -9,9 +9,9 @@ text {* A ballot array represents a history of execution of a Paxos-like algorit
 
 locale ballot_array =
   fixes quorums :: "'a set set"
-  and ballot :: "'a \<Rightarrow> nat"
+  and ballot :: "'a \<Rightarrow> bal"
     -- {* The current ballot *}
-  and vote :: "'a \<Rightarrow> nat \<rightharpoonup> 'v"
+  and vote :: "'a \<Rightarrow> bal \<rightharpoonup> 'v"
     -- {* The history of votes *}
 begin
 

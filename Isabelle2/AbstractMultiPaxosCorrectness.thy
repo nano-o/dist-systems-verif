@@ -1,24 +1,45 @@
 section {* Proof of the agreement property of AbstractMultiPaxos. *}
 
 theory AbstractMultiPaxosCorrectness
-imports AbstractMultiPaxos IOA_Automation
-  BallotArrayProperties 
+imports AbstractMultiPaxos IOA_Automation BallotArrayProperties 
 begin
 
-locale amp_proof = IOA + quorums quorums + amp_ioa quorums learners for
-     quorums :: "'a set set" and learners :: "'l set" +
-  fixes the_ioa :: "(('v,'a)amp_state, ('v,'a,'l)amp_action) ioa"
+consts xx :: "'a"
+consts P :: "'a \<Rightarrow> bool"
+consts Q :: "'a \<Rightarrow> bool"
+
+experiment begin 
+
+declare [[show_types]] and [[show_consts]]
+
+lemma -- {* The example in the Eisbach manual. *}
+  assumes asms: "\<And>x :: 'a . A x"
+  shows "A y"
+  by (match asms in H:"\<And>z :: 'b . P z" for P \<Rightarrow> 
+      \<open>match (y) in "y::'b" for y \<Rightarrow> \<open>rule H[where z=y]\<close> \<close>)
+  
+lemma "\<lbrakk>P xx; Q xx\<rbrakk> \<Longrightarrow> True" -- {* My problem. *}
+  apply (match premises in A:"P ?xx" and B:"Q ?xx" \<Rightarrow> \<open>-\<close> ) oops
+  
+end
+  
+locale amp_proof = quorums quorums + amp_ioa quorums for quorums +
+  fixes the_ioa
   defines "the_ioa \<equiv> amp_ioa"
+  -- {* Here we have to fix the constant @{term the_ioa} in order to fix all type variables.
+  Otherwise, there are problems in Eisbach when matching the same polymorphic constant appearing in several terms. *}
 begin
+
+interpretation IOA .
 
 subsection {* Automation setup and a few lemmas *}
 
 lemmas amp_ioa_defs =
    is_trans_def actions_def amp_trans_def amp_start_def
-   externals_def amp_ioa_def amp_asig_def
+   externals_def amp_ioa_def the_ioa_def paxos_asig_def
 
 declare amp_ioa_defs[inv_proofs_defs]
-declare the_ioa_def[inv_proofs_defs]
+declare amp_ioa_def[inv_proofs_defs]
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp]
   learn_def[simp] Let_def[simp] if_split[split] if_split_asm[split]
@@ -36,7 +57,7 @@ apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
     apply (force simp add:ballot_array.conservative_def)
   apply (case_tac a) 
   apply (auto simp add:inv_proofs_defs split:option.split_asm)
-done 
+done
 declare conservative_inductive[invs]
 
 subsection {* @{term safe}  is inductive relative to @{term conservative_array}} *}
@@ -61,20 +82,20 @@ lemma safe_mono:
 by (metis ballot_array_prefix_axioms.intro ballot_array_prefix_def quorums_axioms trans_imp_prefix_order)
 
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
-
+  
 lemma safe_votes:
   assumes "s \<midarrow>aa\<midarrow>the_ioa\<longrightarrow> t" and "vote s i a b  \<noteq> vote t i a b" and "vote t i a b = Some v"
-  and "conservative_array s" and "safe s"
+    and "conservative_array s" and "safe s"
   shows "safe_at t i v b" 
-using assms
-apply (cases aa)
-apply (auto simp add:inv_proofs_defs)
-subgoal premises prems
+  using assms
+  apply (cases aa)
+    apply (auto simp add:inv_proofs_defs)
+  subgoal premises prems
   proof -
     have "safe_at s i v (ballot s a)" by (smt assms(4) ballot_array.safe_def ballot_array_props.intro ballot_array_props.proved_safe_at_abs_imp_safe_at option.case_eq_if option.distinct(1) option.sel prems(2) prems(6) quorums_axioms) 
     thus ?thesis by (metis amp_state.select_convs(2) amp_state.select_convs(3) amp_state.surjective amp_state.update_convs(3) assms(1) fun_upd_apply prems(9) safe_mono) 
   qed
-done
+  done
 
 lemma safe_inv:
   "invariant the_ioa safe"
@@ -87,9 +108,11 @@ proof (auto simp add:ballot_array.safe_def split:option.splits)
   proof (cases "vote s i a b = vote t i a b")
     case True
     hence "safe_at s i v b" using prems(1) by (metis \<open>vote t i a b = Some v\<close> ballot_array.safe_def option.simps(5))
-    thus ?thesis using prems(2) safe_mono by simp
+    thus ?thesis using prems(2) safe_mono
+      by fastforce 
   next
-    case False thus ?thesis using safe_votes by (metis \<open>vote t i a b = Some v\<close> prems(1) prems(2) prems(3))
+    case False thus ?thesis using safe_votes
+      using \<open>vote t i a b = Some v\<close> prems(1-3) by blast  
   qed
 qed
 done

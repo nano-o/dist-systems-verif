@@ -266,10 +266,10 @@ inductive_set trans_rel :: "(('a,'v) global_state \<times> 'v action \<times> ('
   "\<lbrakk>(Packet a m) \<in> network s; process_msg ((local_states s) a) m = (sa', ms); m = Phase2b a i b v;
     log ((local_states s) a) \<noteq> log sa'\<rbrakk>
     \<Longrightarrow> (s, Learn i v, 
-      s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms\<rparr>) \<in> trans_rel"
+      s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms - {Packet a m}\<rparr>) \<in> trans_rel"
 | "\<lbrakk>(Packet a m) \<in> network s; process_msg ((local_states s) a) m = (sa', ms)\<rbrakk>
     \<Longrightarrow> (s, Internal, 
-      s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms\<rparr>) \<in> trans_rel"
+      s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms - {Packet a m}\<rparr>) \<in> trans_rel"
 | "\<lbrakk>propose ((local_states s) a) v = (sa', ms)\<rbrakk>
     \<Longrightarrow> (s, Propose v, 
       s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms\<rparr>) \<in> trans_rel"

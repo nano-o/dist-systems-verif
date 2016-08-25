@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR1
-imports  IOA BallotArrays DistributedSafeAt
+imports  IOA BallotArrays DistributedSafeAt Paxos_Sig
 begin
 
 text {*
@@ -10,9 +10,6 @@ text {*
 5) Localizing suggestions (the leader function).
 6) Explicit leadership acquisition.
 *}
-
-type_synonym bal = nat
-type_synonym inst = nat
 
 record ('v,'a,'l) ampr1_state =
   propCmd :: "'v set"
@@ -30,19 +27,6 @@ locale ampr1_ioa = IOA +
   fixes quorums::"'a set set" and leader :: "bal \<Rightarrow> 'a"
   -- {* @{term leader} determines the leader of a ballot. *}
 begin
-
-(* interpretation dsa:distributed_safe_at quorums ballot vote for ballot vote . *)
-
-datatype ('vv,'aa,'ll) action =
-  Propose 'vv
-| Learn nat 'vv 'll
-| Internal
-
-definition asig where
-  "asig \<equiv>
-    \<lparr> inputs = { Propose c | c . True},
-      outputs = { Learn i v l | i v l . True},
-      internals = {Internal}\<rparr>"
 
 definition start where
   -- {* The initial state *}
@@ -120,7 +104,8 @@ lemma trans_cases[consumes 1]:
 | (suggest) a i b v where "suggest a i b v r r'"
 | (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'"
 | (acquire) a q where "acquire_leadership a q r r'"
-using assms by induct auto
+  using assms apply induct apply simp
+  by (metis ampr1_ioa.trans_rel.simps(1) ampr1_ioa.trans_rel.simps(3) paxos_action.exhaust trans_rel.simps(2)) 
 
 definition trans where
   "trans \<equiv> { (r,a,r') . trans_rel r a r'}"
@@ -128,7 +113,7 @@ definition trans where
 subsection {* The I/O-automaton *}
 
 definition ioa where
-  "ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
+  "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, start = start, trans = trans\<rparr>"
 
 lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def
   do_vote_def learn_def suggest_def catch_up_def acquire_leadership_def

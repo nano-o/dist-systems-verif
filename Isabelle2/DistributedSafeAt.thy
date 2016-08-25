@@ -1,5 +1,5 @@
 theory DistributedSafeAt
-imports BallotArrays BallotArrayProperties "~~/src/HOL/Library/Monad_Syntax"
+imports BallotArrays BallotArrayProperties "~~/src/HOL/Library/Monad_Syntax" Utils
 begin
 
 subsection {* Computing safe values in a distributed implementation *}

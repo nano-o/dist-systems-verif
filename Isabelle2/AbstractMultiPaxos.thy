@@ -1,6 +1,6 @@
 theory AbstractMultiPaxos
-imports  IOA BallotArrays
-begin
+imports  IOA BallotArrays Paxos_Sig
+begin                          
 
 section {* Definition of the Abstract MultiPaxos I/O-automaton *}
 
@@ -11,21 +11,9 @@ record ('v,'a) amp_state =
   ballot :: "'a \<Rightarrow> nat"
   vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
 
-locale amp_ioa = IOA +
+locale amp_ioa =
   fixes quorums::"'a set set"
-  fixes learners::"'l set"
 begin
-
-datatype ('vv,'aa,'ll) amp_action =
-  Propose 'vv
-| Learn nat 'vv 'll
-| Internal
-
-definition amp_asig where
-  "amp_asig \<equiv>
-    \<lparr> inputs = {Propose c | c . True},
-      outputs = {Learn i v l | i v l . l \<in> learners},
-      internals = {Internal}\<rparr>"
 
 definition amp_start where
   -- {* The initial state *}
@@ -67,7 +55,7 @@ fun amp_trans_rel where
 | "amp_trans_rel r Internal r' = (
     (\<exists> a b . join_ballot a b r r')
     \<or> (\<exists> a q i v . do_vote a i q v r r'))"
-| "amp_trans_rel r (Learn i v l) r' = learn i v r r'"
+| "amp_trans_rel r (Learn i v) r' = learn i v r r'"
 
 lemma trans_cases: assumes "amp_trans_rel r a r'"
   obtains 
@@ -75,7 +63,8 @@ lemma trans_cases: assumes "amp_trans_rel r a r'"
 | (learn) i v where "learn i v r r'"
 | (join_ballot) a b where "join_ballot a b r r'"
 | (do_vote) a i q v where "do_vote a i q v r r'"
-using assms apply induct apply auto done
+  using assms apply induct apply auto
+  by (meson amp_trans_rel.elims(2)) 
 
 definition amp_trans where
   "amp_trans \<equiv> { (r,a,r') . amp_trans_rel r a r'}"
@@ -83,9 +72,9 @@ definition amp_trans where
 subsection {* The I/O-automaton *}
 
 definition amp_ioa where
-  "amp_ioa \<equiv> \<lparr>ioa.asig = amp_asig, start = amp_start, trans = amp_trans\<rparr>"
+  "amp_ioa \<equiv> \<lparr>ioa.asig = paxos_asig, start = amp_start, trans = amp_trans\<rparr>"
 
-lemmas simps = amp_ioa_def amp_asig_def amp_start_def amp_trans_def propose_def join_ballot_def 
+lemmas simps = amp_ioa_def paxos_asig_def amp_start_def amp_trans_def propose_def join_ballot_def 
   do_vote_def learn_def
 
 end
