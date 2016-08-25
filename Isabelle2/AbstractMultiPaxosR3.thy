@@ -198,9 +198,9 @@ definition receive_1b where "receive_1b s b vs \<equiv>
   let s' = s\<lparr>onebs := new_onebs (onebs s) vs b (id s)\<rparr>
   in (if (set (finfun_to_list (the (onebs s' $ b))) = acceptors s) 
     then let
-        s' = s\<lparr>log := new_log (the (onebs s $ b)) (acceptors s) (log s)\<rparr>;
+        s'' = s'\<lparr>log := new_log (the (onebs s $ b)) (acceptors s) (log s)\<rparr>;
         msgs = msgs (the (onebs s $ b)) (acceptors s) (log s)
-      in (s', (send_all s) ` msgs) 
+      in (s'', (send_all s) ` msgs) 
     else (s', {}))"
 
   
