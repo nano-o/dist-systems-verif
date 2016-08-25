@@ -15,7 +15,7 @@ subsection {* Local state and transitions *}
 datatype 'v inst_status =
   Decided 'v | Proposed 'v | Free
   -- {* An instance is in status @{term Free} locally when the acceptor has not itself proposed 
-  or seen a decision in that instance; but, another acceptor might have proposed something. *}
+    or seen a decision in that instance, or seen a proposal. *}
 
 record ('a, 'v) local_state =
   -- {* The local state of an acceptor. *}
@@ -32,10 +32,10 @@ record ('a, 'v) local_state =
 
 datatype ('a,'v) msg =
   Phase1a bal
-  | Phase1b 'a bal "inst \<Rightarrow>f ('v \<times> bal) option"
+  | Phase1b bal "inst \<Rightarrow>f ('v \<times> bal) option"
   | Phase2a inst bal 'v
-  | Phase2b 'a inst bal
-  | Decision inst 'v
+  | Phase2b 'a inst bal 'v
+  (* | Decision inst 'v *)
   | Fwd 'v
 
 datatype ('a,'v) packet =
@@ -45,7 +45,7 @@ definition send_all where
   "send_all s m \<equiv> (\<lambda> a . Packet a m) ` (acceptors s - {id s})"
   
 locale local_defs =
-  fixes leader :: "bal \<Rightarrow> 'a"
+  fixes leader :: "bal \<Rightarrow> 'a::linorder"
   and next_bal :: "bal \<Rightarrow> 'a \<Rightarrow> bal"
   and quorums :: "'a set set"
 begin
@@ -134,7 +134,7 @@ definition try_acquire_leadership where "try_acquire_leadership s \<equiv>
 
 definition receive_1a where "receive_1a s b \<equiv> if b > ballot s then
       let 
-        msgs = {Packet (leader b) (Phase1b (id s) b (votes s))};
+        msgs = {Packet (leader b) (Phase1b b (votes s))};
         s' = s\<lparr>ballot := b\<rparr>
       in (s', msgs)
     else (s, {})"
@@ -200,10 +200,39 @@ definition receive_1b where "receive_1b s b vs \<equiv>
     then let
         s'' = s'\<lparr>log := new_log (the (onebs s $ b)) (acceptors s) (log s)\<rparr>;
         msgs = msgs (the (onebs s $ b)) (acceptors s) (log s)
-      in (s'', (send_all s) ` msgs) 
+      in (s'', Set.bind msgs (send_all s)) 
     else (s', {}))"
 
+abbreviation(input) decided where "decided s i \<equiv> 
+  case (log s $ i) of Decided _ \<Rightarrow> True | _ \<Rightarrow> False"
   
+definition receive_2a where "receive_2a s i b v \<equiv>
+  if b \<ge> ballot s then
+    let s' = s\<lparr>votes := (votes s)(i $:= Some (v, b)),
+      twobs := (twobs s)(i $:= (twobs s $ i)(b $:= insert (id s) (twobs s $ i $ b))),
+      ballot := b\<rparr>;
+      msgs = send_all s (Phase2b (id s) i b v)
+    in (s', msgs)
+  else (s, {})"
+  
+definition receive_2b where "receive_2b s i b a v \<equiv>
+  if (~ decided s i)
+  then let
+      s' = s\<lparr>twobs := (twobs s)(i $:= (twobs s $ i)(b $:= insert a (twobs s $ i $ b)))\<rparr>
+    in (
+      if (twobs s' $ i $ b = (acceptors s))
+      then let s'' = s'\<lparr>log := (log s)(i $:= Decided v)\<rparr>
+        in (s'', {})
+      else (s', {}) )
+  else (s, {})"
+
+fun process_msg where
+  "process_msg s (Phase1a b) = receive_1a s b"
+  | "process_msg s (Phase2a i b v) = receive_2a s i b v"
+  | "process_msg s (Phase2b a i b v) = receive_2b s i b a v"
+  | "process_msg s (Phase1b b vs) = receive_1b s b vs"
+  | "process_msg s (Fwd v) = receive_fwd s v"
+
 end
 
 subsection {* Global system IOA. *}
@@ -211,6 +240,8 @@ subsection {* Global system IOA. *}
 record ('a,'v) global_state =
   local_states :: "'a \<Rightarrow> ('a, 'v)local_state"
   network :: "('a, 'v) packet set"
+
+
 
 subsection {* Code generation *}
 
@@ -222,9 +253,10 @@ global_interpretation ldefs:local_defs leader next_bal quorums for leader next_b
     and try_acquire_leadership = local_defs.try_acquire_leadership
     and receive_1a = local_defs.receive_1a
     and receive_1b = local_defs.receive_1b
+    and receive_2b = local_defs.receive_2b
+    and process_msg = local_defs.process_msg
   .
 
-export_code start do_2a propose receive_fwd 
-  try_acquire_leadership receive_1a receive_1b in Scala
-  
+export_code start propose try_acquire_leadership process_msg in Scala
+
 end
