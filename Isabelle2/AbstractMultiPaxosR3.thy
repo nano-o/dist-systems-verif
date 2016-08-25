@@ -1,7 +1,7 @@
 section {* Distributed and executable algorithm *}
 
-theory AbstractMultiPaxosR3
-imports Main "~~/src/HOL/Library/FinFun" "~~/src/HOL/Library/FSet" "~~/src/HOL/Library/Mapping"
+theory AbstractMultiPaxosR3 
+  imports Main "~~/src/HOL/Library/FinFun" MaxByKey
 begin
 
 unbundle finfun_syntax
@@ -138,7 +138,39 @@ definition receive_1a where "receive_1a s b \<equiv> if b > ballot s then
         s' = s\<lparr>ballot := b\<rparr>
       in (s', msgs)
     else (s, {})"
+
+end 
+
+text {* An experiment. Would be executable, but then how to relate it to a high-level spec?
+  I.e., how to transfer to normal functions? *}
+
+definition option_as_set where "option_as_set x \<equiv> case x of None \<Rightarrow> {} | Some y \<Rightarrow> {y}"
   
+locale receive_1b =
+  fixes votes :: "'a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option"
+  fixes as :: "'a set"
+  fixes log :: "inst \<Rightarrow>f 'v inst_status"
+begin
+
+definition per_inst where "per_inst \<equiv> op$ votes ` as"
+definition votes_per_inst where "votes_per_inst \<equiv> Finite_Set.fold
+  (\<lambda> ff1 ff2 . (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $) ) (K$ {}) per_inst"
+definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ votes_per_inst"
+definition to_propose where "to_propose \<equiv> (\<lambda> (is, m) . 
+    case is of Decided _ \<Rightarrow> None | _ \<Rightarrow> (
+      if m = {} then None else Some ((fst o the_elem) m)) ) 
+  o$ ($ log, max_per_inst $)"
+  
+end
+
+global_interpretation r1:receive_1b votes as log for votes as log
+  defines to_propose = "receive_1b.to_propose"
+  .
+
+export_code to_propose in Scala
+
+context local_defs begin
+
 definition receive_1b where "receive_1b s a b vs \<equiv>
   let s' = s\<lparr>onebs := new_onebs (onebs s) vs b (id s)\<rparr>
   in (if (set (finfun_to_list (the (onebs s' $ b))) = acceptors s) 
