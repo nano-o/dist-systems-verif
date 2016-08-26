@@ -7,7 +7,7 @@ begin
 
 locale ampr1_proof = IOA + quorums quorums + ampr1_ioa quorums for
      quorums :: "'a set set" +
-  fixes the_ioa :: "(('v,'a,'l)ampr1_state, ('v,'a,'l)action) ioa"
+  fixes the_ioa 
   defines "the_ioa \<equiv> ioa"
 begin
 
@@ -23,7 +23,7 @@ declare ioa_defs[inv_proofs_defs]
 declare the_ioa_def[inv_proofs_defs]
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp] suggest_def[simp]
-  learn_def[simp] Let_def[simp] if_split[split] if_split_asm[split] catch_up_def[simp]
+  learn_def[simp] Let_def[simp] if_split[split] if_split_asm[split]
   acquire_leadership_def[simp]
 
 (*  Nitpick config:

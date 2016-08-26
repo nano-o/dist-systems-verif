@@ -18,11 +18,11 @@ lemma -- {* The example in the Eisbach manual. *}
   by (match asms in H:"\<And>z :: 'b . P z" for P \<Rightarrow> 
       \<open>match (y) in "y::'b" for y \<Rightarrow> \<open>rule H[where z=y]\<close> \<close>)
   
-lemma "\<lbrakk>P xx; Q xx\<rbrakk> \<Longrightarrow> True" -- {* My problem. *}
+lemma "\<lbrakk>P xx; Q xx\<rbrakk> \<Longrightarrow> True"
   apply (match premises in A:"P ?xx" and B:"Q ?xx" \<Rightarrow> \<open>-\<close> ) oops
   
 end
-  
+
 locale amp_proof = quorums quorums + amp_ioa quorums for quorums +
   fixes the_ioa
   defines "the_ioa \<equiv> amp_ioa"

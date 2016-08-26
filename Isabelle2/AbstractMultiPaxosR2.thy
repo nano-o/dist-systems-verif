@@ -6,8 +6,6 @@ text {* An executable version of R1 using finfun. *}
 
 unbundle finfun_syntax
 
-definition flip_def[simp]:"flip f \<equiv> \<lambda> x y . f y x"
-
 section {* A finfun-friendly definition of @{term acc_max} *}
 
 definition acc_max_2 where
@@ -56,14 +54,9 @@ record ('v,'a,'l) ampr2_state =
   learned :: "'l \<Rightarrow>f inst \<Rightarrow>f 'v option"
   leader :: "'a \<Rightarrow>f bool"
 
-locale ampr2_ioa = ampr1:ampr1_ioa quorums leader for quorums :: "'a set set" and leader
+locale ampr2_ioa = 
+  fixes quorums :: "'a set set" and leader :: "bal \<Rightarrow> 'a"
 begin
-
-definition asig where
-  "asig \<equiv>
-    \<lparr> inputs = { ampr1.Propose c | c . True},
-      outputs = { ampr1.Learn i v l | i v l . True},
-      internals = {ampr1.Internal}\<rparr>"
 
 definition start where
   -- {* The initial state *}
@@ -217,14 +210,14 @@ definition catch_up where
     \<and> s' = s\<lparr>learned := (learned s)(l1 $:= (learned s $ l1)(i $:= Some v))\<rparr>"
 
 fun trans_rel where
-  "trans_rel r (ampr1.Propose c) r' = propose c r r'"
-| "trans_rel r ampr1.Internal r' = (
+  "trans_rel r (Propose c) r' = propose c r r'"
+| "trans_rel r Internal r' = (
     (\<exists> a b . join_ballot a b r r')
     \<or> (\<exists> a i v . do_vote a i v r r')
     \<or> (\<exists> a i b v . suggest a i b v r r')
     \<or> (\<exists> l1 l2 i v . catch_up l1 l2 i v r r')
     \<or> (\<exists> a q . acquire_leadership a q r r'))"
-| "trans_rel r (ampr1.Learn i v l) r' = learn l i v r r'"
+  | "trans_rel r (Learn i v) r' = (\<exists> l . learn l i v r r')"
 
 lemma trans_cases[consumes 1]:
   assumes "trans_rel r a r'"
@@ -236,19 +229,21 @@ lemma trans_cases[consumes 1]:
 | (suggest) a i b v where "suggest a i b v r r'"
 | (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'"
 | (acquire) a q where "acquire_leadership a q r r'"
-using assms by induct auto
+  using assms apply induct apply (simp add:learn_def)
+  by (metis assms learn paxos_action.exhaust trans_rel.simps(1) trans_rel.simps(2) trans_rel.simps(3)) 
 
 lemma trans_cases_2[consumes 1]:
   assumes "trans_rel r aa r'"
   obtains 
-  (propose) c where "propose c r r'" and "aa = ampr1.action.Propose c"
-| (learn) l i v where "learn l i v r r'" and "aa = ampr1.action.Learn i v l"
-| (join_ballot) a b where "join_ballot a b r r'" and "aa = ampr1.action.Internal"
-| (do_vote) a i v where "do_vote a i v r r'" and "aa = ampr1.action.Internal"
-| (suggest) a i b v where "suggest a i b v r r'" and "aa = ampr1.action.Internal"
-| (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'" and "aa = ampr1.action.Internal"
-| (acquire) a q where "acquire_leadership a q r r'" and "aa = ampr1.action.Internal"
-using assms by induct auto
+  (propose) c where "propose c r r'" and "aa = Propose c"
+| (learn) l i v where "learn l i v r r'" and "aa = Learn i v"
+| (join_ballot) a b where "join_ballot a b r r'" and "aa = Internal"
+| (do_vote) a i v where "do_vote a i v r r'" and "aa = Internal"
+| (suggest) a i b v where "suggest a i b v r r'" and "aa = Internal"
+| (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'" and "aa = Internal"
+| (acquire) a q where "acquire_leadership a q r r'" and "aa = Internal"
+  using assms apply induct apply (simp add:learn_def)
+  by (metis assms learn paxos_action.exhaust trans_rel.simps(1) trans_rel.simps(2) trans_rel.simps(3)) 
 
 definition trans where
   "trans \<equiv> { (r,a,r') . trans_rel r a r'}"
@@ -256,7 +251,7 @@ definition trans where
 subsection {* The I/O-automaton *}
 
 definition ioa where
-  "ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
+  "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, start = start, trans = trans\<rparr>"
 
 lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def 
   do_vote_def learn_def suggest_def catch_up_def acquire_leadership_def

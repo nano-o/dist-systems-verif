@@ -1,7 +1,7 @@
 chapter {* Distributed and executable algorithm *}
 
 theory AbstractMultiPaxosR3 
-  imports Utils "~~/src/HOL/Library/FinFun" MaxByKey IOA Quorums
+  imports Utils "~~/src/HOL/Library/FinFun" MaxByKey IOA Quorums Paxos_Sig
 begin
 
 unbundle finfun_syntax
@@ -236,22 +236,7 @@ fun process_msg where
 
 end
 
-subsection {* Global system IOA. *}
-
-context amp_r3 begin
-
-datatype 'v action =
-  Propose 'v
-| Learn nat 'v
-| Internal
-
-definition asig where
-  "asig \<equiv>
-    \<lparr> inputs = { Propose c | c . True},
-      outputs = { Learn i v | i v . True},
-      internals = {Internal}\<rparr>"
-
-end 
+subsection {* Global system IOA. *} 
 
 record ('a,'v) global_state =
   local_states :: "'a \<Rightarrow> ('a, 'v)local_state"
@@ -262,7 +247,7 @@ context amp_r3 begin
 definition global_start where "global_start \<equiv>
   \<lparr>local_states = (\<lambda> a . local_start a), network = {}\<rparr>"
 
-inductive_set trans_rel :: "(('a,'v) global_state \<times> 'v action \<times> ('a,'v) global_state) set" where
+inductive_set trans_rel :: "(('a,'v) global_state \<times> 'v paxos_action \<times> ('a,'v) global_state) set" where
   "\<lbrakk>(Packet a m) \<in> network s; process_msg ((local_states s) a) m = (sa', ms); m = Phase2b a i b v;
     log ((local_states s) a) \<noteq> log sa'\<rbrakk>
     \<Longrightarrow> (s, Learn i v, 
@@ -277,42 +262,9 @@ inductive_set trans_rel :: "(('a,'v) global_state \<times> 'v action \<times> ('
     \<Longrightarrow> (s, Propose v, 
       s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms\<rparr>) \<in> trans_rel"
 
-end
-
-definition n :: nat where "n \<equiv> 3"
-  -- {* The number of processes *}
-
-definition accs where "accs \<equiv> {1..n}"
-  -- {* The set of acceptors *}
-
-definition leader where "leader (b::nat) \<equiv> (b mod n) + 1"
-  
-definition next_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat" where "next_bal b a \<equiv> 
-  (b div n + 1) * n + a"
-  
-global_interpretation cq:card_quorums accs
-  defines qs = "cq.quorums" and nas = "cq.nas"
-  apply (unfold_locales)
-   apply (simp add: accs_def n_def)
-  apply (simp add: accs_def)
-  done
-
-global_interpretation my_amp_r3:amp_r3 leader next_bal accs qs 
-  defines start = my_amp_r3.global_start
-    and trans = my_amp_r3.trans_rel
-    and propose = my_amp_r3.propose
-    and try_acquire_leadership = my_amp_r3.try_acquire_leadership
-    and process_msg = my_amp_r3.process_msg
-    and local_start = my_amp_r3.local_start
-    and receive_fwd = my_amp_r3.receive_fwd
-    and receive_1a = my_amp_r3.receive_1a
-  .
-
 definition ioa where
-  "ioa \<equiv> \<lparr>ioa.asig = amp_r3.asig, ioa.start = {start}, ioa.trans = trans\<rparr>"
-
-subsection {* Code generation *}
-
-export_code local_start propose try_acquire_leadership process_msg in Scala
+  "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, ioa.start = {global_start}, ioa.trans = trans_rel\<rparr>"
+  
+end
 
 end
