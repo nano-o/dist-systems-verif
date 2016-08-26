@@ -41,7 +41,7 @@ record 'v consensus =
   view :: "bal"
   accepts :: "acc list"
   status :: "nat"
-    -- {* 0: not started; 1: processing; 2: closed *}
+    -- {* 0: not started; 1: processing; 2: decided *}
   val :: "'v cmd option"
   
 record 'v state =
@@ -61,16 +61,16 @@ record 'v state =
   instances :: "inst \<Rightarrow>f 'v consensus"
 
 datatype 'v msg =
-  Phase1a (from_leader: acc) (leader_ballot:bal) (firstUndecided: inst)
-| Phase1b (last_votes:"'v consensus list") (new_ballot: bal) (ballot_acceptor:acc)
-| Phase2a (vote_inst: inst) (for_ballot:bal) (suggestion:"'v cmd") (vote_leader: acc)
-| Phase2b (decide_inst: inst) (decide_ballot:bal) (decide_acceptor: acc) (decide_cmd: "'v cmd")
+  Phase1a (leader_ballot:bal) (firstUndecided: inst)
+| Phase1b (last_votes:"inst \<Rightarrow>f 'v consensus") (new_ballot: bal)
+| Phase2a (vote_inst: inst) (for_ballot:bal) (suggestion:"'v cmd")
+| Phase2b (decide_inst: inst) (decide_ballot:bal) (decide_cmd: "'v cmd")
 | Fwd (decide_val: 'v)
   -- {* Forwards a proposal to another proposer (the leader) *}
 
 datatype 'v packet =
   -- {* A message with sender/destination information *}
-  Packet (sender: acc) (dst: acc) (msg: "'v msg")
+  Packet (packet_sender: acc) (packet_acceptor: acc) (packet_msg: "'v msg")
 
  
 subsection {* A few functions to export to Scala for use by the runtime. *}
@@ -162,9 +162,11 @@ definition quorum_received where
 text {* Finfun Filter/Merge for snapshots / catch ups *}
 
 definition finfun_filt:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow>('a \<Rightarrow> bool) \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)" where
-  "finfun_filt ff filt \<equiv> fold (\<lambda> k l . if (filt k) then (l) else ((l)(k $:= (ff $ k)))) (finfun_to_list ff) (K$ (finfun_default ff)) "
+  "finfun_filt ff filt \<equiv> fold (\<lambda> k df. if (filt k) then (df) else ((df)(k $:= (ff $ k)))) (finfun_to_list ff) (K$ (finfun_default ff)) "
 definition finfun_filt_le :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow>f 'b" where
   "finfun_filt_le ff truncloc\<equiv> finfun_filt ff (\<lambda> k . (k \<le> truncloc))"
+definition finfun_filt_l :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow>f 'b" where
+  "finfun_filt_l ff truncloc\<equiv> finfun_filt ff (\<lambda> k . (k < truncloc))"
 definition finfun_filt_ge :: "'a::linorder \<Rightarrow>f 'b \<Rightarrow>  'a \<Rightarrow> 'a \<Rightarrow>f 'b" where
   "finfun_filt_ge ff truncloc\<equiv> finfun_filt ff (\<lambda> k . (k \<ge> truncloc))"
 definition finfun_replace:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)  \<Rightarrow> ('a::linorder \<Rightarrow>f 'b)" where
@@ -175,9 +177,16 @@ definition finfun_remove:: "('a::linorder \<Rightarrow>f 'b) \<Rightarrow> ('a \
   "finfun_remove ff ff_remove \<equiv> fold (\<lambda> k l . (l)(k $:= (finfun_default l) )) (finfun_to_list ff_remove) ff"
 definition finfun_deserialize where
  "finfun_deserialize l \<equiv> foldr (\<lambda> kv r . finfun_update_code r (fst kv) (snd kv)) l (K$ None)"
+definition finfun_deserial where
+ "finfun_deserial vs \<equiv> foldr (\<lambda> kv r . finfun_update_code r (view kv) kv) vs (K$ \<lparr>view = 0, accepts = [], status = 0, val = None\<rparr>)"
 definition finfun_serialize where
  "finfun_serialize vs \<equiv> (let insts = finfun_to_list vs; ilength = length insts; iter = [0..<ilength] in
      map (\<lambda>i. vs $ (insts!i)) iter)"
+
+
+value "let ff = ((K$ 0) :: nat \<Rightarrow>f nat)(1 $:= 42)(42 $:= 2)(43 $:= 1) in (finfun_filt_l ff 42)"
+value "let ff = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(43 $:= 1); 
+          ff2 = ((K$ 0) :: int \<Rightarrow>f int)(1 $:= 42)(42 $:= 0)(20 $:= 1)  in (finfun_replace ff ff2)"
 
 subsection {* Initialization of the state. *}
 
@@ -210,7 +219,7 @@ definition def_send1a :: "'v state \<Rightarrow> ('v state \<times> 'v packet li
     (let a = id s;
         b = nextBallot a (ballot s) (def_replicaCount s);
         i = firstUncommitted s;
-        msg_1a = Phase1a a b i in
+        msg_1a = Phase1a b i in
       (s\<lparr>ballot := b, onebs := K$ []\<rparr>, send_all a msg_1a s))"
 
 definition def_receive1a :: "acc \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
@@ -219,23 +228,45 @@ definition def_receive1a :: "acc \<Rightarrow> bal \<Rightarrow> inst \<Rightarr
       (if (bal < b)
        then
           (let a = id s;
-            insts = finfun_filt_le (instances s) i;
-            msg_1b = Phase1b insts b a;
+            insts = finfun_filt_l (instances s) i;
+            msg_1b = Phase1b insts b;
             packet = Packet a l msg_1b;
             state = s\<lparr>ballot := b, leader := False, onebs := K$ []\<rparr>
           in
           (state, [packet]))
        else (s, [])))"
 
-definition update_onebs where
+definition update_consensus where
+  "update_consensus newc c nas \<equiv> 
+    if (status c = 2) then c
+    else (
+      if (status newc = 2)
+        then c\<lparr>view := (view newc), val := (val newc), status := 2\<rparr>
+      else (
+        if (view c) < (view newc)
+          then (let c1 = c\<lparr>view := (view newc), accepts := (List.union (accepts c) (accepts newc)), val := (val newc)\<rparr> in
+            if (2 * length (accepts c1) > nas) then c1\<lparr>status := 2\<rparr> else c1)
+        else
+          (let c1 = c\<lparr>accepts := (List.union (accepts c) (accepts newc))\<rparr> in
+            if (2 * length (accepts c1) > nas) then c1\<lparr>status := 2\<rparr> else c1)
+      )
+    )"
+
+definition update_instance:: "'v state \<Rightarrow> acc \<Rightarrow> (inst \<Rightarrow>f 'v consensus) \<Rightarrow> 'v state" where
   -- {* Update the list of highest voted values when receiving a 1b
     message from a2 for ballot bal containing last_vs *}
-  "update_onebs s a last_vs \<equiv>
+  "update_instance s a last_vs \<equiv>
     let
-      combiner = \<lambda> (xs, y) . (if (List.member xs (a, y)) then xs else ((a, y) # xs));
+      newInsts = (\<lambda> (newc, c). (update_consensus newc c (def_replicaCount s)));
+      pair_insts = ($ last_vs, (instances s) $);
+      new_instances = newInsts o$ pair_insts;
+      newUndecided = (filter (\<lambda>i. status (new_instances $ i) < 2) (finfun_to_list new_instances)) ! 0;
+      fUncommitted = (firstUncommitted s);
+      combiner = \<lambda> (xs, c) . (let vs = (view c, val c) in if (List.member xs (a, vs)) then xs else ((a, vs) # xs));
       pair_map = ($ (onebs s), last_vs $);
-      at_bal = combiner o$ pair_map
-    in s\<lparr>onebs := at_bal\<rparr>"
+      new_onebs = combiner o$ pair_map
+    in s\<lparr>instances := new_instances, onebs := new_onebs, 
+      firstUncommitted := (if (newUndecided < fUncommitted) then fUncommitted else newUndecided)\<rparr>"
 
 definition highest_voted where
   -- {* Makes sense only if no list in the map is empty. *}
@@ -256,24 +287,25 @@ text {*
   For now we propose values to all the instances ever started.
 *}
 
-definition def_receive1b :: "('v consensus list) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
+definition def_receive1b :: "(inst \<Rightarrow>f 'v consensus) \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
  "def_receive1b last_vs bal a2 s \<equiv> (
     if (bal = ballot s)
-    then (let a = id s; i = (firstUncommitted s); s1 = update_onebs s a2 last_vs in 
-      (if quorum_received i s1
+    then (let a = id s; s1 = update_instance s a2 last_vs in 
+      (if quorum_received (firstUncommitted s) s1
           then (let
               onebs_bal = onebs s1;
               max_i = (let l = (finfun_to_list onebs_bal) in (if l = [] then 0 else hd (rev l)));
               maxInst = (next_inst s1);
               s2 = s1\<lparr>leader := True, next_inst := (if max_i + 1 < maxInst then maxInst else max_i + 1)\<rparr>;
-              insts = [i..<max_i+1];
+              startI = (firstUncommitted s);
+              insts = [startI..<max_i+1];
               highestVoted = highest_voted onebs_bal;
               pCmds = (propCmds s2);
               cmdOptions = map (\<lambda> i . highestVoted i) insts;
               (newCmds, newPCmds) = construct_msg pCmds cmdOptions;
-              msgs = map (\<lambda>v. Phase2a i bal v a) newCmds;
+              msgs = map (\<lambda>i. Phase2a i bal (newCmds!(i-startI))) insts;
               s3 = fold (\<lambda> i s . s\<lparr>propCmds := newPCmds, instances := (instances s)(i $:= (instances s $ i)\<lparr>view := bal, 
-                accepts := [a], status := 1, val := (highestVoted i)\<rparr>)\<rparr>) insts s2;
+                accepts := [a], status := 1, val := Some (newCmds!(i-startI))\<rparr>)\<rparr>) insts s2;
               pckts = map (\<lambda> m . send_all a m s3) msgs
             in (s3, fold (op @) pckts []))
       else (s1, []) ) )
@@ -285,7 +317,7 @@ definition def_send2a where
       a = id s;
       inst = (next_inst s);
       b = (ballot s);
-      msg = Phase2a inst b v a;
+      msg = Phase2a inst b v;
       new_state = s\<lparr>next_inst := (if i + 1 < inst then inst else i + 1),
         instances := (instances s)(i $:= (instances s $ i)\<lparr>view := b, accepts := [a], status := 1, val := (Some v)\<rparr>)
        \<rparr>
@@ -342,7 +374,7 @@ definition def_receive2 :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Righta
 definition def_receive2a :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
   "def_receive2a i b v l s \<equiv> 
   if (ballot s \<le> b) then (let a = id s in
-    (def_receive2 i b v l s, send_all a (Phase2b i b a v) s))
+    (def_receive2 i b v l s, send_all a (Phase2b i b v) s))
   else (s, [])"
 
 definition def_receive2b :: "inst \<Rightarrow> bal \<Rightarrow> acc \<Rightarrow> 'v cmd  \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
@@ -385,12 +417,13 @@ code_identifier
 | code_module Complete_Partial_Order \<rightharpoonup> (Scala) MPLib
 | code_module Lattices \<rightharpoonup> (Scala) MPLib
 
-fun processExternalEvent where
-  "processExternalEvent (Phase1a l b i) s = def_receive1a l b i s"
-| "processExternalEvent (Phase1b last_vote b a) s = def_receive1b last_vote b a s "
-| "processExternalEvent (Phase2a i b cm l) s = def_receive2a i b cm l s"
-| "processExternalEvent (Phase2b i b a cm) s = def_receive2b i b a cm s"
-| "processExternalEvent (Fwd v) s = def_receiveFwd v s"
+definition processExternalEvent where
+  "processExternalEvent sender msg s = 
+    (case msg of (Phase1a b i) \<Rightarrow> def_receive1a sender b i s
+      | (Phase1b last_vote b) \<Rightarrow> def_receive1b last_vote b sender s
+      | (Phase2a i b cm) \<Rightarrow> def_receive2a i b cm sender s
+      | (Phase2b i b cm) \<Rightarrow> def_receive2b i b sender cm s
+      | (Fwd v) \<Rightarrow> def_receiveFwd v s)"
 
 export_code def_learn def_onRequest def_send1a def_propose init_state def_getBallot def_isLeader def_getLeader def_getNextInstance 
   def_getFirstUncommitted def_getRequest def_leaderOfBal def_isDecided def_getStatus processExternalEvent
