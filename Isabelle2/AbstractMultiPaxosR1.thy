@@ -106,7 +106,7 @@ subsection {* The I/O-automaton *}
 definition ioa where
   "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, start = start, trans = trans\<rparr>"
 
-lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def
+lemmas simps = ioa_def paxos_asig_def start_def trans_def propose_def join_ballot_def
   do_vote_def learn_def suggest_def acquire_leadership_def
 
 end
