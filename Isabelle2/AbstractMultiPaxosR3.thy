@@ -261,7 +261,7 @@ inductive trans_rel :: "(('a,'v) global_state \<times> 'v paxos_action \<times> 
     \<Longrightarrow> trans_rel (s, Internal, 
       s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms\<rparr>)"
   
-inductive_cases test:"trans_rel (s,a,s')"
+inductive_cases trans_rel_cases:"trans_rel (s,a,s')"
 
 abbreviation(input) local_step where "local_step a p r r' \<equiv> 
   r' = r\<lparr>local_states := (local_states r)(a := fst p), network := network r \<union> snd p\<rparr>"
@@ -271,8 +271,8 @@ lemma trans_cases:
   obtains
     (propose) a v where "act = Propose v" and "local_step a (propose (local_states r a) v) r r'"
   | (learn) a i b v m p where "act = Learn i v" and "m = Phase2b a i b v"
-    and "p = process_msg (local_states r a) m"
-    and "local_step a p r r'" 
+    and "p = receive_2b (local_states r a) i b a v"
+    and "local_step a p r r'"
     and "Packet a m \<in> network r" 
     and "log (local_states r a) \<noteq> log (fst p)"
   | (acquire_leadership) a where "act = Internal" and "local_step a (try_acquire_leadership (local_states r a)) r r'"
@@ -284,8 +284,8 @@ lemma trans_cases:
     and "p = receive_2a (local_states r a) i b v"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
-  | (receive_2b) a i b v m p where "act = Internal" and "m = Phase2b a i b v"
-    and "p = receive_2b (local_states r a) i b a v"
+  | (receive_2b) a a2 i b v m p where "act = Internal" and "m = Phase2b a2 i b v"
+    and "p = receive_2b (local_states r a) i b a2 v"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
   | (receive_1b) a b vs m p where "act = Internal" and "m = Phase1b b vs"
@@ -296,23 +296,29 @@ lemma trans_cases:
     and "p = receive_fwd (local_states r a) v"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
-  using assms that  
-  apply (elim test)
-     apply (metis amp_r3.process_msg.simps(3) fst_conv snd_conv)
-    defer
-    apply (metis fst_conv snd_conv)
-   apply (metis fst_conv snd_conv)
-    (* does not terminate: apply (induct rule:process_msg.induct). *)
-  subgoal premises prems 
-  proof -
-    from prems(18) show ?thesis
-      apply (induct rule:process_msg.induct)
-      apply simp
-    
-      
-  
+proof -
+  show ?thesis using assms
+    apply (rule trans_rel_cases)
+       apply (metis fst_conv learn snd_conv)
+      defer
+      apply (metis fst_conv propose snd_conv)
+     apply (metis acquire_leadership fst_conv snd_conv)
+    subgoal premises prems for a m
+    proof -
+      show ?thesis using prems 
+        apply (induct m rule:process_msg.induct)
+            apply (metis fst_conv process_msg.simps(1) receive_1a snd_conv)
+           apply (metis fst_conv process_msg.simps(2) receive_2a snd_conv)
+          defer
+          apply (metis fst_conv process_msg.simps(4) receive_1b snd_conv)
+         apply (metis amp_r3.process_msg.simps(5) fst_conv fwd snd_conv)
+        by (metis fst_conv process_msg.simps(3) receive_2b snd_conv)
+    qed
+    done
+qed  
+
 definition ioa where
-  "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, ioa.start = {global_start}, ioa.trans = trans_rel\<rparr>"
+  "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, ioa.start = {global_start}, ioa.trans = Collect trans_rel\<rparr>"
   
 end
 
