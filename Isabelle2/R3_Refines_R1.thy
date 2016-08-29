@@ -1,8 +1,12 @@
+section {* R3 refines R1 *} 
+
 theory R3_Refines_R1   
 imports AbstractMultiPaxosR3 AbstractMultiPaxosR1 Simulations Hist_Supplemental IOA_Automation
 begin
 
-locale ref_proof = quorums quorums + amp_r3 leader next_bal as quorums 
+section {* A first attempt. *}
+
+locale ref_proof_1 = quorums quorums + amp_r3 leader next_bal as quorums 
   + r1:ampr1_ioa quorums leader
   for quorums :: "('a::linorder) set set" and leader :: "bal \<Rightarrow> ('a::linorder)" and next_bal as + 
   fixes ampr3_ioa :: "(('a, 'v) global_state, 'v paxos_action) ioa" 
@@ -17,33 +21,6 @@ definition ghost_ioa where
   "ghost_ioa \<equiv>
       let update = \<lambda> s h a s' . case a of Propose v \<Rightarrow> insert v h | _ \<Rightarrow> h;
         init = \<lambda> s . {}
-      in
-    add_history ampr3_ioa update init"
-
-definition voted where "voted s s' a i b \<equiv>
-  case votes (lstate s' a) $ i of Some (v, b) \<Rightarrow>
-    (case votes (lstate s a) $ i of None \<Rightarrow> Some v
-    | Some _ \<Rightarrow> None)
-  | None \<Rightarrow> None"
-  
-definition ghost_ioa_2 where 
-  -- {* This gets a little tricky. Why not define a history IOA without @{term add_hist} and 
-  prove trace inclusion with a forward simulation? *}
-  "ghost_ioa_2 \<equiv>
-      let update = \<lambda> s h a s' . case a of 
-        Propose v \<Rightarrow> h\<lparr>propCmd := insert v (propCmd h)\<rparr>
-        | Internal \<Rightarrow> 
-            h\<lparr>vote := \<lambda> i a b . case (votes (lstate s' a) $ i) of Some (v,b2) \<Rightarrow> 
-                (if b = b2 then Some v else (vote h i a b)) | None \<Rightarrow> None,
-              ampr1_state.ballot := \<lambda> a . local_state.ballot (lstate s' a),
-              suggestion := \<lambda> i b . case (log (lstate s' (leader b)) $ i) of Proposed v \<Rightarrow> (
-                    case (log (lstate s (leader b)) $ i) of Free \<Rightarrow> Some v | _ \<Rightarrow> suggestion h i b)
-                | Decided v \<Rightarrow> suggestion h i b
-                | Free \<Rightarrow> None,
-              onebs := \<lambda> a b . if local_state.ballot (lstate s' a) = b \<and> local_state.ballot (lstate s' a) \<noteq> b
-                then Some (op$ (votes (lstate s a))) else None\<rparr>
-        | _ \<Rightarrow> h;
-        init = \<lambda> s . r1.start_s
       in
     add_history ampr3_ioa update init"
 
@@ -87,21 +64,65 @@ lemma inv1:"invariant ghost_ioa inv1"
   apply(simp add: do_2a_def propose_def Let_def send_all_def split:if_splits option.splits)
   done
 
-text {*
-TODO: what about letting the ghost state be exactly the state of r1?
-That would give a very simple refinement map, but we will need to prove invariants
-relating the normal state to the ghost state.
-*}
+end
 
-definition ref_map where "ref_map s \<equiv> let r3_s = fst s; ghost_s = snd s in \<lparr>
-  ampr1_state.propCmd = ghost_s,
-  ampr1_state.ballot = (\<lambda> a . local_state.ballot (lstate r3_s a)),
-  ampr1_state.vote = undefined,
-  ampr1_state.suggestion = undefined,
-  ampr1_state.onebs = undefined,
-  ampr1_state.leader = undefined\<rparr>"
+section {* A second attempt *}
   
-lemma "is_ref_map ref_map ghost_ioa ampr1_ioa" 
+locale ref_proof = quorums quorums + amp_r3 leader next_bal as quorums 
+  + r1:ampr1_ioa quorums leader
+  for quorums :: "('a::linorder) set set" and leader :: "bal \<Rightarrow> ('a::linorder)" and next_bal as + 
+  fixes ampr3_ioa :: "(('a, 'v) global_state, 'v paxos_action) ioa" 
+    and ampr1_ioa :: "(('v, 'a, 'l) ampr1_state, 'v paxos_action) ioa" 
+  defines "ampr3_ioa \<equiv> ioa" and "ampr1_ioa \<equiv> r1.ioa"
+begin
+
+interpretation IOA .
+
+lemmas ioa_defs =
+   IOA.actions_def
+   IOA.externals_def IOA.add_history_def
+
+definition ghost_ioa where 
+  -- {* This gets a little tricky. Why not define a history IOA without @{term add_hist} and 
+  prove trace inclusion with a forward simulation? *}
+  "ghost_ioa \<equiv>
+      let update = \<lambda> s h a s' . case a of 
+        Propose v \<Rightarrow> h\<lparr>propCmd := insert v (propCmd h)\<rparr>
+        | Internal \<Rightarrow> 
+            h\<lparr>vote := \<lambda> i a b . case (votes (lstate s' a) $ i) of Some (v,b2) \<Rightarrow> 
+                (if b = b2 then Some v else (vote h i a b)) | None \<Rightarrow> None,
+              ampr1_state.ballot := \<lambda> a . local_state.ballot (lstate s' a),
+              suggestion := \<lambda> i b . case (log (lstate s' (leader b)) $ i) of Proposed v \<Rightarrow> (
+                    case (log (lstate s (leader b)) $ i) of Free \<Rightarrow> Some v | _ \<Rightarrow> suggestion h i b)
+                | Decided v \<Rightarrow> suggestion h i b
+                | Free \<Rightarrow> None,
+              onebs := \<lambda> a b . if local_state.ballot (lstate s' a) = b \<and> local_state.ballot (lstate s' a) \<noteq> b
+                then Some (op$ (votes (lstate s a))) else None\<rparr>
+        | _ \<Rightarrow> h;
+        init = \<lambda> s . r1.start_s
+      in
+    add_history ampr3_ioa update init"
+
+lemmas amp_defs = ioa_defs ampr1_ioa_def ampr3_ioa_def ghost_ioa_def
+  ioa_def global_start_def
+
+definition inv1 where "inv1 s \<equiv> let r3_s = fst s; h = snd s in
+  \<forall> a v . (Packet a (Fwd v)) \<in> network r3_s \<longrightarrow> v \<in> propCmd h"
+declare inv1_def[inv_proofs_defs]
+
+lemma inv2:"invariant ghost_ioa inv1"
+  apply (rule invariantI)
+   apply (simp add:inv1_def amp_defs)
+  apply (rm_reachable)
+  apply (simp add:ghost_ioa_def)
+  apply (simp only: split_paired_all)
+  apply (frule IOA.add_hist_trans(1), drule IOA.add_hist_trans(2))
+  apply (simp add:is_trans_def ampr3_ioa_def ioa_def)
+  apply (drule trans_cases) oops
+  
+definition ref_map where "ref_map s \<equiv> snd s"
+  
+lemma "is_ref_map ref_map ghost_ioa_2 ampr1_ioa"
 oops
   
 end
