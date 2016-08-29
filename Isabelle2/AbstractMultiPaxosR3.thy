@@ -65,7 +65,8 @@ fun last_contiguous :: "nat list \<Rightarrow> nat" where
 | "last_contiguous (x#y#xs) = (if y = Suc x then last_contiguous (y#xs) else x)"
 
 definition send_all where
-  "send_all s m \<equiv> (\<lambda> a . Packet a m) ` (acceptors s - {id s})"
+  "send_all s m \<equiv> { Packet a m | a . a \<in> acceptors s \<and> a \<noteq> id s}"
+  (* "send_all s m \<equiv> (\<lambda> a . Packet a m) ` (acceptors s - {id s})" *)
 
 definition next_inst where "next_inst s \<equiv>
   last_contiguous (finfun_to_list (log s))"
@@ -303,19 +304,17 @@ proof -
       defer
       apply (metis fst_conv propose snd_conv)
      apply (metis acquire_leadership fst_conv snd_conv)
-    subgoal premises prems for a m
-    proof -
-      show ?thesis using prems 
-        apply (induct m rule:process_msg.induct)
-            apply (metis fst_conv process_msg.simps(1) receive_1a snd_conv)
-           apply (metis fst_conv process_msg.simps(2) receive_2a snd_conv)
-          defer
-          apply (metis fst_conv process_msg.simps(4) receive_1b snd_conv)
-         apply (metis amp_r3.process_msg.simps(5) fst_conv fwd snd_conv)
-        by (metis fst_conv process_msg.simps(3) receive_2b snd_conv)
-    qed
+    subgoal premises prems for a m (* TODO: how to apply induct here, without subgoal...*)
+      using prems 
+      apply (induct rule:process_msg.induct)
+          apply (metis fst_conv process_msg.simps(1) receive_1a snd_conv)
+         apply (metis fst_conv process_msg.simps(2) receive_2a snd_conv)
+        defer
+        apply (metis fst_conv process_msg.simps(4) receive_1b snd_conv)
+       apply (metis amp_r3.process_msg.simps(5) fst_conv fwd snd_conv)
+      by (metis fst_conv process_msg.simps(3) receive_2b snd_conv)
     done
-qed  
+qed
 
 definition ioa where
   "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, ioa.start = {global_start}, ioa.trans = Collect trans_rel\<rparr>"
