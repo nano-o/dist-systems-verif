@@ -135,11 +135,31 @@ lemma inv1:"invariant ghost_ioa inv1"
   qed
   apply (simp add:receive_fwd_def do_2a_def Let_def send_all_def split:if_splits)
   done
-  
+declare inv1[invs]
+
 definition ref_map where "ref_map s \<equiv> snd s"
   
-lemma "is_ref_map ref_map ghost_ioa_2 ampr1_ioa"
-oops
+lemma "is_ref_map ref_map ghost_ioa ampr1_ioa"
+  apply (auto simp add:is_ref_map_def)
+   apply (simp add:ghost_ioa_def add_history_def ampr3_ioa_def r1.start_s_def ampr1_ioa_def r1.ioa_def r1.start_def
+      ref_map_def)
+  apply (insert invs)
+  apply (instantiate_invs)
+  apply (rm_reachable)
+  apply (simp add:ghost_ioa_def)
+  apply (frule IOA.add_hist_trans(1), drule IOA.add_hist_trans(2))
+  apply (simp add:is_trans_def ampr3_ioa_def ioa_def)
+  apply (elim trans_cases)
+  (* Propose *)
+  subgoal premises prems for x1 x2 x3 x4 x5 x6 x7
+    apply (rule exI[where ?x=x2], rule exI[where ?x="[(Propose x7, update x1 x2 x5 x3)]"])
+    apply (insert prems)
+    apply (auto simp add:ampr1_ioa_def ref_map_def refines_def update_def is_trans_def r1.ioa_def
+        r1.trans_def trace_match_def paxos_asig_def Let_def inv1_def r1.propose_def externals_def 
+        trace_def schedule_def filter_act_def propose_def do_2a_def split!:if_splits)
+    done
+  oops
+  
   
 end
 
