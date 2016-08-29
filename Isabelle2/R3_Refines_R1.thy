@@ -20,6 +20,33 @@ definition ghost_ioa where
       in
     add_history ampr3_ioa update init"
 
+definition voted where "voted s s' a i b \<equiv>
+  case votes (lstate s' a) $ i of Some (v, b) \<Rightarrow>
+    (case votes (lstate s a) $ i of None \<Rightarrow> Some v
+    | Some _ \<Rightarrow> None)
+  | None \<Rightarrow> None"
+  
+definition ghost_ioa_2 where 
+  -- {* This gets a little tricky. Why not define a history IOA without @{term add_hist} and 
+  prove trace inclusion with a forward simulation? *}
+  "ghost_ioa_2 \<equiv>
+      let update = \<lambda> s h a s' . case a of 
+        Propose v \<Rightarrow> h\<lparr>propCmd := insert v (propCmd h)\<rparr>
+        | Internal \<Rightarrow> 
+            h\<lparr>vote := \<lambda> i a b . case (votes (lstate s' a) $ i) of Some (v,b2) \<Rightarrow> 
+                (if b = b2 then Some v else (vote h i a b)) | None \<Rightarrow> None,
+              ampr1_state.ballot := \<lambda> a . local_state.ballot (lstate s' a),
+              suggestion := \<lambda> i b . case (log (lstate s' (leader b)) $ i) of Proposed v \<Rightarrow> (
+                    case (log (lstate s (leader b)) $ i) of Free \<Rightarrow> Some v | _ \<Rightarrow> suggestion h i b)
+                | Decided v \<Rightarrow> suggestion h i b
+                | Free \<Rightarrow> None,
+              onebs := \<lambda> a b . if local_state.ballot (lstate s' a) = b \<and> local_state.ballot (lstate s' a) \<noteq> b
+                then Some (op$ (votes (lstate s a))) else None\<rparr>
+        | _ \<Rightarrow> h;
+        init = \<lambda> s . r1.start_s
+      in
+    add_history ampr3_ioa update init"
+
 lemmas ioa_defs =
    IOA.actions_def
    IOA.externals_def IOA.add_history_def
@@ -50,7 +77,7 @@ lemma inv1:"invariant ghost_ioa inv1"
     apply(simp add:receive_1b_def receive_1b.msgs_def msgs_def Let_def send_all_def split:if_splits option.splits)
   subgoal proof -
     fix a :: "('a, 'v) global_state" and b :: "'v set" and ac :: 'a and bb :: nat and vs :: "nat \<Rightarrow>f ('v \<times> nat) option" and ad :: "('a, 'v) local_state" and bc :: "('a, 'v) packet set" and ae :: 'a and v :: 'v
-    assume a1: "(\<exists>x. finfun_dom (receive_1b.new_log (the (local_state.onebs (local_states a ac) $ bb)) (acceptors (local_states a ac)) (log (local_states a ac))) $ x \<and> (Fwd v::('a, 'v) msg) = (case the_elem (receive_1b.max_per_inst (the (local_state.onebs (local_states a ac) $ bb)) (acceptors (local_states a ac)) $ x) of (v, b) \<Rightarrow> Phase2a x b v)) \<and> ae \<in> acceptors (local_states a ac) \<and> ae \<noteq> local_state.id (local_states a ac)"
+    assume a1: "(\<exists>x. finfun_dom (receive_1b.new_log (the (local_state.onebs (lstate a ac) $ bb)) (acceptors (lstate a ac)) (log (lstate a ac))) $ x \<and> (Fwd v::('a, 'v) msg) = (case the_elem (receive_1b.max_per_inst (the (local_state.onebs (lstate a ac) $ bb)) (acceptors (lstate a ac)) $ x) of (v, b) \<Rightarrow> Phase2a x b v)) \<and> ae \<in> acceptors (lstate a ac) \<and> ae \<noteq> local_state.id (lstate a ac)"
     have "\<And>n p v. (case p of (v, na) \<Rightarrow> Phase2a n na v) \<noteq> (Fwd v::('a, 'v) msg)"
       by (metis amp_r3.msg.distinct(17) case_prod_conv surj_pair)
     then show "v \<in> b"
@@ -68,7 +95,7 @@ relating the normal state to the ghost state.
 
 definition ref_map where "ref_map s \<equiv> let r3_s = fst s; ghost_s = snd s in \<lparr>
   ampr1_state.propCmd = ghost_s,
-  ampr1_state.ballot = (\<lambda> a . local_state.ballot (local_states r3_s a)),
+  ampr1_state.ballot = (\<lambda> a . local_state.ballot (lstate r3_s a)),
   ampr1_state.vote = undefined,
   ampr1_state.suggestion = undefined,
   ampr1_state.onebs = undefined,

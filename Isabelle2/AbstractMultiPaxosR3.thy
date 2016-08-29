@@ -239,62 +239,62 @@ end
 subsection {* Global system IOA. *} 
 
 record ('a,'v) global_state =
-  local_states :: "'a \<Rightarrow> ('a, 'v)local_state"
+  lstate :: "'a \<Rightarrow> ('a, 'v)local_state"
   network :: "('a, 'v) amp_r3.packet set"
 
 context amp_r3 begin
 
 definition global_start where "global_start \<equiv>
-  \<lparr>local_states = (\<lambda> a . local_start a), network = {}\<rparr>"
+  \<lparr>lstate = (\<lambda> a . local_start a), network = {}\<rparr>"
 
 inductive trans_rel :: "(('a,'v) global_state \<times> 'v paxos_action \<times> ('a,'v) global_state) \<Rightarrow> bool" where
-  "\<lbrakk>(Packet a m) \<in> network s; process_msg ((local_states s) a) m = (sa', ms); m = Phase2b a i b v;
-    log ((local_states s) a) \<noteq> log sa'\<rbrakk>
+  "\<lbrakk>(Packet a m) \<in> network s; process_msg ((lstate s) a) m = (sa', ms); m = Phase2b a i b v;
+    log ((lstate s) a) \<noteq> log sa'\<rbrakk>
     \<Longrightarrow> trans_rel (s, Learn i v, 
-      s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms\<rparr>)"
-| "\<lbrakk>(Packet a m) \<in> network s; process_msg ((local_states s) a) m = (sa', ms)\<rbrakk>
+      s\<lparr>lstate := (lstate s)(a := sa'), network := network s \<union> ms\<rparr>)"
+| "\<lbrakk>(Packet a m) \<in> network s; process_msg ((lstate s) a) m = (sa', ms)\<rbrakk>
     \<Longrightarrow> trans_rel (s, Internal, 
-      s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms\<rparr>)"
-| "\<lbrakk>propose ((local_states s) a) v = (sa', ms)\<rbrakk>
+      s\<lparr>lstate := (lstate s)(a := sa'), network := network s \<union> ms\<rparr>)"
+| "\<lbrakk>propose ((lstate s) a) v = (sa', ms)\<rbrakk>
     \<Longrightarrow> trans_rel (s, Propose v, 
-      s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms\<rparr>)"
-| "\<lbrakk>try_acquire_leadership ((local_states s) a) = (sa', ms)\<rbrakk>
+      s\<lparr>lstate := (lstate s)(a := sa'), network := network s \<union> ms\<rparr>)"
+| "\<lbrakk>try_acquire_leadership ((lstate s) a) = (sa', ms)\<rbrakk>
     \<Longrightarrow> trans_rel (s, Internal, 
-      s\<lparr>local_states := (local_states s)(a := sa'), network := network s \<union> ms\<rparr>)"
+      s\<lparr>lstate := (lstate s)(a := sa'), network := network s \<union> ms\<rparr>)"
   
 inductive_cases trans_rel_cases:"trans_rel (s,a,s')"
 
 abbreviation(input) local_step where "local_step a p r r' \<equiv> 
-  r' = r\<lparr>local_states := (local_states r)(a := fst p), network := network r \<union> snd p\<rparr>"
+  r' = r\<lparr>lstate := (lstate r)(a := fst p), network := network r \<union> snd p\<rparr>"
   
 lemma trans_cases:
   assumes "trans_rel (r, act, r')"
   obtains
-    (propose) a v where "act = Propose v" and "local_step a (propose (local_states r a) v) r r'"
+    (propose) a v where "act = Propose v" and "local_step a (propose (lstate r a) v) r r'"
   | (learn) a i b v m p where "act = Learn i v" and "m = Phase2b a i b v"
-    and "p = receive_2b (local_states r a) i b a v"
+    and "p = receive_2b (lstate r a) i b a v"
     and "local_step a p r r'"
     and "Packet a m \<in> network r" 
-    and "log (local_states r a) \<noteq> log (fst p)"
-  | (acquire_leadership) a where "act = Internal" and "local_step a (try_acquire_leadership (local_states r a)) r r'"
+    and "log (lstate r a) \<noteq> log (fst p)"
+  | (acquire_leadership) a where "act = Internal" and "local_step a (try_acquire_leadership (lstate r a)) r r'"
   | (receive_1a) a b m p where "act = Internal" and "m = Phase1a b"
-    and "p = receive_1a (local_states r a) b"
+    and "p = receive_1a (lstate r a) b"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
   | (receive_2a) a i b v m p where "act = Internal" and "m = Phase2a i b v"
-    and "p = receive_2a (local_states r a) i b v"
+    and "p = receive_2a (lstate r a) i b v"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
   | (receive_2b) a a2 i b v m p where "act = Internal" and "m = Phase2b a2 i b v"
-    and "p = receive_2b (local_states r a) i b a2 v"
+    and "p = receive_2b (lstate r a) i b a2 v"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
   | (receive_1b) a b vs m p where "act = Internal" and "m = Phase1b b vs"
-    and "p = receive_1b (local_states r a) b vs"
+    and "p = receive_1b (lstate r a) b vs"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
   | (fwd) a v m p where "act = Internal" and "m = Fwd v"
-    and "p = receive_fwd (local_states r a) v"
+    and "p = receive_fwd (lstate r a) v"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
 proof -
@@ -304,8 +304,8 @@ proof -
       defer
       apply (metis fst_conv propose snd_conv)
      apply (metis acquire_leadership fst_conv snd_conv)
-    subgoal premises prems for a m (* TODO: how to apply induct here, without subgoal...*)
-      using prems 
+    subgoal premises prems for a m (* TODO: how to apply induct here without subgoal? *)
+      using prems
       apply (induct rule:process_msg.induct)
           apply (metis fst_conv process_msg.simps(1) receive_1a snd_conv)
          apply (metis fst_conv process_msg.simps(2) receive_2a snd_conv)
@@ -318,7 +318,7 @@ qed
 
 definition ioa where
   "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, ioa.start = {global_start}, ioa.trans = Collect trans_rel\<rparr>"
-  
+
 end
 
 end

@@ -15,7 +15,7 @@ record ('v,'a,'l) ampr1_state =
   vote :: "inst \<Rightarrow> 'a \<Rightarrow> bal \<rightharpoonup> 'v"
   suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> ('v\<times>bal))"
-  leader :: "'a \<Rightarrow> bool"
+  (* leader :: "'a \<Rightarrow> bool" TODO: was this needed? *)
 
 global_interpretation dsa:distributed_safe_at quorums ballot vote for quorums ballot vote 
   defines acc_max = dsa.acc_max and max_quorum_votes = dsa.max_quorum_votes .
@@ -25,12 +25,14 @@ locale ampr1_ioa =
   -- {* @{term leader} determines the leader of a ballot. *}
 begin
 
-definition start where
+definition start_s where
   -- {* The initial state *}
-  "start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> i a . Map.empty), 
-    suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty,
-    leader = \<lambda> a . leader 0 = a\<rparr>}"
+  "start_s \<equiv> \<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> i a . Map.empty), 
+    suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty (*,
+    leader = \<lambda> a . leader 0 = a *)\<rparr>"
 
+definition start where "start \<equiv> {start_s}"
+  
 subsection {* The transitions *}
 
 definition propose where
@@ -42,16 +44,16 @@ definition join_ballot where
     in
       b > (ballot s a)
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
-        onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')),
-        leader := (ampr1_state.leader s)(a := False)\<rparr>"
+        onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')) (*,
+        leader := (ampr1_state.leader s)(a := False) *)\<rparr>"
 
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in
     leader b = a
     \<and> q \<in> quorums
-    \<and> \<not> ampr1_state.leader s a
+    (* \<and> \<not> ampr1_state.leader s a *)
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
-    \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True),
+    \<and> s' = s\<lparr>(*leader := (ampr1_state.leader s)(a := True),*)
         suggestion := \<lambda> i . (suggestion s i)(b :=
           let a_max = \<lambda> a . the (onebs s a b) i; m = dsa.max_quorum_votes q a_max
           in if m = {} then None else Some (fst (the_elem m)))\<rparr>"
@@ -61,7 +63,7 @@ definition acquire_leadership where
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
         \<and> ballot s a = b
-        \<and> ampr1_state.leader s a
+        (* \<and> ampr1_state.leader s a *)
         \<and> suggestion s i b = None
         \<and> s' = s\<lparr>suggestion := (suggestion s)(i := (suggestion s i)(b \<mapsto> v))\<rparr>"
 
