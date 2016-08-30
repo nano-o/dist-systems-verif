@@ -45,7 +45,7 @@ begin
 
 datatype ('aa,'vv) msg =
   Phase1a bal
-  | Phase1b bal "inst \<Rightarrow>f ('vv \<times> bal) option"
+  | Phase1b 'aa bal "inst \<Rightarrow>f ('vv \<times> bal) option"
   | Phase2a inst bal 'vv
   | Phase2b 'aa inst bal 'vv
   (* | Decision inst 'v *)
@@ -83,7 +83,7 @@ definition do_2a where "do_2a s v \<equiv>
   
 definition propose where "propose s v \<equiv> 
   let l = leader (ballot s) in
-    if l = id s 
+    if l = id s
     then do_2a s v
     else (s, {Packet l (Fwd v)})"
   -- {* TODO: Here we loose the proposal if it happens during an unsuccessful
@@ -132,7 +132,7 @@ subsection {* The @{text receive_1a} action *}
 
 definition receive_1a where "receive_1a s b \<equiv> if b > ballot s then
       let 
-        msgs = {Packet (leader b) (Phase1b b (votes s))};
+        msgs = {Packet (leader b) (Phase1b (id s) b (votes s))};
         s' = s\<lparr>ballot := b\<rparr>
       in (s', msgs)
     else (s, {})"
@@ -189,8 +189,8 @@ global_interpretation r1:receive_1b votes as log for votes as log
 
 context amp_r3 begin
 
-definition receive_1b where "receive_1b s b vs \<equiv>
-  let s' = s\<lparr>onebs := new_onebs (onebs s) vs b (id s)\<rparr>
+definition receive_1b where "receive_1b s a b vs \<equiv>
+  let s' = s\<lparr>onebs := new_onebs (onebs s) vs b a\<rparr>
   in (if (set (finfun_to_list (the (onebs s' $ b))) = acceptors s) 
     then let
         s'' = s'\<lparr>log := new_log (the (onebs s $ b)) (acceptors s) (log s)\<rparr>;
@@ -231,7 +231,7 @@ fun process_msg where
   "process_msg s (Phase1a b) = receive_1a s b"
   | "process_msg s (Phase2a i b v) = receive_2a s i b v"
   | "process_msg s (Phase2b a i b v) = receive_2b s i b a v"
-  | "process_msg s (Phase1b b vs) = receive_1b s b vs"
+  | "process_msg s (Phase1b a b vs) = receive_1b s a b vs"
   | "process_msg s (Fwd v) = receive_fwd s v"
 
 end
@@ -289,8 +289,8 @@ lemma trans_cases:
     and "p = receive_2b (lstate r a) i b a2 v"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
-  | (receive_1b) a b vs m p where "act = Internal" and "m = Phase1b b vs"
-    and "p = receive_1b (lstate r a) b vs"
+  | (receive_1b) a b vs m p a2 where "act = Internal" and "m = Phase1b a2 b vs"
+    and "p = receive_1b (lstate r a) a2 b vs"
     and "local_step a p r r'"
     and "Packet a m \<in> network r"
   | (fwd) a v m p where "act = Internal" and "m = Fwd v"
