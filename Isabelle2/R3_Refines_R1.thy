@@ -333,6 +333,10 @@ lemma inv2:"invariant ampr3_ioa inv2"
   apply trans_cases
   oops
 
+definition inv4 where "inv4 s \<equiv> \<forall> a . log (lstate s a) $ 0 = Free"
+  
+lemma inv4:"invariant ampr3_ioa inv4" oops
+  
 fun extract_vs where 
   "extract_vs (Fwd v) = {v}"
 | "extract_vs (Phase2a _ _ v) = {v}"
