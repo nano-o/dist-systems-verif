@@ -72,6 +72,10 @@ definition next_inst where "next_inst s \<equiv>
   last_contiguous (finfun_to_list (log s))"
   -- {* TODO: optimize using a definition with finfun_rec. *}
   
+lemma "finfun_default (log s) = Free \<Longrightarrow> (log s) $ (next_inst s) = Free"
+  apply (simp add:next_inst_def)
+  apply (induct "finfun_to_list (log s)" rule:last_contiguous.induct)
+  
 definition do_2a where "do_2a s v \<equiv>
   let
     i = next_inst s;

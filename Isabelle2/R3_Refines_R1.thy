@@ -289,6 +289,8 @@ interpretation IOA .
 
 lemmas action_defs = propose_def do_2a_def receive_2b_def
       try_acquire_leadership_def receive_1a_def receive_2a_def receive_1b_def receive_fwd_def
+  send_all_def Let_def
+
 lemmas init_defs = ampr3_ioa_def ioa_def global_start_def local_start_def
   ampr1_ioa_def r1.ioa_def r1.start_def r1.start_s_def 
 
@@ -305,6 +307,32 @@ lemma inv1:"invariant ampr3_ioa inv1"
   done
 declare inv1[invs]
 
+definition inv2 where inv2_def:
+  "inv2 s \<equiv> \<forall> i b v a . Packet a (Phase2a i b v) \<in> network s 
+    \<longrightarrow> log (lstate s (leader b)) $ i = Free"
+lemma inv2:"invariant ampr3_ioa inv2"
+  apply (rule invariantI)
+   apply (simp add:inv2_def init_defs)
+  apply (insert invs)
+  apply (instantiate_invs)
+  apply (rm_reachable)
+  apply trans_cases
+         apply (simp_all add:inv2_def inv1_def action_defs split!:if_splits) 
+  oops
+  
+definition inv3 where 
+  "inv3 s \<equiv> \<forall> i a b d1 v1 d2 v2 . 
+    Packet d1 (Phase2b a i b v1) \<in> network s \<and> Packet d2 (Phase2b a i b v2) \<in> network s
+    \<longrightarrow> v1 = v2 \<and> d1 = d2"
+lemma inv2:"invariant ampr3_ioa inv2"
+  apply (rule invariantI)
+   apply (simp add:inv2_def init_defs)
+  apply (insert invs)
+  apply (instantiate_invs)
+  apply (rm_reachable)
+  apply trans_cases
+  oops
+
 fun extract_vs where 
   "extract_vs (Fwd v) = {v}"
 | "extract_vs (Phase2a _ _ v) = {v}"
@@ -315,38 +343,21 @@ fun extract_vs where
   
 definition propCmd where "propCmd s \<equiv> \<Union> ((\<lambda> p . case p of Packet _ m \<Rightarrow> extract_vs m) ` network s)"
 
-definition propCmd2 where "propCmd2 s \<equiv> {v . \<exists> a \<in> as . 
-  Packet a (Fwd v) \<in> network s 
-  \<or> (\<exists> i b . Packet a (Phase2a i b v) \<in> network s)
-  \<or> (\<exists> a2 \<in> as . \<exists> i b v . Packet a (Phase2b a2 i b v) \<in> network s)
-  \<or> (\<exists> a2 \<in> as . \<exists> b ff i b2 . Packet a (Phase1b a2 b ff) \<in> network s \<and> ff $ i = Some (v,b2))}"
-
 definition ref_map where "ref_map s \<equiv> \<lparr>
   ampr1_state.propCmd = propCmd s,
   ballot = \<lambda> a . local_state.ballot (lstate s a),
   vote = \<lambda> i a b . if (\<exists> a2 v . Packet a2 (Phase2b a i b v) \<in> network s) 
-    then Some (the_elem {v . \<exists> a2 v . Packet a2 (Phase2b a i b v) \<in> network s}) else None,
+    then Some (the_elem {v . \<exists> a2 . Packet a2 (Phase2b a i b v) \<in> network s}) else None,
   suggestion = \<lambda> i b . if (\<exists> a v. Packet a (Phase2a i b v) \<in> network s) 
     then Some (the_elem {v . \<exists> a . Packet a (Phase2a i b v) \<in> network s}) else None,
   onebs = \<lambda> a b . if (\<exists> ff . Packet (leader b) (Phase1b a b ff) \<in> network s) 
-    then Some (the_elem {op$ ff | ff . Packet (leader b) (Phase1b a b ff) \<in> network s}) else None\<rparr>
-
-(* 
-  ampr1_state.propCmd t = propCmd s
-  \<and> ballot t = (\<lambda> a . local_state.ballot (lstate s a))
-  \<and> (\<forall> i b v . suggestion t i b = None \<longleftrightarrow> (\<forall> a . Packet a (Phase2a i b v) \<notin> network s))
-  \<and> (\<forall> i b v . suggestion t i b = Some v \<longleftrightarrow> (\<forall> a . a \<noteq> leader b \<longrightarrow> Packet a (Phase2a i b v) \<in> network s))
-  \<and> (\<forall> i b v a . vote t i a b = None \<longleftrightarrow> (\<forall> a2 . Packet a2 (Phase2b a i b v) \<notin> network s))
-  \<and> (\<forall> i b v a . vote t i a b = Some v \<longleftrightarrow> (\<forall> a2 . a2 \<noteq> a \<longrightarrow> Packet a2 (Phase2b a i b v) \<in> network s))
-  \<and> (\<forall> a b ff . onebs t a b = None \<longleftrightarrow> (Packet (leader b) (Phase1b a b ff) \<notin> network s))
-  \<and> (\<forall> a b f . onebs t a b = Some f \<longleftrightarrow> (Packet (leader b) (Phase1b a b (Abs_finfun f)) \<in> network s))} *)"
+    then Some (the_elem {op$ ff | ff . Packet (leader b) (Phase1b a b ff) \<in> network s}) else None\<rparr>"
   
-lemmas sim_defs = fwd_sim_def propCmd_def 
+lemmas ref_defs = ref_map_def propCmd_def 
 
-lemma "is_forward_sim fwd_sim ampr3_ioa ampr1_ioa"
-  apply (auto simp add:is_forward_sim_def)
-   apply (simp add:init_defs sim_defs)
-   apply (metis ref_proof_3.axioms(2) ref_proof_3_axioms ref_proof_3_axioms_def)
+lemma "is_ref_map ref_map ampr3_ioa ampr1_ioa"
+  apply (auto simp add:is_ref_map_def)
+   apply (simp add:init_defs ref_defs)
   apply (insert invs)
   apply (instantiate_invs)
   apply (rm_reachable)
