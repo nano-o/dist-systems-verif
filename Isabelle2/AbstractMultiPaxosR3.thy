@@ -74,7 +74,8 @@ fun first_hole :: "nat list \<Rightarrow> nat" where
 value "first_hole [1]"
 value "let l = [1] in dropWhile (flip op\<le> (first_hole l)) l"
 
-lemma assumes "sorted l" and "distinct l" and "\<forall> x \<in> set l . x > 0" 
+lemma first_hole_lemma:
+  assumes "sorted l" and "distinct l" and "\<And> x . x \<in> set l \<Longrightarrow> x > 0" 
     shows "first_hole l \<notin> set l"
 proof -
   have "first_hole l \<notin> set l \<and> (l \<noteq> [] \<longrightarrow> first_hole l > hd l)"
@@ -113,13 +114,20 @@ definition next_inst where "next_inst s \<equiv>
   first_hole (finfun_to_list (log s))"
   -- {* TODO: optimize using a definition with finfun_rec. *}
   
-lemma
+lemma next_inst_lemma:
   fixes s 
-  assumes "finfun_default (log s) = Free"
-  shows "(log s) $ (next_inst s) = Free" unfolding next_inst_def
-  using set_finfun_to_list[of "log s"]
-  apply (simp add:next_inst_def)
-  apply (induct "finfun_to_list (log s)" rule:first_hole.induct)
+  assumes "finfun_default (log s) = Free" and "log s $ 0 = Free"
+  shows "(log s) $ (next_inst s) = Free"
+proof -
+  let ?l="finfun_to_list (log s)"
+  have 1:"\<And> x . x \<in> set ?l \<Longrightarrow> 0 < x" using assms apply auto
+    by (metis finfun_dom_conv neq0_conv) 
+  have 2:"distinct ?l" and 3:"sorted ?l"
+     apply (simp add: distinct_finfun_to_list)
+    by (simp add: sorted_finfun_to_list)
+  show ?thesis using assms(1) first_hole_lemma[OF 3 2 1] apply simp apply (auto simp add:next_inst_def)
+    by (simp add: finfun_dom_conv)
+qed
   
 definition do_2a where "do_2a s v \<equiv>
   let
