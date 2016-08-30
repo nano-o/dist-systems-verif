@@ -60,21 +60,66 @@ definition local_start where "local_start a \<equiv>
 
 subsection {* The propose action *} 
 
-fun last_contiguous :: "nat list \<Rightarrow> nat" where 
-  "last_contiguous [x] = x"
-| "last_contiguous (x#y#xs) = (if y = Suc x then last_contiguous (y#xs) else x)"
-
 definition send_all where
   "send_all s m \<equiv> { Packet a m | a . a \<in> acceptors s \<and> a \<noteq> id s}"
   (* "send_all s m \<equiv> (\<lambda> a . Packet a m) ` (acceptors s - {id s})" *)
 
+end 
+
+fun first_hole :: "nat list \<Rightarrow> nat" where 
+  "first_hole [] = Suc 0"
+| "first_hole [x] = Suc x"
+| "first_hole (x#y#xs) = (if y = Suc x then first_hole (y#xs) else Suc x)"
+  
+value "first_hole [1]"
+value "let l = [1] in dropWhile (flip op\<le> (first_hole l)) l"
+
+lemma assumes "sorted l" and "distinct l" and "\<forall> x \<in> set l . x > 0" 
+    shows "first_hole l \<notin> set l"
+proof -
+  have "first_hole l \<notin> set l \<and> (l \<noteq> [] \<longrightarrow> first_hole l > hd l)"
+    using assms
+  proof (induct l rule:first_hole.induct)
+    case 1
+    then show ?case
+      by simp 
+  next
+    case (2 x)
+    then show ?case
+      by simp
+  next
+    case (3 x y xs)
+    from "3.prems" have 4:"sorted (y#xs)" and 5:"distinct (y#xs)" using sorted_Cons by auto
+    show ?case proof (cases "y = Suc x")
+      case True
+      hence 6:"first_hole (x#y#xs) = first_hole (y#xs)" by auto
+      have 7:"y < first_hole (y#xs)" using 4 5 3 True by auto
+      show ?thesis using 3 4 5 6 7 True by auto
+    next
+      case False
+      with \<open>sorted (x#y#xs)\<close> and \<open>distinct (x#y#xs)\<close> have "\<And> z . z \<in> set (y#xs) \<Longrightarrow> z > Suc x"
+        apply auto by (metis Suc_lessI le_imp_less_or_eq le_less_Suc_eq le_trans sorted_Cons)
+      then show ?thesis apply simp using not_less by blast
+    qed
+  qed
+  thus ?thesis
+    by blast 
+qed
+  
+context amp_r3
+begin
+
 definition next_inst where "next_inst s \<equiv>
-  last_contiguous (finfun_to_list (log s))"
+  first_hole (finfun_to_list (log s))"
   -- {* TODO: optimize using a definition with finfun_rec. *}
   
-lemma "finfun_default (log s) = Free \<Longrightarrow> (log s) $ (next_inst s) = Free"
+lemma
+  fixes s 
+  assumes "finfun_default (log s) = Free"
+  shows "(log s) $ (next_inst s) = Free" unfolding next_inst_def
+  using set_finfun_to_list[of "log s"]
   apply (simp add:next_inst_def)
-  apply (induct "finfun_to_list (log s)" rule:last_contiguous.induct)
+  apply (induct "finfun_to_list (log s)" rule:first_hole.induct)
   
 definition do_2a where "do_2a s v \<equiv>
   let
@@ -94,7 +139,6 @@ definition propose where "propose s v \<equiv>
   leadership acquisition attempt. *}
 
 subsection {* The @{text receive_fwd} action *}
-
 definition receive_fwd where "receive_fwd s v \<equiv>
   let l = leader (ballot s) in
     if l = id s
