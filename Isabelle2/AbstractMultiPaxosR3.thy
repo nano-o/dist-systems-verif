@@ -235,14 +235,22 @@ locale receive_1b_lemmas = receive_1b votes as log for votes as log +
     and "finfun_default log = Free" and "finite as"
 begin
 
+interpretation folding_idem combine "K$ {}"
+  apply (unfold_locales)
+   apply (auto simp add:combine_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
+  done
+
 lemma pre_inst_lemma:
   "\<And> ff . ff \<in> per_inst \<Longrightarrow> finfun_default ff = None"
   using receive_1b_lemmas_axioms receive_1b_lemmas_def
   using per_inst_def by (metis (mono_tags, lifting) imageE)
 
-declare [[show_sorts,show_types]]
+lemma assumes "finfun_default (ff1::nat \<Rightarrow>f 'd) = d1" and "finfun_default (ff2::nat \<Rightarrow>f 'c) = d2"
+  shows "finfun_default ($ ff1, ff2 $) = (d1,d2)" using assms oops
+  (* TODO: transfer is not setup for finfun_Diag... *)
+
 lemma votes_per_inst_lemma:
-  fixes s assumes "finite s"
+  fixes s assumes "finite s" and "\<And> ff . ff \<in> s \<Longrightarrow> finfun_default ff = None"
   shows "finfun_default (votes_per_inst s) = {}"
 proof (simp add:votes_per_inst_def)
   show "finfun_default (Finite_Set.fold combine (K$ {}) s) = {}" using assms
@@ -251,8 +259,15 @@ proof (simp add:votes_per_inst_def)
     then show ?case by (simp add:combine_def finfun_default_const)
   next
     case (insert x F)
-    then show ?case 
-  qed
+    have 1:"Finite_Set.fold combine (K$ {}) (insert x F)
+      = combine x (Finite_Set.fold combine (K$ {}) F)" using insert_idem
+      by (metis eq_fold insert.hyps(1))
+    have 2:"finfun_default (Finite_Set.fold combine (K$ {}) F) = {}"
+      by (simp add: insert.hyps(3) insert.prems)
+    hence 3:"finfun_default ($ x, Finite_Set.fold combine (K$ {}) F $) = (None, {})" 
+      using insert(4) apply auto oops
+    show ?case apply (simp add:1) apply (auto simp add:combine_def option_as_set_def)
+  qed oops
 
 lemma new_log_lemma:
   "finfun_default new_log = Free" apply (simp add:new_log_def) oops
