@@ -203,7 +203,8 @@ interpretation folding_idem combine "K$ {}"
   apply (unfold_locales)
    apply (auto simp add:combine_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
   done
-definition votes_per_inst where "votes_per_inst \<equiv> \<lambda> s . Finite_Set.fold combine (K$ {}) s"
+definition votes_per_inst :: "(nat \<Rightarrow>f 'c option) set \<Rightarrow> nat \<Rightarrow>f 'c set" where
+  "votes_per_inst s \<equiv> Finite_Set.fold combine (K$ {}) s"
 lemma votes_per_inst_code[code]: "votes_per_inst (set (x#xs)) = combine x (votes_per_inst (set xs))"
 proof -
   let ?fold_expr = "\<lambda> s . Finite_Set.fold combine (K$ {}) s"
@@ -239,17 +240,7 @@ lemma pre_inst_lemma:
   using receive_1b_lemmas_axioms receive_1b_lemmas_def
   using per_inst_def by (metis (mono_tags, lifting) imageE)
 
-thm finite_empty_induct
-lemma votes_per_inst_lemma:
-  fixes s P assumes "finite s"
-  shows "P s" using assms
-  apply (induct s) oops
-
-lemma "infinite (UNIV::'a set) \<Longrightarrow> infinite (UNIV::('a \<Rightarrow> 'b) set)" 
-proof (rule ccontr)
-  assume "\<not> infinite (UNIV::('a \<Rightarrow> 'b) set)"
-  show False oops
-  
+declare [[show_sorts,show_types]]
 lemma votes_per_inst_lemma:
   fixes s assumes "finite s"
   shows "finfun_default (votes_per_inst s) = {}"
@@ -257,10 +248,10 @@ proof (simp add:votes_per_inst_def)
   show "finfun_default (Finite_Set.fold combine (K$ {}) s) = {}" using assms
   proof (induct s)
     case empty
-    then show ?case apply (simp add:combine_def finfun_default_const) oops
+    then show ?case by (simp add:combine_def finfun_default_const)
   next
     case (insert x F)
-    then show ?case sorry
+    then show ?case 
   qed
 
 lemma new_log_lemma:
