@@ -70,13 +70,10 @@ fun first_hole :: "nat list \<Rightarrow> nat" where
   "first_hole [] = Suc 0"
 | "first_hole [x] = Suc x"
 | "first_hole (x#y#xs) = (if y = Suc x then first_hole (y#xs) else Suc x)"
-  
-value "first_hole [1]"
-value "let l = [1] in dropWhile (flip op\<le> (first_hole l)) l"
 
 lemma first_hole_lemma:
   assumes "sorted l" and "distinct l" and "\<And> x . x \<in> set l \<Longrightarrow> x > 0" 
-    shows "first_hole l \<notin> set l"
+    shows "first_hole l \<notin> set l" and "l \<noteq> [] \<Longrightarrow> first_hole l > hd l"
 proof -
   have "first_hole l \<notin> set l \<and> (l \<noteq> [] \<longrightarrow> first_hole l > hd l)"
     using assms
@@ -103,8 +100,8 @@ proof -
       then show ?thesis apply simp using not_less by blast
     qed
   qed
-  thus ?thesis
-    by blast 
+  thus "first_hole l \<notin> set l" and "l \<noteq> [] \<Longrightarrow> first_hole l > hd l"
+    by auto
 qed
   
 context amp_r3
@@ -117,7 +114,7 @@ definition next_inst where "next_inst s \<equiv>
 lemma next_inst_lemma:
   fixes s 
   assumes "finfun_default (log s) = Free" and "log s $ 0 = Free"
-  shows "(log s) $ (next_inst s) = Free"
+  shows "(log s) $ (next_inst s) = Free" and "next_inst s > 0"
 proof -
   let ?l="finfun_to_list (log s)"
   have 1:"\<And> x . x \<in> set ?l \<Longrightarrow> 0 < x" using assms apply auto
@@ -125,8 +122,10 @@ proof -
   have 2:"distinct ?l" and 3:"sorted ?l"
      apply (simp add: distinct_finfun_to_list)
     by (simp add: sorted_finfun_to_list)
-  show ?thesis using assms(1) first_hole_lemma[OF 3 2 1] apply simp apply (auto simp add:next_inst_def)
+  show "(log s) $ (next_inst s) = Free" using assms(1) first_hole_lemma[OF 3 2 1] apply simp apply (auto simp add:next_inst_def)
     by (simp add: finfun_dom_conv)
+  show "next_inst s > 0" apply (simp add:next_inst_def)
+    by (metis "1" "2" "3" first_hole.simps(1) first_hole_lemma(2) gr0I n_not_Suc_n not_less0)
 qed
   
 definition do_2a where "do_2a s v \<equiv>
@@ -229,13 +228,18 @@ definition new_log where "new_log \<equiv> (\<lambda> (is, m) .
       if m = {} then amp_r3.Free else amp_r3.Proposed ((fst o the_elem) m)) )
   o$ ($ log, max_per_inst $)"
   
-definition msgs where "msgs \<equiv> 
+definition msgs where "msgs \<equiv>
   let 
     is = finfun_to_list new_log;
     to_propose = map (\<lambda> i . (i, the_elem (max_per_inst $ i))) is;
     msg_list = map (\<lambda> (i,v,b) . (amp_r3.Phase2a i b v)) to_propose
   in set msg_list"
 
+lemma new_log_lemma:
+  assumes "\<And> a . votes $ a $ 0 = None"
+    and "log $ 0 = Free"
+    shows "new_log $ 0 = Free" oops
+  
 end
 
 global_interpretation r1:receive_1b votes as log for votes as log
@@ -268,7 +272,7 @@ definition receive_2a where "receive_2a s i b v \<equiv>
     in (s', msgs)
   else (s, {})"
   
-subsection {* The @{text receive_1b} action *}
+subsection {* The @{text receive_2b} action *}
 
 definition receive_2b where "receive_2b s i b a v \<equiv>
   if (~ decided s i)

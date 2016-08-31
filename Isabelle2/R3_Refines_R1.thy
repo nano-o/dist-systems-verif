@@ -283,6 +283,7 @@ locale ref_proof_4 = quorums quorums + amp_r3 leader next_bal as quorums
   defines "ampr3_ioa \<equiv> ioa" and "ampr1_ioa \<equiv> r1.ioa"
   fixes a1 a2 a3
   assumes "a1 \<in> as" and "a2 \<in> as" and "a3 \<in> as" and "a1 \<noteq> a2" and "a3 \<noteq> a2" and "a3 \<noteq> a1"
+  (* assumes a_inf:"\<not> finite (UNIV::'a set)" *)
 begin
 
 interpretation IOA .
@@ -333,9 +334,30 @@ lemma inv2:"invariant ampr3_ioa inv2"
   apply trans_cases
   oops
 
-definition inv4 where "inv4 s \<equiv> \<forall> a . log (lstate s a) $ 0 = Free"
+definition inv4 where "inv4 s \<equiv> 
+  (\<forall> a . log (lstate s a) $ 0 = Free 
+    \<and> finfun_default (log (lstate s a)) = Free)
+  \<and> (\<forall> p \<in> network s . case p of 
+      Packet _ (Phase2a i _ _) \<Rightarrow> i > 0 
+      | Packet _ (Phase2b _ i _ _) \<Rightarrow> i > 0
+      | _ \<Rightarrow> True)"
   
-lemma inv4:"invariant ampr3_ioa inv4" oops
+lemma inv4:"invariant ampr3_ioa inv4"
+  apply (rule invariantI)
+   apply (simp add:inv4_def init_defs)
+   apply (simp add: finfun_default_const) (* TODO: what happened here? Why is 'a finite? *)
+  apply (insert invs)
+  apply (instantiate_invs)
+  apply (rm_reachable)
+  apply trans_cases
+         apply (auto simp add:inv4_def inv1_def action_defs finfun_default_update_const finfun_upd_apply
+          amp_r3.next_inst_lemma
+          split!:if_splits msg.splits packet.splits inst_status.splits)
+         apply (metis amp_r3.next_inst_lemma(2) less_numeral_extra(3))
+        apply fastforce
+  apply fastforce
+
+  
   
 fun extract_vs where 
   "extract_vs (Fwd v) = {v}"
