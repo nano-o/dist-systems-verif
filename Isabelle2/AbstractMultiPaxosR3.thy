@@ -67,12 +67,12 @@ definition send_all where
 end 
 
 fun first_hole :: "nat list \<Rightarrow> nat" where 
-  "first_hole [] = Suc 0"
+  "first_hole [] = 0"
 | "first_hole [x] = Suc x"
 | "first_hole (x#y#xs) = (if y = Suc x then first_hole (y#xs) else Suc x)"
 
 lemma first_hole_lemma:
-  assumes "sorted l" and "distinct l" and "\<And> x . x \<in> set l \<Longrightarrow> x > 0" 
+  assumes "sorted l" and "distinct l"
     shows "first_hole l \<notin> set l" and "l \<noteq> [] \<Longrightarrow> first_hole l > hd l"
 proof -
   have "first_hole l \<notin> set l \<and> (l \<noteq> [] \<longrightarrow> first_hole l > hd l)"
@@ -113,19 +113,13 @@ definition next_inst where "next_inst s \<equiv>
   
 lemma next_inst_lemma:
   fixes s 
-  assumes "finfun_default (log s) = Free" and "log s $ 0 = Free"
-  shows "(log s) $ (next_inst s) = Free" and "next_inst s > 0"
+  assumes "finfun_default (log s) = Free"
+  shows "(log s) $ (next_inst s) = Free"
 proof -
-  let ?l="finfun_to_list (log s)"
-  have 1:"\<And> x . x \<in> set ?l \<Longrightarrow> 0 < x" using assms apply auto
-    by (metis finfun_dom_conv neq0_conv) 
-  have 2:"distinct ?l" and 3:"sorted ?l"
-     apply (simp add: distinct_finfun_to_list)
-    by (simp add: sorted_finfun_to_list)
-  show "(log s) $ (next_inst s) = Free" using assms(1) first_hole_lemma[OF 3 2 1] apply simp apply (auto simp add:next_inst_def)
+    let ?l="finfun_to_list (log s)" 
+    have 2:"distinct ?l" and 3:"sorted ?l" apply (simp add: distinct_finfun_to_list) by (simp add: sorted_finfun_to_list)
+    show "(log s) $ (next_inst s) = Free" using assms(1) first_hole_lemma[OF 3 2] apply simp apply (auto simp add:next_inst_def)
     by (simp add: finfun_dom_conv)
-  show "next_inst s > 0" apply (simp add:next_inst_def)
-    by (metis "1" "2" "3" first_hole.simps(1) first_hole_lemma(2) gr0I n_not_Suc_n not_less0)
 qed
   
 definition do_2a where "do_2a s v \<equiv>
@@ -203,22 +197,19 @@ locale receive_1b =
 begin
 
 definition per_inst where "per_inst \<equiv> op$ votes ` as"
-definition votes_per_inst where "votes_per_inst \<equiv> \<lambda> s . Finite_Set.fold
-  (\<lambda> ff1 ff2 . (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $) ) (K$ {}) s"
-lemma votes_per_inst_code[code]:
-  "votes_per_inst (set (x#xs)) = 
-    (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ x, votes_per_inst (set xs) $)"
+definition combine where 
+  "combine ff1 ff2 \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $)"
+interpretation folding_idem combine "K$ {}"
+  apply (unfold_locales)
+   apply (auto simp add:combine_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
+  done
+definition votes_per_inst where "votes_per_inst \<equiv> \<lambda> s . Finite_Set.fold combine (K$ {}) s"
+lemma votes_per_inst_code[code]: "votes_per_inst (set (x#xs)) = combine x (votes_per_inst (set xs))"
 proof -
-  define f :: "'b \<Rightarrow>f 'c option \<Rightarrow> 'b \<Rightarrow>f 'c set \<Rightarrow> 'b \<Rightarrow>f 'c set"
-    where "f \<equiv> \<lambda> ff1 ff2 . (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $)"
-  interpret folding_idem f "K$ {}" 
-    apply (unfold_locales)
-     apply (auto simp add:f_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
-    done
-  let ?fold_expr = "\<lambda> s . Finite_Set.fold f (K$ {}) s"
-  from insert_idem[of "set xs" x] have "?fold_expr (set (x#xs)) = f x (?fold_expr (set xs))"
+  let ?fold_expr = "\<lambda> s . Finite_Set.fold combine (K$ {}) s"
+  from insert_idem[of "set xs" x] have "?fold_expr (set (x#xs)) = combine x (?fold_expr (set xs))"
     by (simp add:votes_per_inst_def option_as_set_def eq_fold split!:option.splits)
-  thus ?thesis by (auto simp add:votes_per_inst_def f_def)
+  thus ?thesis by (auto simp add:votes_per_inst_def combine_def)
 qed
   
 definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ (votes_per_inst per_inst)"
@@ -235,10 +226,45 @@ definition msgs where "msgs \<equiv>
     msg_list = map (\<lambda> (i,v,b) . (amp_r3.Phase2a i b v)) to_propose
   in set msg_list"
 
+  
+end
+
+locale receive_1b_lemmas = receive_1b votes as log for votes as log +
+  assumes "\<And> a . finfun_default (votes $ a) = None"
+    and "finfun_default log = Free" and "finite as"
+begin
+
+lemma pre_inst_lemma:
+  "\<And> ff . ff \<in> per_inst \<Longrightarrow> finfun_default ff = None"
+  using receive_1b_lemmas_axioms receive_1b_lemmas_def
+  using per_inst_def by (metis (mono_tags, lifting) imageE)
+
+thm finite_empty_induct
+lemma votes_per_inst_lemma:
+  fixes s P assumes "finite s"
+  shows "P s" using assms
+  apply (induct s) oops
+
+lemma "infinite (UNIV::'a set) \<Longrightarrow> infinite (UNIV::('a \<Rightarrow> 'b) set)" 
+proof (rule ccontr)
+  assume "\<not> infinite (UNIV::('a \<Rightarrow> 'b) set)"
+  show False oops
+  
+lemma votes_per_inst_lemma:
+  fixes s assumes "finite s"
+  shows "finfun_default (votes_per_inst s) = {}"
+proof (simp add:votes_per_inst_def)
+  show "finfun_default (Finite_Set.fold combine (K$ {}) s) = {}" using assms
+  proof (induct s)
+    case empty
+    then show ?case apply (simp add:combine_def finfun_default_const) oops
+  next
+    case (insert x F)
+    then show ?case sorry
+  qed
+
 lemma new_log_lemma:
-  assumes "\<And> a . votes $ a $ 0 = None"
-    and "log $ 0 = Free"
-    shows "new_log $ 0 = Free" oops
+  "finfun_default new_log = Free" apply (simp add:new_log_def) oops
   
 end
 
