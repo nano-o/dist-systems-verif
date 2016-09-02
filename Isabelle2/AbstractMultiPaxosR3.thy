@@ -257,61 +257,6 @@ definition msgs where "msgs \<equiv>
     msg_list = map (\<lambda> (i,v,b) . (amp_r3.Phase2a i b v)) to_propose
   in set msg_list"
 
-  
-end
-
-locale receive_1b_lemmas = receive_1b votes as log for votes as log +
-  assumes votes_default:"\<And> a . finfun_default (votes $ a) = None"
-    and log_default:"finfun_default log = amp_r3.inst_status.Free" and fin:"finite as"
-begin
-
-lemma per_inst_lemma:
-  "\<And> ff . ff \<in> per_inst \<Longrightarrow> finfun_default ff = None"
-  using receive_1b_lemmas_axioms receive_1b_lemmas_def
-  using per_inst_def by (metis (mono_tags, lifting) imageE)
-
-lemma votes_per_inst_lemma:
-  fixes s assumes "finite s" and "\<And> ff . ff \<in> s \<Longrightarrow> finfun_default ff = None"
-  shows "finfun_default (votes_per_inst s) = {}"
-proof (simp add:votes_per_inst_def)
-  show "finfun_default (Finite_Set.fold combine (K$ {}) s) = {}" using assms
-  proof (induct s)
-    case empty
-    then show ?case by (simp add:combine_def finfun_default_const)
-  next
-    case (insert x F)
-    have 1:"Finite_Set.fold combine (K$ {}) (insert x F)
-      = combine x (Finite_Set.fold combine (K$ {}) F)" using insert_idem
-      by (metis eq_fold insert.hyps(1))
-    have "finfun_default (Finite_Set.fold combine (K$ {}) F) = {}"
-      by (simp add: insert.hyps(3) insert.prems)
-    moreover have "finfun_default x = None"
-      by (simp add: insert.prems) 
-    ultimately have "finfun_default ($ x, Finite_Set.fold combine (K$ {}) F $) = (None, {})"
-      by (simp add: diag_default)
-    hence "finfun_default ( (\<lambda>(vo, vs). option_as_set vo \<union> vs) \<circ>$
-                 ($x, Finite_Set.fold combine (K$ {}) F$)) = {}"
-      by (simp add:comp_default option_as_set_def)
-    thus ?case apply (simp add:1) by (auto simp add:combine_def)
-  qed
-qed
-
-lemma max_per_inst_default:
-  "finfun_default (max_per_inst) = {}"
-proof -
-  have "finfun_default (votes_per_inst per_inst) = {}"
-  proof -
-    have "finite per_inst" using fin by (simp add:per_inst_def)
-    thus ?thesis by (simp add:per_inst_lemma votes_per_inst_lemma)
-  qed
-  thus ?thesis by (simp add:max_per_inst_def max_by_key_def comp_default)
-qed
-
-lemma new_log_lemma:
-  "finfun_default new_log = amp_r3.inst_status.Free" using log_default
-  apply (auto simp add:new_log_def max_per_inst_default comp_default diag_default)
-  by (simp add: amp_r3.inst_status.simps(11))
-  
 end
 
 global_interpretation r1:receive_1b votes as log for votes as log
