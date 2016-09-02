@@ -4,6 +4,8 @@ theory R3_Refines_R1
 imports AbstractMultiPaxosR3 AbstractMultiPaxosR1 Simulations Hist_Supplemental IOA_Automation
 begin
 
+section {* A few lemmas *}
+
 locale receive_1b_lemmas = receive_1b votes as log for votes as log +
   assumes votes_default:"\<And> a . finfun_default (votes $ a) = None"
     and log_default:"finfun_default log = amp_r3.inst_status.Free" and fin:"finite as"
@@ -58,103 +60,7 @@ lemma new_log_lemma:
   
 end
 
-section {* A third attempt *}
-  
-locale ref_proof_3 = quorums quorums + amp_r3 leader next_bal as quorums
-  + r1:ampr1_ioa quorums leader
-  for quorums :: "('a::linorder) set set" and leader :: "bal \<Rightarrow> ('a::linorder)" and next_bal as + 
-  fixes ampr3_ioa :: "(('a, 'v) global_state, 'v paxos_action) ioa" 
-    and ampr1_ioa :: "(('v, 'a, 'l) ampr1_state, 'v paxos_action) ioa" 
-  defines "ampr3_ioa \<equiv> ioa" and "ampr1_ioa \<equiv> r1.ioa"
-  fixes a1 a2 a3
-  assumes "a1 \<in> as" and "a2 \<in> as" and "a3 \<in> as" and "a1 \<noteq> a2" and "a3 \<noteq> a2" and "a3 \<noteq> a1"
-begin
-
-interpretation IOA .
-
-lemmas action_defs = propose_def do_2a_def receive_2b_def
-      try_acquire_leadership_def receive_1a_def receive_2a_def receive_1b_def receive_fwd_def
-lemmas init_defs = ampr3_ioa_def ioa_def global_start_def local_start_def
-  ampr1_ioa_def r1.ioa_def r1.start_def r1.start_s_def 
-
-method trans_cases =
-  (simp add:is_trans_def ampr3_ioa_def ioa_def, elim trans_cases)
-
-definition inv1 where inv1_def[inv_proofs_defs]:"inv1 s \<equiv> \<forall> a . acceptors (lstate s a) = as \<and> id (lstate s a) = a"
-lemma inv1:"invariant ampr3_ioa inv1"
-  apply (rule invariantI)
-   apply (simp add:inv1_def init_defs)
-  apply (rm_reachable)
-  apply trans_cases
-         apply (auto simp add:Let_def inv1_def action_defs)
-  done
-declare inv1[invs]
-
-fun extract_vs where 
-  "extract_vs (Fwd v) = {v}"
-| "extract_vs (Phase2a _ _ v) = {v}"
-| "extract_vs (Phase2b _ _ _ v) = {v}"
-| "extract_vs (Phase1b _ _ ff) = {v . \<exists> i b . ff $ i = Some (v,b)}"
-  -- {* Could be @{term "{ff $ i \<bind> (Some o fst) | i . True} \<bind> option_as_set" }*}
-| "extract_vs _ = {}"
-  
-definition propCmd where "propCmd s \<equiv> \<Union> ((\<lambda> p . case p of Packet _ m \<Rightarrow> extract_vs m) ` network s)"
-
-definition propCmd2 where "propCmd2 s \<equiv> {v . \<exists> a \<in> as . 
-  Packet a (Fwd v) \<in> network s 
-  \<or> (\<exists> i b . Packet a (Phase2a i b v) \<in> network s)
-  \<or> (\<exists> a2 \<in> as . \<exists> i b v . Packet a (Phase2b a2 i b v) \<in> network s)
-  \<or> (\<exists> a2 \<in> as . \<exists> b ff i b2 . Packet a (Phase1b a2 b ff) \<in> network s \<and> ff $ i = Some (v,b2))}"
-
-definition fwd_sim where "fwd_sim s \<equiv> {t . 
-  ampr1_state.propCmd t = propCmd s
-  \<and> ballot t = (\<lambda> a . local_state.ballot (lstate s a))
-  \<and> (\<forall> i b v . suggestion t i b = None \<longleftrightarrow> (\<forall> a . Packet a (Phase2a i b v) \<notin> network s))
-  \<and> (\<forall> i b v . suggestion t i b = Some v \<longleftrightarrow> (\<forall> a . a \<noteq> leader b \<longrightarrow> Packet a (Phase2a i b v) \<in> network s))
-  \<and> (\<forall> i b v a . vote t i a b = None \<longleftrightarrow> (\<forall> a2 . Packet a2 (Phase2b a i b v) \<notin> network s))
-  \<and> (\<forall> i b v a . vote t i a b = Some v \<longleftrightarrow> (\<forall> a2 . a2 \<noteq> a \<longrightarrow> Packet a2 (Phase2b a i b v) \<in> network s))
-  \<and> (\<forall> a b ff . onebs t a b = None \<longleftrightarrow> (Packet (leader b) (Phase1b a b ff) \<notin> network s))
-  \<and> (\<forall> a b f . onebs t a b = Some f \<longleftrightarrow> (Packet (leader b) (Phase1b a b (Abs_finfun f)) \<in> network s))}"
-  
-lemmas sim_defs = fwd_sim_def propCmd_def 
-
-lemma "is_forward_sim fwd_sim ampr3_ioa ampr1_ioa"
-  apply (auto simp add:is_forward_sim_def)
-   apply (simp add:init_defs sim_defs)
-   apply (metis ref_proof_3.axioms(2) ref_proof_3_axioms ref_proof_3_axioms_def)
-  apply (insert invs)
-  apply (instantiate_invs)
-  apply (rm_reachable)
-  apply trans_cases
-  subgoal premises prems for s s' t act a v (* Propose *)
-  proof -
-    let ?ef = "[(act, s'\<lparr>ampr1_state.propCmd := insert v (ampr1_state.propCmd s')\<rparr>)]"
-    show ?thesis
-      apply (intro exI[where ?x="?ef"])
-      apply (intro conjI)
-        prefer 3
-        apply (force simp add:trace_match_def trace_def schedule_def externals_def
-          filter_act_def ampr1_ioa_def r1.ioa_def paxos_asig_def Let_def is_trans_def 
-          r1.trans_def split!:if_splits)
-       apply simp
-      subgoal proof (cases "leader (local_state.ballot (lstate s a)) = local_state.id (lstate s a)")
-        case False
-        with prems(1,4) show ?thesis by (simp add:propose_def send_all_def fwd_sim_def propCmd_def)
-      next
-        case True thm prems
-        have 1:"\<And> a . local_state.ballot (lstate t a) = ballot s' a" using prems(1,4) True 
-          by (simp add:do_2a_def propose_def send_all_def fwd_sim_def Let_def propCmd_def)
-        have 2:"network t = network s \<union> {Packet a2 (Phase2a (next_inst (lstate s a)) (local_state.ballot (lstate s a)) v) 
-            | a2 . a2 \<noteq> a \<and> a2 \<in> acceptors (lstate s a)}"
-          using prems(4,2) True
-          by (fastforce simp add:do_2a_def propose_def send_all_def fwd_sim_def propCmd_def Let_def inv1_def)
-        show ?thesis using 1 2 prems(1,2) apply (auto simp add:sim_defs inv1_def split!:msg.splits packet.splits)
-              apply (metis ref_proof_3.axioms(2) ref_proof_3_axioms ref_proof_3_axioms_def)
-             apply meson defer
-          apply meson oops
-end
-
-section {* A fourth attempt *}
+section {* Refinement proof using a refinement mapping *}
   
 locale ref_proof_4 = quorums quorums + amp_r3 leader next_bal as quorums
   + r1:ampr1_ioa quorums leader
@@ -292,7 +198,7 @@ end
 
 section {* Old attempts. *}
 
-subsection {*First one *}
+subsection {* Proof using a history variable (simple sketch) *}
 
 locale ref_proof_1 = quorums quorums + amp_r3 leader next_bal as quorums 
   + r1:ampr1_ioa quorums leader
@@ -354,7 +260,7 @@ lemma inv1:"invariant ghost_ioa inv1"
 
 end
 
-subsection {* A second attempt *}
+subsection {* Proof using a more involved history state. *}
   
 locale ref_proof = quorums quorums + amp_r3 leader next_bal as quorums 
   + r1:ampr1_ioa quorums leader
@@ -463,6 +369,102 @@ lemma "is_ref_map ref_map ghost_ioa ampr1_ioa"
     thm prems
     oops
     
+end
+
+subsection {* implementation proof using a forward simulation *}
+  
+locale ref_proof_3 = quorums quorums + amp_r3 leader next_bal as quorums
+  + r1:ampr1_ioa quorums leader
+  for quorums :: "('a::linorder) set set" and leader :: "bal \<Rightarrow> ('a::linorder)" and next_bal as + 
+  fixes ampr3_ioa :: "(('a, 'v) global_state, 'v paxos_action) ioa" 
+    and ampr1_ioa :: "(('v, 'a, 'l) ampr1_state, 'v paxos_action) ioa" 
+  defines "ampr3_ioa \<equiv> ioa" and "ampr1_ioa \<equiv> r1.ioa"
+  fixes a1 a2 a3
+  assumes "a1 \<in> as" and "a2 \<in> as" and "a3 \<in> as" and "a1 \<noteq> a2" and "a3 \<noteq> a2" and "a3 \<noteq> a1"
+begin
+
+interpretation IOA .
+
+lemmas action_defs = propose_def do_2a_def receive_2b_def
+      try_acquire_leadership_def receive_1a_def receive_2a_def receive_1b_def receive_fwd_def
+lemmas init_defs = ampr3_ioa_def ioa_def global_start_def local_start_def
+  ampr1_ioa_def r1.ioa_def r1.start_def r1.start_s_def 
+
+method trans_cases =
+  (simp add:is_trans_def ampr3_ioa_def ioa_def, elim trans_cases)
+
+definition inv1 where inv1_def[inv_proofs_defs]:"inv1 s \<equiv> \<forall> a . acceptors (lstate s a) = as \<and> id (lstate s a) = a"
+lemma inv1:"invariant ampr3_ioa inv1"
+  apply (rule invariantI)
+   apply (simp add:inv1_def init_defs)
+  apply (rm_reachable)
+  apply trans_cases
+         apply (auto simp add:Let_def inv1_def action_defs)
+  done
+declare inv1[invs]
+
+fun extract_vs where 
+  "extract_vs (Fwd v) = {v}"
+| "extract_vs (Phase2a _ _ v) = {v}"
+| "extract_vs (Phase2b _ _ _ v) = {v}"
+| "extract_vs (Phase1b _ _ ff) = {v . \<exists> i b . ff $ i = Some (v,b)}"
+  -- {* Could be @{term "{ff $ i \<bind> (Some o fst) | i . True} \<bind> option_as_set" }*}
+| "extract_vs _ = {}"
+  
+definition propCmd where "propCmd s \<equiv> \<Union> ((\<lambda> p . case p of Packet _ m \<Rightarrow> extract_vs m) ` network s)"
+
+definition propCmd2 where "propCmd2 s \<equiv> {v . \<exists> a \<in> as . 
+  Packet a (Fwd v) \<in> network s 
+  \<or> (\<exists> i b . Packet a (Phase2a i b v) \<in> network s)
+  \<or> (\<exists> a2 \<in> as . \<exists> i b v . Packet a (Phase2b a2 i b v) \<in> network s)
+  \<or> (\<exists> a2 \<in> as . \<exists> b ff i b2 . Packet a (Phase1b a2 b ff) \<in> network s \<and> ff $ i = Some (v,b2))}"
+
+definition fwd_sim where "fwd_sim s \<equiv> {t . 
+  ampr1_state.propCmd t = propCmd s
+  \<and> ballot t = (\<lambda> a . local_state.ballot (lstate s a))
+  \<and> (\<forall> i b v . suggestion t i b = None \<longleftrightarrow> (\<forall> a . Packet a (Phase2a i b v) \<notin> network s))
+  \<and> (\<forall> i b v . suggestion t i b = Some v \<longleftrightarrow> (\<forall> a . a \<noteq> leader b \<longrightarrow> Packet a (Phase2a i b v) \<in> network s))
+  \<and> (\<forall> i b v a . vote t i a b = None \<longleftrightarrow> (\<forall> a2 . Packet a2 (Phase2b a i b v) \<notin> network s))
+  \<and> (\<forall> i b v a . vote t i a b = Some v \<longleftrightarrow> (\<forall> a2 . a2 \<noteq> a \<longrightarrow> Packet a2 (Phase2b a i b v) \<in> network s))
+  \<and> (\<forall> a b ff . onebs t a b = None \<longleftrightarrow> (Packet (leader b) (Phase1b a b ff) \<notin> network s))
+  \<and> (\<forall> a b f . onebs t a b = Some f \<longleftrightarrow> (Packet (leader b) (Phase1b a b (Abs_finfun f)) \<in> network s))}"
+  
+lemmas sim_defs = fwd_sim_def propCmd_def 
+
+lemma "is_forward_sim fwd_sim ampr3_ioa ampr1_ioa"
+  apply (auto simp add:is_forward_sim_def)
+   apply (simp add:init_defs sim_defs)
+   apply (metis ref_proof_3.axioms(2) ref_proof_3_axioms ref_proof_3_axioms_def)
+  apply (insert invs)
+  apply (instantiate_invs)
+  apply (rm_reachable)
+  apply trans_cases
+  subgoal premises prems for s s' t act a v (* Propose *)
+  proof -
+    let ?ef = "[(act, s'\<lparr>ampr1_state.propCmd := insert v (ampr1_state.propCmd s')\<rparr>)]"
+    show ?thesis
+      apply (intro exI[where ?x="?ef"])
+      apply (intro conjI)
+        prefer 3
+        apply (force simp add:trace_match_def trace_def schedule_def externals_def
+          filter_act_def ampr1_ioa_def r1.ioa_def paxos_asig_def Let_def is_trans_def 
+          r1.trans_def split!:if_splits)
+       apply simp
+      subgoal proof (cases "leader (local_state.ballot (lstate s a)) = local_state.id (lstate s a)")
+        case False
+        with prems(1,4) show ?thesis by (simp add:propose_def send_all_def fwd_sim_def propCmd_def)
+      next
+        case True thm prems
+        have 1:"\<And> a . local_state.ballot (lstate t a) = ballot s' a" using prems(1,4) True 
+          by (simp add:do_2a_def propose_def send_all_def fwd_sim_def Let_def propCmd_def)
+        have 2:"network t = network s \<union> {Packet a2 (Phase2a (next_inst (lstate s a)) (local_state.ballot (lstate s a)) v) 
+            | a2 . a2 \<noteq> a \<and> a2 \<in> acceptors (lstate s a)}"
+          using prems(4,2) True
+          by (fastforce simp add:do_2a_def propose_def send_all_def fwd_sim_def propCmd_def Let_def inv1_def)
+        show ?thesis using 1 2 prems(1,2) apply (auto simp add:sim_defs inv1_def split!:msg.splits packet.splits)
+              apply (metis ref_proof_3.axioms(2) ref_proof_3_axioms ref_proof_3_axioms_def)
+             apply meson defer
+          apply meson oops
 end
 
 end
