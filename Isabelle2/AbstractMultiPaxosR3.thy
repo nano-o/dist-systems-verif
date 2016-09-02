@@ -60,9 +60,13 @@ definition local_start where "local_start a \<equiv>
 
 subsection {* The propose action *} 
 
-definition send_all where
+definition send_all where send_all_def[code del]:
   "send_all s m \<equiv> { Packet a m | a . a \<in> acceptors s \<and> a \<noteq> id s}"
-  (* "send_all s m \<equiv> (\<lambda> a . Packet a m) ` (acceptors s - {id s})" *)
+  -- {* TODO: This definition does not always work for code generation. Why? *}
+  
+lemma send_all_code[code]:
+  "send_all s m = (flip Packet m) ` (acceptors s - {id s})"
+  by (auto simp add:send_all_def)
   
 end 
 
@@ -130,14 +134,14 @@ definition do_2a where "do_2a s v \<equiv>
       twobs := (twobs s)(i $:= (twobs s $ i)(b $:= {id s}))\<rparr>;
     msgs = send_all s (Phase2a i b v)
   in (s', msgs)"
-  
+ 
 definition propose where "propose s v \<equiv> 
   let l = leader (ballot s) in
     if l = id s
-    then do_2a s v
+    then (do_2a s v)
     else (s, {Packet l (Fwd v)})"
   -- {* TODO: Here we loose the proposal if it happens during an unsuccessful
-  leadership acquisition attempt. *}
+  leadership acquisition attempt. *} 
 
 subsection {* The @{text receive_fwd} action *}
 definition receive_fwd where "receive_fwd s v \<equiv>
