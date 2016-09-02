@@ -97,9 +97,50 @@ lemma inv1:"invariant ampr3_ioa inv1"
   done
 declare inv1[invs]
 
+definition inv6 where inv6_def:
+  "inv6 s \<equiv> \<forall> a i b v . (Packet a (Phase2a i b v) \<in> network s \<longrightarrow> log (lstate s (leader b)) $ i \<noteq> Free)"
+lemma inv6: "invariant ampr3_ioa inv6"
+  apply (rule invariantI)
+   apply (simp add:inv6_def init_defs)
+  apply (insert invs)
+  apply (instantiate_invs)
+  apply (rm_reachable)
+  apply (trans_cases;
+    (simp add:inv1_def inv6_def action_defs  split!:packet.splits msg.splits; fail)?)
+        apply (simp add:inv1_def inv6_def action_defs)
+        apply (metis amp_r3.inst_status.distinct(5) finfun_upd_apply)
+       apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
+        apply (metis amp_r3.inst_status.distinct(3) finfun_upd_apply)
+  apply blast
+      apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
+         apply blast
+        apply blast
+       apply blast
+      apply blast
+     apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
+        apply blast
+       apply blast
+      apply blast
+     apply blast
+    apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
+         apply (metis amp_r3.inst_status.distinct(3) finfun_upd_apply)
+        apply blast
+       apply auto[1]
+      apply auto[1]
+     apply blast
+    apply blast
+   defer
+   apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
+      apply (metis amp_r3.inst_status.distinct(5) finfun_upd_apply)
+     apply blast
+    apply blast
+  apply blast
+   (* TODO: The hard one is left. *) oops
+  
 definition inv2 where inv2_def:
-  "inv2 s \<equiv> \<forall> i b v1 v2 a1 a2 . Packet a1 (Phase2a i b v1) \<in> network s 
-    \<and> Packet a2 (Phase2a i b v2) \<in> network s \<longrightarrow> v1 = v2" 
+  "inv2 s \<equiv> \<forall> i b v1 v2 a1 a2 .
+    (Packet a1 (Phase2a i b v1) \<in> network s
+      \<and> Packet a2 (Phase2a i b v2) \<in> network s \<longrightarrow> v1 = v2)"
 lemma inv2:"invariant ampr3_ioa inv2"
   apply (rule invariantI)
    apply (simp add:inv2_def init_defs)
@@ -109,7 +150,7 @@ lemma inv2:"invariant ampr3_ioa inv2"
   apply (trans_cases;
     (simp add:inv1_def inv2_def action_defs finfun_default_update_const split!:packet.splits msg.splits; fail)?)
   subgoal premises prems for s t act a v
-  proof - 
+  proof -
     thm prems
     show ?thesis using prems(1,2,4) oops
       nitpick[no_assms, card 'v =2, card 'a = 1, show_types]
