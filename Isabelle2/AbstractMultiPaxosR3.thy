@@ -1,7 +1,7 @@
 chapter {* Distributed and executable algorithm *}
 
 theory AbstractMultiPaxosR3 
-  imports Utils "~~/src/HOL/Library/FinFun" MaxByKey IOA Quorums Paxos_Sig
+  imports Utils FinFun_Supplemental MaxByKey IOA Quorums Paxos_Sig
 begin
 
 unbundle finfun_syntax
@@ -199,20 +199,29 @@ begin
 definition per_inst where "per_inst \<equiv> op$ votes ` as"
 definition combine where 
   "combine ff1 ff2 \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $)"
-definition combine2 where 
-  "combine2 ff1 f2 \<equiv> \<lambda> i . option_as_set (ff1 $ i) \<union> f2 i"
-interpretation folding_idem combine "K$ {}"
+  
+sublocale folding_idem combine "K$ {}"
   apply (unfold_locales)
    apply (auto simp add:combine_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
   done
+
+(*
+definition combine2 where 
+  "combine2 ff1 f2 \<equiv> \<lambda> i . option_as_set (ff1 $ i) \<union> f2 i"
 interpretation fi2:folding_idem combine2 "\<lambda> i . {}"
   apply (unfold_locales)
    apply (auto simp add:combine2_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
-  done
+  done 
+*)
+
 definition votes_per_inst :: "(nat \<Rightarrow>f 'c option) set \<Rightarrow> nat \<Rightarrow>f 'c set" where
   "votes_per_inst s \<equiv> Finite_Set.fold combine (K$ {}) s"
+  
+(*
 definition votes_per_inst2 :: "(nat \<Rightarrow>f 'c option) set \<Rightarrow> nat \<Rightarrow> 'c set" where
-  "votes_per_inst2 s \<equiv> Finite_Set.fold combine2 (\<lambda> i . {}) s"
+  "votes_per_inst2 s \<equiv> Finite_Set.fold combine2 (\<lambda> i . {}) s" 
+*)
+  
 lemma votes_per_inst_code[code]: "votes_per_inst (set (x#xs)) = combine x (votes_per_inst (set xs))"
 proof -
   let ?fold_expr = "\<lambda> s . Finite_Set.fold combine (K$ {}) s"
@@ -220,6 +229,7 @@ proof -
     by (simp add:votes_per_inst_def option_as_set_def eq_fold split!:option.splits)
   thus ?thesis by (auto simp add:votes_per_inst_def)
 qed
+(*
 lemma votes_per_inst2_code[code]: "votes_per_inst2 (set (x#xs)) = combine2 x (votes_per_inst2 (set xs))"
 proof -
   let ?fold_expr = "\<lambda> s . Finite_Set.fold combine2 (\<lambda> i . {}) s"
@@ -227,9 +237,12 @@ proof -
     by (simp add:votes_per_inst2_def option_as_set_def fi2.eq_fold split!:option.splits)
   thus ?thesis by (auto simp add:votes_per_inst2_def)
 qed
-  
+*)
+
 definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ (votes_per_inst per_inst)"
+  (*
 definition max_per_inst2 where "max_per_inst2 \<equiv> (flip max_by_key snd) o (votes_per_inst2 per_inst)"
+  *)
   
 definition new_log where "new_log \<equiv> (\<lambda> (is, m) .
     case is of amp_r3.Decided _ \<Rightarrow> is | _ \<Rightarrow> (
@@ -248,16 +261,11 @@ definition msgs where "msgs \<equiv>
 end
 
 locale receive_1b_lemmas = receive_1b votes as log for votes as log +
-  assumes "\<And> a . finfun_default (votes $ a) = None"
-    and "finfun_default log = Free" and "finite as"
+  assumes votes_default:"\<And> a . finfun_default (votes $ a) = None"
+    and log_default:"finfun_default log = amp_r3.inst_status.Free" and fin:"finite as"
 begin
 
-interpretation folding_idem combine "K$ {}"
-  apply (unfold_locales)
-   apply (auto simp add:combine_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
-  done
-
-lemma pre_inst_lemma:
+lemma per_inst_lemma:
   "\<And> ff . ff \<in> per_inst \<Longrightarrow> finfun_default ff = None"
   using receive_1b_lemmas_axioms receive_1b_lemmas_def
   using per_inst_def by (metis (mono_tags, lifting) imageE)
@@ -275,20 +283,34 @@ proof (simp add:votes_per_inst_def)
     have 1:"Finite_Set.fold combine (K$ {}) (insert x F)
       = combine x (Finite_Set.fold combine (K$ {}) F)" using insert_idem
       by (metis eq_fold insert.hyps(1))
-    have 2:"finfun_default (Finite_Set.fold combine (K$ {}) F) = {}"
+    have "finfun_default (Finite_Set.fold combine (K$ {}) F) = {}"
       by (simp add: insert.hyps(3) insert.prems)
-    hence 3:"finfun_default ($ x, Finite_Set.fold combine (K$ {}) F $) = (None, {})" 
-      using insert(4) sorry
-    hence 4:"finfun_default ((\<lambda>(vo, vs). option_as_set vo \<union> vs) \<circ>$
-                 ($x,
-                  Finite_Set.fold combine (K$ {})
-                   F$)) = {}" sorry
+    moreover have "finfun_default x = None"
+      by (simp add: insert.prems) 
+    ultimately have "finfun_default ($ x, Finite_Set.fold combine (K$ {}) F $) = (None, {})"
+      by (simp add: diag_default)
+    hence "finfun_default ( (\<lambda>(vo, vs). option_as_set vo \<union> vs) \<circ>$
+                 ($x, Finite_Set.fold combine (K$ {}) F$)) = {}"
+      by (simp add:comp_default option_as_set_def)
     thus ?case apply (simp add:1) by (auto simp add:combine_def)
   qed
 qed
 
+lemma max_per_inst_default:
+  "finfun_default (max_per_inst) = {}"
+proof -
+  have "finfun_default (votes_per_inst per_inst) = {}"
+  proof -
+    have "finite per_inst" using fin by (simp add:per_inst_def)
+    thus ?thesis by (simp add:per_inst_lemma votes_per_inst_lemma)
+  qed
+  thus ?thesis by (simp add:max_per_inst_def max_by_key_def comp_default)
+qed
+
 lemma new_log_lemma:
-  "finfun_default new_log = Free" apply (simp add:new_log_def) oops
+  "finfun_default new_log = amp_r3.inst_status.Free" using log_default
+  apply (auto simp add:new_log_def max_per_inst_default comp_default diag_default)
+  by (simp add: amp_r3.inst_status.simps(11))
   
 end
 
