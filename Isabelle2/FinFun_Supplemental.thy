@@ -54,7 +54,8 @@ lemma comp_default:
   qed
   done
 
-lemma assumes "finfun_default (ff1::'c \<Rightarrow>f 'd) = d1" 
+lemma diag_default:
+  assumes "finfun_default (ff1::'c \<Rightarrow>f 'd) = d1" 
   and "finfun_default (ff2::'c \<Rightarrow>f 'e) = d2"
   and infin:"infinite (UNIV::'c set)"
   shows "finfun_default ($ ff1, ff2 $) = (d1,d2)" using assms 
