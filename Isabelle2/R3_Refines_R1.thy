@@ -98,22 +98,26 @@ lemma inv1:"invariant ampr3_ioa inv1"
 declare inv1[invs]
 
 definition inv2 where inv2_def:
-  "inv2 s \<equiv> \<forall> i b v a . Packet a (Phase2a i b v) \<in> network s 
-    \<longrightarrow> log (lstate s (leader b)) $ i = Free" (* What? *)
+  "inv2 s \<equiv> \<forall> i b v1 v2 a1 a2 . Packet a1 (Phase2a i b v1) \<in> network s 
+    \<and> Packet a2 (Phase2a i b v2) \<in> network s \<longrightarrow> v1 = v2" 
 lemma inv2:"invariant ampr3_ioa inv2"
   apply (rule invariantI)
    apply (simp add:inv2_def init_defs)
   apply (insert invs)
   apply (instantiate_invs)
   apply (rm_reachable)
-  apply trans_cases
-         apply (simp_all add:inv2_def inv1_def action_defs split!:if_splits)
-  oops
+  apply (trans_cases;
+    (simp add:inv1_def inv2_def action_defs finfun_default_update_const split!:packet.splits msg.splits; fail)?)
+  subgoal premises prems for s t act a v
+  proof - 
+    thm prems
+    show ?thesis using prems(1,2,4) oops
+      nitpick[no_assms, card 'v =2, card 'a = 1, show_types]
   
 definition inv3 where 
-  "inv3 s \<equiv> \<forall> i a b d1 v1 d2 v2 . 
-    Packet d1 (Phase2b a i b v1) \<in> network s \<and> Packet d2 (Phase2b a i b v2) \<in> network s
-    \<longrightarrow> v1 = v2 \<and> d1 = d2 \<and> d1 = leader b"
+  "inv3 s \<equiv> \<forall> i a1 a2 b d1 v1 d2 v2 .
+    Packet d1 (Phase2b a1 i b v1) \<in> network s \<and> Packet d2 (Phase2b a2 i b v2) \<in> network s
+    \<longrightarrow> v1 = v2"
 lemma inv2:"invariant ampr3_ioa inv2"
   apply (rule invariantI)
    apply (simp add:inv2_def init_defs)
@@ -181,7 +185,8 @@ lemma inv5:"invariant ampr3_ioa inv5"
     qed
   qed
   done
-        
+declare inv5[invs]
+
 definition inv4 where "inv4 s \<equiv>
   (\<forall> a . finfun_default (log (lstate s a)) = Free)"
   
@@ -230,25 +235,58 @@ lemma "is_ref_map ref_map ampr3_ioa ampr1_ioa"
   proof (intro exI[where ?x="ref_map s"] exI[where ?x="[(act, ref_map t)]"])
     thm prems
     have "ref_map t = (ref_map s)\<lparr>propCmd := insert v (ampr1_state.propCmd (ref_map s))\<rparr>"
-    proof (cases "leader (acc.ballot (lstate s a)) = a")
-      case True 
-      have 1:"network t = (network s \<union> (snd (do_2a (lstate s a) v)))" using prems(1) prems(3) True
-        by (simp add:inv1_def propose_def)
-      have 2:"\<And> a . acc.ballot (lstate s a) = acc.ballot (lstate t a)" using prems(1) prems(3) True
-        by (simp add:inv1_def propose_def do_2a_def Let_def)
-      show ?thesis using prems(1) 1 2 at_least_3 (* Note: does not hold if we have only one acceptor in the systems *)
-        apply (auto simp add:inv1_def ref_map_def action_defs propCmd_def fun_eq_iff split!:packet.splits msg.splits if_splits)
-           apply metis (* Here we need a lemma about all those the_elem terms. *)
-        sorry
-    next
-      case False
-      then show ?thesis using prems(1) prems(3)
-        by (auto simp add:inv1_def ref_map_def action_defs propCmd_def fun_eq_iff split!:packet.splits msg.splits if_splits)
-    qed oops
+    proof (cases "leader (acc.ballot (lstate s a)) = a") oops
     
 end
 
+section {* Testing interpretation. *}
 
+
+definition n :: nat where "n \<equiv> 3"
+  -- {* The number of processes *}
+
+definition accs where "accs \<equiv> {1..n}"
+  -- {* The set of acceptors *}
+
+definition leader where "leader (b::nat) \<equiv> (b mod n) + 1"
+  
+definition next_bal :: "nat \<Rightarrow> nat \<Rightarrow> nat" where "next_bal b a \<equiv> 
+  (b div n + 1) * n + a"
+
+global_interpretation cq:card_quorums accs
+  defines qs = "cq.quorums" and nas = "cq.nas"
+  apply (unfold_locales)
+   apply (simp add: accs_def n_def)
+  apply (simp add: accs_def)
+  done
+                
+definition r3_ioa :: "((nat, nat) global_state, nat paxos_action) ioa"
+  where r3_ioa_def:"r3_ioa \<equiv> amp_r3.ioa leader next_bal accs"
+
+definition r1_ioa  :: "((nat, nat, nat) ampr1_state, nat paxos_action) ioa"
+  where "r1_ioa \<equiv> ampr1_ioa.ioa qs leader"
+  
+global_interpretation ref_proof_4 qs leader next_bal accs 
+  r3_ioa r1_ioa 1 2 3
+    apply (unfold_locales)
+      apply (auto simp add:accs_def n_def r3_ioa_def r1_ioa_def) .
+
+term ioa
+thm ioa_def
+interpretation IOA .
+thm init_defs
+(* declare [[show_types, show_consts]] *)
+lemma "invariant r3_ioa inv2"
+  apply (rule invariantI)
+   apply (simp add:inv2_def init_defs accs_def leader_def next_bal_def amp_r3.ioa_def
+      amp_r3.global_start_def)
+  apply (insert invs)
+  apply (instantiate_invs)
+  apply (rm_reachable)
+  apply (trans_cases;
+    (simp add:inv1_def inv2_def action_defs finfun_default_update_const split!:packet.splits msg.splits; fail)?)
+apply (simp add:inv2_def inv1_def inv5_def propose_def do_2a_def send_all_def) oops
+  
 section {* Old attempts. *}
 
 subsection {* Proof using a history variable (simple sketch) *}
