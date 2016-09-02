@@ -27,7 +27,7 @@ datatype 'v inst_status =
 
 end
 
-record ('a, 'v) local_state =
+record ('a, 'v) acc =
   -- {* The local state of an acceptor. *}
   id :: 'a
   acceptors :: "'a set"
@@ -35,7 +35,7 @@ record ('a, 'v) local_state =
   log :: "inst \<Rightarrow>f 'v amp_r3.inst_status"
     -- {* Last ballot in which the acceptor voted. *}
   votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
-  onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option) option"
+  onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option)"
     -- {* The oneb messages received when the acceptor tries to acquire leadership. *}
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a set"
     -- {* the twob messages received (they are broadcast). *}
@@ -56,14 +56,14 @@ datatype ('aa,'vv) packet =
 
 definition local_start where "local_start a \<equiv>
   \<lparr>id = a, acceptors = as, ballot = 0, log = K$ Free,
-    votes = K$ None, onebs = K$ None, twobs = K$ K$ {}\<rparr>"
+    votes = K$ None, onebs = K$ K$ K$ None, twobs = K$ K$ {}\<rparr>"
 
 subsection {* The propose action *} 
 
 definition send_all where
   "send_all s m \<equiv> { Packet a m | a . a \<in> acceptors s \<and> a \<noteq> id s}"
   (* "send_all s m \<equiv> (\<lambda> a . Packet a m) ` (acceptors s - {id s})" *)
-
+  
 end 
 
 fun first_hole :: "nat list \<Rightarrow> nat" where 
@@ -153,18 +153,13 @@ end
 subsection {* The @{text try_acquire_leadership} action *}
 
 locale update_onebs =
-  fixes onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option) option"
+  fixes onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option)"
   and votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
   and  b :: bal and a :: 'a
 begin 
-  abbreviation(input) at_b where "at_b \<equiv> onebs $ b"
-  abbreviation(input) from_none where "from_none \<equiv> (K$ K$ None)(a $:= votes)"
-  abbreviation(input) from_existing where "from_existing \<equiv> \<lambda> ff . ff(a $:= votes)"
-  definition new_onebs where "new_onebs \<equiv>
-    case at_b of None \<Rightarrow> onebs(b $:= Some from_none)
-    | Some ff \<Rightarrow> onebs(b $:= Some (from_existing ff))"
-end
+definition new_onebs where "new_onebs \<equiv> onebs(b $:= (onebs $ b)(a $:= votes))"
 
+end
 global_interpretation uonebs:update_onebs onebs votes b a for onebs votes b a 
   defines new_onebs = update_onebs.new_onebs .
 
@@ -173,7 +168,7 @@ context amp_r3 begin
 definition try_acquire_leadership where "try_acquire_leadership s \<equiv>
   let
     b = next_bal (ballot s) (id s);
-    s' = s\<lparr>onebs := new_onebs (onebs s) (votes s) b (id s), ballot := b\<rparr>;
+    s'' = s\<lparr>onebs := (onebs s)(b $:= ((onebs s)$ b)((id s) $:= votes s)), ballot := b\<rparr>;
     msgs = send_all s (Phase1a b)
   in (s, msgs)"
 
@@ -191,12 +186,12 @@ end
 subsection {* The @{text receive_1b} action *}
 
 locale receive_1b =
-  fixes votes :: "'a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option"
+  fixes onebs :: "'a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option"
   fixes as :: "'a set"
   fixes log :: "inst \<Rightarrow>f 'v amp_r3.inst_status"
 begin
 
-definition per_inst where "per_inst \<equiv> op$ votes ` as"
+definition per_inst where "per_inst \<equiv> op$ onebs ` as"
 definition combine where 
   "combine ff1 ff2 \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $)"
   
@@ -257,9 +252,13 @@ definition msgs where "msgs \<equiv>
     msg_list = map (\<lambda> (i,v,b) . (amp_r3.Phase2a i b v)) to_propose
   in set msg_list"
 
+lemma msgs_lemma:
+  "\<And> m . m \<in> msgs \<Longrightarrow> case m of (amp_r3.Phase2a _ _ _) \<Rightarrow> True |_ \<Rightarrow> False"
+  apply (auto simp add:local.msgs_def) by (simp add: amp_r3.msg.simps(28))
+
 end
 
-global_interpretation r1:receive_1b votes as log for votes as log
+global_interpretation r1:receive_1b onebs as log for onebs as log
   defines new_log = "receive_1b.new_log"
     and msgs = "receive_1b.msgs"
   .
@@ -268,11 +267,11 @@ context amp_r3 begin
 
 definition receive_1b where "receive_1b s a b vs \<equiv>
   let s' = s\<lparr>onebs := new_onebs (onebs s) vs b a\<rparr>
-  in (if (set (finfun_to_list (the (onebs s' $ b))) = acceptors s) 
+  in (if (set (finfun_to_list (onebs s' $ b)) = acceptors s)
     then let
-        s'' = s'\<lparr>log := new_log (the (onebs s $ b)) (acceptors s) (log s)\<rparr>;
-        msgs = msgs (the (onebs s $ b)) (acceptors s) (log s)
-      in (s'', Set.bind msgs (send_all s)) 
+        s'' = s'\<lparr>log := new_log (onebs s $ b) (acceptors s) (log s)\<rparr>;
+        msgs = msgs (onebs s $ b) (acceptors s) (log s)
+      in (s'', \<Union> {send_all s m | m . m \<in> msgs})
     else (s', {}))"
 
 subsection {* The @{text receive_2a} action *}
@@ -316,7 +315,7 @@ end
 subsection {* Global system IOA. *} 
 
 record ('a,'v) global_state =
-  lstate :: "'a \<Rightarrow> ('a, 'v)local_state"
+  lstate :: "'a \<Rightarrow> ('a, 'v)acc"
   network :: "('a, 'v) amp_r3.packet set"
 
 context amp_r3 begin
