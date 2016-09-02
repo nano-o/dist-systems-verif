@@ -265,7 +265,7 @@ lemma pre_inst_lemma:
 context includes lifting_syntax
 begin
 
-lemma finfun_Diag_transfer[transfer_rule]: 
+lemma finfun_Diag_transfer[transfer_rule]:
   "((pcr_finfun A B) ===> (pcr_finfun A C) ===> (pcr_finfun A (rel_prod B C))) 
     (\<lambda> f g  x . (f x, g x)) (\<lambda> ff gg . ($ ff, gg $))" 
   unfolding  OO_def pcr_finfun_def cr_finfun_def rel_prod_conv rel_fun_def
@@ -292,8 +292,22 @@ proof -
   qed
 qed
 
-lemma "finfun_default (f o$ (ff::nat \<Rightarrow>f 'd)) = f (finfun_default ff)"
-  apply transfer apply (simp add:finfun_default_aux_def finfun_def) oops
+lemma comp_default:
+  fixes ff :: "nat \<Rightarrow>f 'c" and f :: "'c \<Rightarrow> 'd"
+  shows "finfun_default (f o$ ff) = f (finfun_default ff)"
+  apply transfer apply (simp add:finfun_default_aux_def finfun_def)
+  subgoal premises prems for f ff
+  proof - 
+    from \<open>\<exists>b. finite {a. ff a \<noteq> b}\<close> obtain b where "finite {a. ff a \<noteq> b}"
+      by auto
+    hence 1:"(THE b. finite {a. ff a \<noteq> b}) = b" by (auto simp add: finfun_default_determined)
+    let ?b' = "f b"
+    have "finite {a. f (ff a) \<noteq> ?b'}" using \<open>finite {a. ff a \<noteq> b}\<close>
+      by (metis (mono_tags, lifting) Collect_mono finite_subset)
+    hence 2:"(THE b. finite {a. f (ff a) \<noteq> b}) = ?b'" by (auto simp add: finfun_default_determined)
+    from 1 2 show ?thesis by blast
+  qed
+  done
 
 end
   
