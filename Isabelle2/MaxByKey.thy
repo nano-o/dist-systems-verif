@@ -12,10 +12,6 @@ context begin
 definition max_by_key :: "'a set \<Rightarrow> ('a \<Rightarrow> 'b::linorder) \<Rightarrow> 'a set" where
   -- {* @{term max_by_key} is executable *}
   "max_by_key S f \<equiv> {x \<in> S . f x = Max (f ` S)}"
-
-lemma fixes X::"nat set" assumes "finite X" and "X \<noteq> {}"
-  obtains a where "a \<in> X" and "\<And> x . \<lbrakk>x \<in> X; x \<noteq> a\<rbrakk> \<Longrightarrow> x < a"
-  by (metis Max_ge Max_in assms(1) assms(2) le_neq_implies_less) 
   
 lemma max_by_key_ordered:
   fixes S::"'a set" and f::"'a \<Rightarrow> 'b::linorder"
