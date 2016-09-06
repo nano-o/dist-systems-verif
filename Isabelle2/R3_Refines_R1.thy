@@ -6,15 +6,42 @@ begin
 
 section {* A few lemmas *}
 
+lemma comprehension_to_fold:
+  fixes Y P c
+  assumes "finite Y" 
+  defines "c \<equiv> \<lambda> y xs . xs \<union> {x . P x y}"
+  shows "{x . \<exists> y \<in> Y . P x y} = Finite_Set.fold c {} Y" using assms
+proof -
+  interpret c_folding:folding_idem c "{}"
+    apply (unfold_locales)
+     apply (auto simp add:c_def)
+    done
+  show ?thesis using assms(1)
+  proof (induct Y)
+    case empty
+    then show ?case by simp
+  next
+    case (insert x F)
+    have "Finite_Set.fold c {} (insert x F) = c x {x . \<exists> y \<in> F . P x y}"
+      using c_folding.eq_fold c_folding.insert insert.hyps(1) insert.hyps(2) insert.hyps(3) by auto
+    also have "... =  {z . \<exists> y \<in> (insert x F) . P z y}" 
+      by (fastforce simp add:c_def)
+    finally show ?case by simp
+  qed
+qed
+
 locale receive_1b_lemmas = receive_1b onebs as log for onebs as log +
   assumes votes_default:"\<And> a . finfun_default (onebs $ a) = None"
     and log_default:"finfun_default log = inst_status.Free" and fin:"finite as"
+  and conservative:"\<And> a a' i b v v' . \<lbrakk>onebs $ a $ i = Some (v,b); onebs $a' $ i = Some (v',b)\<rbrakk>
+        \<Longrightarrow> v = v'"
 begin
 
 lemma per_inst_lemma:
   "\<And> ff . ff \<in> per_inst \<Longrightarrow> finfun_default ff = None"
   using receive_1b_lemmas_axioms receive_1b_lemmas_def
-  using per_inst_def by (metis (mono_tags, lifting) imageE)
+  using per_inst_def
+  by (metis (no_types, hide_lams) image_iff) 
 
 lemma votes_per_inst_default:
   fixes s assumes "finite s" and "\<And> ff . ff \<in> s \<Longrightarrow> finfun_default ff = None"
@@ -57,6 +84,23 @@ lemma new_log_default:
   "finfun_default new_log = inst_status.Free" using log_default
   by (auto simp add:new_log_def max_per_inst_default comp_default diag_default)
 
+
+lemma votes_per_inst_decl: 
+  "votes_per_inst per_inst $ i = {(v,b) . \<exists> a \<in> as . onebs $ a $ i = Some (v,b)}"
+  sorry
+
+lemma conservative_per_inst:
+  fixes v v' b i
+    assumes "(v,b) \<in> votes_per_inst per_inst $ i"
+    and "(v',b) \<in> votes_per_inst per_inst $ i"
+  shows "v = v'" using conservative assms votes_per_inst_decl by auto
+
+lemma test:
+  assumes "max_by_key ps snd \<noteq> {}"
+  obtains p where "max_by_key ps snd = {p}"
+    using max_by_key_ordered 
+  oops
+
 lemma max_per_inst_lemma:
   "\<forall> i . max_per_inst $ i = max_by_key {(v,b) . (\<exists> a \<in> as . onebs $ a $ i = Some (v,b))} snd"
   oops
@@ -70,7 +114,8 @@ lemma max_per_inst_lemma_2:
   
 lemma test:
   "new_log $ i = Active \<longleftrightarrow> (\<exists> b . Phase2a i b v \<in> msgs)"
-  apply (simp add:msgs_def) oops
+  apply (simp add:msgs_def) 
+  oops
   
 end
   
