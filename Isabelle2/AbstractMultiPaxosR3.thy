@@ -14,7 +14,7 @@ section {* Local state and transitions *}
 subsection {* Data structures *}
 
 datatype 'v inst_status =
-  Decided 'v | Proposed 'v | Free
+  Decided 'v | Active | Free
   -- {* An instance is in status @{term Free} locally when the acceptor has not itself proposed 
     or seen a decision in that instance, or seen a proposal. *}
 
@@ -125,7 +125,7 @@ definition do_2a where "do_2a s v \<equiv>
   let
     i = next_inst s;
     b = ballot s;
-    s' = s\<lparr>log := (log s)(i $:= Proposed v),
+    s' = s\<lparr>log := (log s)(i $:= Active),
       twobs := (twobs s)(i $:= (twobs s $ i)(b $:= {id s}))\<rparr>;
     msgs = send_all s (Phase2a i b v)
   in (s', msgs)"
@@ -213,8 +213,7 @@ qed
 definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ (votes_per_inst per_inst)"
   
 definition new_log where "new_log \<equiv> (\<lambda> (s, m) .
-    case s of Decided _ \<Rightarrow> s | _ \<Rightarrow> (
-      if m = {} then Free else Proposed ((fst o the_elem) m)) )
+    case s of Decided _ \<Rightarrow> s | _ \<Rightarrow> (if m = {} then Free else Active))
   o$ ($ log, max_per_inst $)"
   
 definition msgs where "msgs \<equiv>

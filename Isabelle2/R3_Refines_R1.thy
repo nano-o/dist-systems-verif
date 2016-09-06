@@ -65,11 +65,11 @@ lemma max_per_inst_lemma_2:
   "\<forall> i . let m = max_by_key {(v,b) . (\<exists> a \<in> as . onebs $ a $ i = Some (v,b))} snd in
      case log $ i of Decided _ \<Rightarrow> new_log $ i = log $ i
      | _ \<Rightarrow> if m = {} then new_log $ i = Free 
-        else new_log $ i = Proposed ((fst o the_elem) m)"
+        else new_log $ i = Active"
   oops
   
 lemma test:
-  "new_log $ i = Proposed v \<longleftrightarrow> (\<exists> b . Phase2a i b v \<in> msgs)"
+  "new_log $ i = Active \<longleftrightarrow> (\<exists> b . Phase2a i b v \<in> msgs)"
   apply (simp add:msgs_def) oops
   
 end
