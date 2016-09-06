@@ -190,7 +190,15 @@ locale receive_1b =
   fixes log :: "inst \<Rightarrow>f 'v inst_status"
 begin
 
+definition votes_per_inst_2 where
+  "votes_per_inst_2 \<equiv>
+    let
+      f = \<lambda> a vs . (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ (onebs $ a), vs $)
+    in
+      Finite_Set.fold f (K$ {}) as"
+
 definition per_inst where "per_inst \<equiv> op$ onebs ` as"
+  
 definition combine where 
   "combine ff1 ff2 \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $)"
   
@@ -218,7 +226,7 @@ definition new_log where "new_log \<equiv> (\<lambda> (s, m) .
   
 definition msgs where "msgs \<equiv>
   let 
-    is = finfun_to_list new_log;
+    is = finfun_to_list ((op= Active) o$ new_log);
     to_propose = map (\<lambda> i . (i, the_elem (max_per_inst $ i))) is;
     msg_list = map (\<lambda> (i,v,b) . (Phase2a i b v)) to_propose
   in set msg_list"
