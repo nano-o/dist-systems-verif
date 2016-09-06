@@ -8,7 +8,7 @@ section {* A few lemmas *}
 
 locale receive_1b_lemmas = receive_1b onebs as log for onebs as log +
   assumes votes_default:"\<And> a . finfun_default (onebs $ a) = None"
-    and log_default:"finfun_default log = amp_r3.inst_status.Free" and fin:"finite as"
+    and log_default:"finfun_default log = inst_status.Free" and fin:"finite as"
 begin
 
 lemma per_inst_lemma:
@@ -16,7 +16,7 @@ lemma per_inst_lemma:
   using receive_1b_lemmas_axioms receive_1b_lemmas_def
   using per_inst_def by (metis (mono_tags, lifting) imageE)
 
-lemma votes_per_inst_lemma:
+lemma votes_per_inst_default:
   fixes s assumes "finite s" and "\<And> ff . ff \<in> s \<Longrightarrow> finfun_default ff = None"
   shows "finfun_default (votes_per_inst s) = {}"
 proof (simp add:votes_per_inst_def)
@@ -48,18 +48,32 @@ proof -
   have "finfun_default (votes_per_inst per_inst) = {}"
   proof -
     have "finite per_inst" using fin by (simp add:per_inst_def)
-    thus ?thesis by (simp add:per_inst_lemma votes_per_inst_lemma)
+    thus ?thesis by (simp add:per_inst_lemma votes_per_inst_default)
   qed
   thus ?thesis by (simp add:max_per_inst_def max_by_key_def comp_default)
 qed
 
-lemma new_log_lemma:
-  "finfun_default new_log = amp_r3.inst_status.Free" using log_default
-  apply (auto simp add:new_log_def max_per_inst_default comp_default diag_default)
-  by (simp add: amp_r3.inst_status.simps(11))
+lemma new_log_default:
+  "finfun_default new_log = inst_status.Free" using log_default
+  by (auto simp add:new_log_def max_per_inst_default comp_default diag_default)
+
+lemma max_per_inst_lemma:
+  "\<forall> i . max_per_inst $ i = max_by_key {(v,b) . (\<exists> a \<in> as . onebs $ a $ i = Some (v,b))} snd"
+  oops
+  
+lemma max_per_inst_lemma_2:
+  "\<forall> i . let m = max_by_key {(v,b) . (\<exists> a \<in> as . onebs $ a $ i = Some (v,b))} snd in
+     case log $ i of Decided _ \<Rightarrow> new_log $ i = log $ i
+     | _ \<Rightarrow> if m = {} then new_log $ i = Free 
+        else new_log $ i = Proposed ((fst o the_elem) m)"
+  oops
+  
+lemma test:
+  "new_log $ i = Proposed v \<longleftrightarrow> (\<exists> b . Phase2a i b v \<in> msgs)"
+  apply (simp add:msgs_def) oops
   
 end
-
+  
 section {* Refinement proof using a refinement mapping *}
   
 locale ref_proof_4 = quorums quorums + amp_r3 leader next_bal as quorums
@@ -97,6 +111,8 @@ lemma inv1:"invariant ampr3_ioa inv1"
   done
 declare inv1[invs]
 
+declare finfun_upd_apply[simp]
+
 definition inv6 where inv6_def:
   "inv6 s \<equiv> \<forall> a i b v . (Packet a (Phase2a i b v) \<in> network s \<longrightarrow> log (lstate s (leader b)) $ i \<noteq> Free)"
 lemma inv6: "invariant ampr3_ioa inv6"
@@ -105,36 +121,14 @@ lemma inv6: "invariant ampr3_ioa inv6"
   apply (insert invs)
   apply (instantiate_invs)
   apply (rm_reachable)
-  apply (trans_cases;
-    (simp add:inv1_def inv6_def action_defs  split!:packet.splits msg.splits; fail)?)
-        apply (simp add:inv1_def inv6_def action_defs)
-        apply (metis amp_r3.inst_status.distinct(5) finfun_upd_apply)
+  apply (trans_cases)
+        apply (fastforce simp add:inv1_def inv6_def action_defs)
+        apply (fastforce simp add:inv1_def inv6_def action_defs)
        apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
-        apply (metis amp_r3.inst_status.distinct(3) finfun_upd_apply)
-  apply blast
-      apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
-         apply blast
-        apply blast
-       apply blast
-      apply blast
-     apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
-        apply blast
-       apply blast
-      apply blast
-     apply blast
-    apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
-         apply (metis amp_r3.inst_status.distinct(3) finfun_upd_apply)
-        apply blast
-       apply auto[1]
-      apply auto[1]
-     apply blast
-    apply blast
-   defer
-   apply (simp add:inv1_def inv6_def action_defs split!:if_splits)
-      apply (metis amp_r3.inst_status.distinct(5) finfun_upd_apply)
-     apply blast
-    apply blast
-  apply blast
+      apply (fastforce simp add:inv1_def inv6_def action_defs split!:if_splits)
+     apply (fastforce simp add:inv1_def inv6_def action_defs split!:if_splits)
+    apply (fastforce simp add:inv1_def inv6_def action_defs split!:if_splits) defer
+   apply (fastforce simp add:inv1_def inv6_def action_defs split!:if_splits)
    (* TODO: The hard one is left. *) oops
   
 definition inv2 where inv2_def:
@@ -199,7 +193,9 @@ lemma inv5:"invariant ampr3_ioa inv5"
           using prems(1) by (auto simp add:inv5_def)
         show ?thesis using 2 3 prems(1,4,7)
           apply (auto simp add: inv5_def new_onebs_def update_onebs.new_onebs_def)
-          apply (case_tac "b' = b", case_tac "a2' = a2") apply auto
+          apply (case_tac "b' = b", case_tac "a2' = a2")
+            apply fastforce
+          apply blast
           by fastforce
       next
         case False

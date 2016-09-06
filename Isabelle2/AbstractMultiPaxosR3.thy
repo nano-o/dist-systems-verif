@@ -13,26 +13,17 @@ section {* Local state and transitions *}
 
 subsection {* Data structures *}
 
-locale amp_r3 =
-  fixes leader :: "bal \<Rightarrow> 'a::linorder"
-  and next_bal :: "bal \<Rightarrow> 'a \<Rightarrow> bal"
-  and as :: "'a set"
-  and quorums :: "'a set set"
-begin
-
 datatype 'v inst_status =
   Decided 'v | Proposed 'v | Free
   -- {* An instance is in status @{term Free} locally when the acceptor has not itself proposed 
     or seen a decision in that instance, or seen a proposal. *}
-
-end
 
 record ('a, 'v) acc =
   -- {* The local state of an acceptor. *}
   id :: 'a
   acceptors :: "'a set"
   ballot :: bal
-  log :: "inst \<Rightarrow>f 'v amp_r3.inst_status"
+  log :: "inst \<Rightarrow>f 'v inst_status"
     -- {* Last ballot in which the acceptor voted. *}
   votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
   onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option)"
@@ -40,23 +31,29 @@ record ('a, 'v) acc =
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a set"
     -- {* the twob messages received (they are broadcast). *}
 
-context amp_r3
-begin
-
 datatype ('aa,'vv) msg =
   Phase1a bal
   | Phase1b 'aa bal "inst \<Rightarrow>f ('vv \<times> bal) option"
   | Phase2a inst bal 'vv
   | Phase2b 'aa inst bal 'vv
   (* | Decision inst 'v *)
-  | Fwd 'vv
-
+| Fwd 'vv
+  
 datatype ('aa,'vv) packet =
   Packet 'aa  "('aa,'vv) msg"
+
+locale amp_r3 =
+  fixes leader :: "bal \<Rightarrow> 'a::linorder"
+  and next_bal :: "bal \<Rightarrow> 'a \<Rightarrow> bal"
+  and as :: "'a set"
+  and quorums :: "'a set set"
+begin
 
 definition local_start where "local_start a \<equiv>
   \<lparr>id = a, acceptors = as, ballot = 0, log = K$ Free,
     votes = K$ None, onebs = K$ K$ K$ None, twobs = K$ K$ {}\<rparr>"
+  
+end
 
 subsection {* The propose action *} 
 
@@ -67,8 +64,6 @@ definition send_all where send_all_def[code del]:
 lemma send_all_code[code]:
   "send_all s m = (flip Packet m) ` (acceptors s - {id s})"
   by (auto simp add:send_all_def)
-  
-end 
 
 fun first_hole :: "nat list \<Rightarrow> nat" where 
   "first_hole [] = 0"
@@ -192,7 +187,7 @@ subsection {* The @{text receive_1b} action *}
 locale receive_1b =
   fixes onebs :: "'a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option"
   fixes as :: "'a set"
-  fixes log :: "inst \<Rightarrow>f 'v amp_r3.inst_status"
+  fixes log :: "inst \<Rightarrow>f 'v inst_status"
 begin
 
 definition per_inst where "per_inst \<equiv> op$ onebs ` as"
@@ -204,22 +199,8 @@ sublocale folding_idem combine "K$ {}"
    apply (auto simp add:combine_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
   done
 
-(*
-definition combine2 where 
-  "combine2 ff1 f2 \<equiv> \<lambda> i . option_as_set (ff1 $ i) \<union> f2 i"
-interpretation fi2:folding_idem combine2 "\<lambda> i . {}"
-  apply (unfold_locales)
-   apply (auto simp add:combine2_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
-  done 
-*)
-
 definition votes_per_inst :: "(nat \<Rightarrow>f 'c option) set \<Rightarrow> nat \<Rightarrow>f 'c set" where
   "votes_per_inst s \<equiv> Finite_Set.fold combine (K$ {}) s"
-  
-(*
-definition votes_per_inst2 :: "(nat \<Rightarrow>f 'c option) set \<Rightarrow> nat \<Rightarrow> 'c set" where
-  "votes_per_inst2 s \<equiv> Finite_Set.fold combine2 (\<lambda> i . {}) s" 
-*)
   
 lemma votes_per_inst_code[code]: "votes_per_inst (set (x#xs)) = combine x (votes_per_inst (set xs))"
 proof -
@@ -228,37 +209,24 @@ proof -
     by (simp add:votes_per_inst_def option_as_set_def eq_fold split!:option.splits)
   thus ?thesis by (auto simp add:votes_per_inst_def)
 qed
-(*
-lemma votes_per_inst2_code[code]: "votes_per_inst2 (set (x#xs)) = combine2 x (votes_per_inst2 (set xs))"
-proof -
-  let ?fold_expr = "\<lambda> s . Finite_Set.fold combine2 (\<lambda> i . {}) s"
-  from fi2.insert_idem[of "set xs" x] have "?fold_expr (set (x#xs)) = combine2 x (?fold_expr (set xs))"
-    by (simp add:votes_per_inst2_def option_as_set_def fi2.eq_fold split!:option.splits)
-  thus ?thesis by (auto simp add:votes_per_inst2_def)
-qed
-*)
 
 definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ (votes_per_inst per_inst)"
-  (*
-definition max_per_inst2 where "max_per_inst2 \<equiv> (flip max_by_key snd) o (votes_per_inst2 per_inst)"
-  *)
   
-definition new_log where "new_log \<equiv> (\<lambda> (is, m) .
-    case is of amp_r3.Decided _ \<Rightarrow> is | _ \<Rightarrow> (
-      if m = {} then amp_r3.Free else amp_r3.Proposed ((fst o the_elem) m)) )
+definition new_log where "new_log \<equiv> (\<lambda> (s, m) .
+    case s of Decided _ \<Rightarrow> s | _ \<Rightarrow> (
+      if m = {} then Free else Proposed ((fst o the_elem) m)) )
   o$ ($ log, max_per_inst $)"
-  -- {* TODO: how to define this using the definitions ending with 2? Using finfun_to_list. *}
   
 definition msgs where "msgs \<equiv>
   let 
     is = finfun_to_list new_log;
     to_propose = map (\<lambda> i . (i, the_elem (max_per_inst $ i))) is;
-    msg_list = map (\<lambda> (i,v,b) . (amp_r3.Phase2a i b v)) to_propose
+    msg_list = map (\<lambda> (i,v,b) . (Phase2a i b v)) to_propose
   in set msg_list"
 
 lemma msgs_lemma:
-  "\<And> m . m \<in> msgs \<Longrightarrow> case m of (amp_r3.Phase2a _ _ _) \<Rightarrow> True |_ \<Rightarrow> False"
-  apply (auto simp add:local.msgs_def) by (simp add: amp_r3.msg.simps(28))
+  "\<And> m . m \<in> msgs \<Longrightarrow> case m of (Phase2a _ _ _) \<Rightarrow> True |_ \<Rightarrow> False"
+  by (auto simp add:local.msgs_def) 
 
 end
 
@@ -320,7 +288,7 @@ subsection {* Global system IOA. *}
 
 record ('a,'v) global_state =
   lstate :: "'a \<Rightarrow> ('a, 'v)acc"
-  network :: "('a, 'v) amp_r3.packet set"
+  network :: "('a, 'v) packet set"
 
 context amp_r3 begin
 

@@ -30,7 +30,6 @@ global_interpretation my_amp_r3:amp_r3 leader next_bal accs qs
     and receive_fwd = my_amp_r3.receive_fwd
     and receive_1a = my_amp_r3.receive_1a
     and do_2a = my_amp_r3.do_2a
-    and send_all = my_amp_r3.send_all
   .
 
 subsection {* Code generation *}
