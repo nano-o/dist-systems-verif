@@ -59,7 +59,8 @@ subsection {* The propose action *}
 
 definition send_all where send_all_def[code del]:
   "send_all s m \<equiv> { Packet a m | a . a \<in> acceptors s \<and> a \<noteq> id s}"
-  -- {* TODO: This definition does not always work for code generation. Why? *}
+  -- {* TODO: This definition does not always work for code generation. Why? 
+  That's why there is a code equation below. *}
   
 lemma send_all_code[code]:
   "send_all s m = (flip Packet m) ` (acceptors s - {id s})"
@@ -108,7 +109,6 @@ begin
 
 definition next_inst where "next_inst s \<equiv>
   first_hole (finfun_to_list (log s))"
-  -- {* TODO: optimize using a definition with finfun_rec. *}
   
 lemma next_inst_lemma:
   fixes s 
@@ -190,6 +190,8 @@ locale receive_1b =
   fixes log :: "inst \<Rightarrow>f 'v inst_status"
 begin
 
+text {* Why not do things with @{term finfun_rec}? *}
+
 definition c where 
   "c a vs \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ (onebs $ a), vs $)"
   
@@ -219,7 +221,7 @@ definition msgs_2 where "msgs_2 \<equiv> let
     is = ((\<lambda> s . case s of Decided _ \<Rightarrow> False | _ \<Rightarrow> True) o$ log);
     to_propose = my_comp (\<lambda> i (b,m) . if m = {} \<or> \<not> b then {} else ((case_prod (flip (Phase2a i))) ` m))
       ($is, max_per_inst$)
-    in True"
+    in \<Union> {the (to_propose $ i) | i . i \<in> set (finfun_to_list to_propose)}"
   
 definition msgs where "msgs \<equiv>
   let 

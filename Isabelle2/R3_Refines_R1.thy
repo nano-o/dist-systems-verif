@@ -139,8 +139,8 @@ lemma max_per_inst_lemma:
 lemma new_log_lemma:
   "\<forall> i . let m = max_by_key {(v,b) . (\<exists> a \<in> as . onebs $ a $ i = Some (v,b))} snd in
      case log $ i of Decided _ \<Rightarrow> new_log $ i = log $ i
-     | _ \<Rightarrow> if m = {} then new_log $ i = Free 
-        else new_log $ i = Active" 
+     | _ \<Rightarrow> if m = {} then new_log $ i = Free
+        else new_log $ i = Active"
   apply (rule allI) apply (auto simp add:Let_def new_log_def split!:inst_status.splits)
      apply (metis empty_iff max_per_inst_lemma)
     apply (metis empty_iff max_per_inst_lemma)
@@ -178,7 +178,7 @@ proof -
     then show "finfun_dom (op = Active \<circ>$ local.new_log) $ i = (local.new_log $ i = Active)"
       using f3 f2 a1 by (metis finfun_dom_conv)
   qed 
-  thus ?thesis unfolding msgs_def Let_def apply simp oops
+  thus ?thesis unfolding msgs_def Let_def apply simp 
     (* Here we are missing the fact that if an instance is Active in new_log then its max_per_inst
     is a singleton*)
   oops
