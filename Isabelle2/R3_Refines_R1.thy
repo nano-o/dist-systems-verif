@@ -30,6 +30,32 @@ proof -
   qed
 qed
 
+lemma comprehension_to_fold_2:
+  fixes f S P g i c
+  assumes "finite S"
+  defines "c \<equiv> \<lambda> a res . (\<lambda> (gai, ri) . if P gai then insert (f gai) ri else ri) o$ ($ g a, res $)"
+  shows
+    "{f ((g a) $ i) | a . a \<in> S \<and> P ((g a) $ i)} = (Finite_Set.fold c (K$ {}) S) $ i" using assms(1)
+proof (induct)
+  case empty
+  then show ?case by simp
+next
+  case (insert x F)
+  interpret c_folding:folding_idem c "K$ {}"
+    apply (unfold_locales)
+     apply (auto simp add:c_def fun_eq_iff expand_finfun_eq)
+    done
+  have 1:"\<And> ff . c x ff $ i = (if P (g x $ i) then insert (f (g x $ i)) (ff $ i) else ff $ i)"
+    by (simp add:c_def)
+  have "Finite_Set.fold c (K$ {}) (insert x F) $ i = c x (Finite_Set.fold c (K$ {}) F) $ i"
+    using c_folding.eq_fold c_folding.insert_idem insert.hyps(1) by auto
+  also have "... = (if (P (g x $ i)) then insert (f (g x $ i)) (Finite_Set.fold c (K$ {}) F $ i)
+    else (Finite_Set.fold c (K$ {}) F) $ i)"
+    by (simp add: "1")
+  finally show ?case using insert.hyps
+    by auto
+qed
+
 locale receive_1b_lemmas = receive_1b onebs as log for onebs as log +
   assumes votes_default:"\<And> a . finfun_default (onebs $ a) = None"
     and log_default:"finfun_default log = inst_status.Free" and fin:"finite as"
@@ -37,6 +63,21 @@ locale receive_1b_lemmas = receive_1b onebs as log for onebs as log +
         \<Longrightarrow> v = v'"
 begin
 
+lemma votes_per_inst_2_decl:
+  "(\<lambda> i . {the (onebs $ a $ i) | a . a \<in> as \<and> onebs $ a $ i \<noteq> None}) = op$ votes_per_inst_2"
+  apply (simp only:fun_eq_iff, rule allI)
+  subgoal for i
+  proof -
+    let ?f="\<lambda>(gai, ri). if gai \<noteq> None then insert (the gai) ri else ri"
+    have 1:"?f = (\<lambda> (vo, vs) . option_as_set vo \<union> vs)"
+      by (auto simp add:option_as_set_def fun_eq_iff split!:option.splits)
+    have 2:"votes_per_inst_2 = Finite_Set.fold (\<lambda> a vs . ?f o$ ($ (onebs $ a), vs $)) (K$ {}) as"
+      by (simp only:votes_per_inst_2_def 1 Let_def)
+    note 3 = comprehension_to_fold_2[OF fin, where ?g="op$ onebs" and ?f=the and ?P="flip op\<noteq> None"]
+    show ?thesis by (simp only:2 3) 
+  qed
+  done
+  
 lemma per_inst_lemma:
   "\<And> ff . ff \<in> per_inst \<Longrightarrow> finfun_default ff = None"
   using receive_1b_lemmas_axioms receive_1b_lemmas_def
@@ -84,6 +125,9 @@ lemma new_log_default:
   "finfun_default new_log = inst_status.Free" using log_default
   by (auto simp add:new_log_def max_per_inst_default comp_default diag_default)
 
+lemma votes_decl: 
+  "op$ (votes_per_inst per_inst) = (\<lambda> i . {(v,b) . \<exists> a \<in> as . onebs $ a $ i = Some (v,b)})"
+  sorry
 
 lemma votes_per_inst_decl: 
   "votes_per_inst per_inst $ i = {(v,b) . \<exists> a \<in> as . onebs $ a $ i = Some (v,b)}"
