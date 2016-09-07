@@ -215,6 +215,12 @@ definition new_log where "new_log \<equiv> (\<lambda> (s, m) .
     case s of Decided _ \<Rightarrow> s | _ \<Rightarrow> (if m = {} then Free else Active))
   o$ ($ log, max_per_inst $)"
   
+definition msgs_2 where "msgs_2 \<equiv> let
+    is = ((\<lambda> s . case s of Decided _ \<Rightarrow> False | _ \<Rightarrow> True) o$ log);
+    to_propose = my_comp (\<lambda> i (b,m) . if m = {} \<or> \<not> b then {} else ((case_prod (flip (Phase2a i))) ` m))
+      ($is, max_per_inst$)
+    in True"
+  
 definition msgs where "msgs \<equiv>
   let 
     is = finfun_to_list ((op= Active) o$ new_log);

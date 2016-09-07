@@ -147,9 +147,40 @@ lemma new_log_lemma:
    apply (metis empty_iff max_per_inst_lemma)
   by (metis empty_iff max_per_inst_lemma)
 
-lemma test:
-  "new_log $ i = Active \<longleftrightarrow> (\<exists> b . Phase2a i b v \<in> msgs)"
-  apply (auto simp add:msgs_def)
+lemma msgs_lemma:
+  "msgs = {Phase2a i b v | i b v . (new_log $ i = Active \<and> max_per_inst $ i = {(v,b)})}"
+proof -
+  have 1:"finfun_default ((op= Active) o$ new_log) = False" using new_log_default
+    apply auto
+  proof -
+    assume a1: "finfun_default (op = Active \<circ>$ local.new_log)"
+    assume a2: "finfun_default local.new_log = Free"
+    have "Active = finfun_default local.new_log"
+      using a1 comp_default by auto
+    then show False
+      using a2 by (metis inst_status.distinct(5))
+  qed
+  hence "i \<in> set (finfun_to_list ((op= Active) o$ new_log)) = (new_log $ i = Active)" for i
+    apply (simp add:)
+  proof -
+    assume a1: "\<not> finfun_default (op = Active \<circ>$ local.new_log)"
+    have f2: "\<And>p f n i. (p \<circ>$ f(n::nat $:= i::'b inst_status)) $ n \<or> \<not> p i"
+      by (metis finfun_comp_update finfun_upd_apply)
+    have f3: "\<And>f n i. f(n::nat $:= i::'b inst_status) = f \<or> i \<noteq> f $ n"
+      by (metis finfun_ext finfun_upd_apply)
+    then have f4: "\<And>p f n. p (f $ (n::nat)::'b inst_status) \<or> \<not> (p \<circ>$ f) $ n"
+      by (metis finfun_comp_update finfun_upd_apply)
+    { assume "Active \<noteq> local.new_log $ i \<and> local.new_log $ i \<noteq> Active"
+      then have "\<not> (op = Active \<circ>$ local.new_log) $ i \<and> \<not> finfun_default (op = Active \<circ>$ local.new_log) \<and> local.new_log $ i \<noteq> Active"
+        using f4 a1 by metis
+      then have "finfun_dom (op = Active \<circ>$ local.new_log) $ i = (local.new_log $ i = Active)"
+        by (smt finfun_dom_conv) }
+    then show "finfun_dom (op = Active \<circ>$ local.new_log) $ i = (local.new_log $ i = Active)"
+      using f3 f2 a1 by (metis finfun_dom_conv)
+  qed 
+  thus ?thesis unfolding msgs_def Let_def apply simp oops
+    (* Here we are missing the fact that if an instance is Active in new_log then its max_per_inst
+    is a singleton*)
   oops
   
 end

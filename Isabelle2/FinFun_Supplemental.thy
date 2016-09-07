@@ -78,6 +78,14 @@ lemma diag_default:
   qed
   done
     
+lift_definition my_comp :: "('a \<Rightarrow> 'b \<Rightarrow> 'c) \<Rightarrow> ('a \<Rightarrow>f 'b) \<Rightarrow> ('a \<Rightarrow>f 'c option)"
+  is "\<lambda> f ff . \<lambda> x . if finfun_dom ff $ x then Some (f x (ff $ x)) else None"
+  apply (auto simp add:finfun_def)
+  by (smt Abs_finfun_inverse Collect_cong finfun_dom_def finfun_dom_finfunI finite_finfun_default option.distinct(1)) 
+  
+lemma my_comp_dom[simp]:"finfun_dom (my_comp f ff) = finfun_dom ff" sorry
+lemma my_comp_default[simp]:"finfun_default (my_comp f ff) = None" sorry
+
 declare finfun_default_const_code[simp]
 
 end
