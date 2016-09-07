@@ -78,4 +78,6 @@ lemma diag_default:
   qed
   done
     
+declare finfun_default_const_code[simp]
+
 end

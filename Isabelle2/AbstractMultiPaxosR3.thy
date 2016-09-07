@@ -190,35 +190,26 @@ locale receive_1b =
   fixes log :: "inst \<Rightarrow>f 'v inst_status"
 begin
 
-definition votes_per_inst_2 where
-  "votes_per_inst_2 \<equiv>
-    let
-      f = \<lambda> a vs . (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ (onebs $ a), vs $)
-    in
-      Finite_Set.fold f (K$ {}) as"
+definition c where 
+  "c a vs \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ (onebs $ a), vs $)"
+  
+definition pre_votes_per_inst where
+  "pre_votes_per_inst S \<equiv> Finite_Set.fold c (K$ {}) S"
 
-definition per_inst where "per_inst \<equiv> op$ onebs ` as"
+definition votes_per_inst where
+  "votes_per_inst \<equiv> pre_votes_per_inst as"
   
-definition combine where 
-  "combine ff1 ff2 \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ ff1, ff2 $)"
-  
-sublocale folding_idem combine "K$ {}"
+sublocale folding_idem c "K$ {}"
   apply (unfold_locales)
-   apply (auto simp add:combine_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
+   apply (auto simp add:c_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
   done
 
-definition votes_per_inst :: "(nat \<Rightarrow>f 'c option) set \<Rightarrow> nat \<Rightarrow>f 'c set" where
-  "votes_per_inst s \<equiv> Finite_Set.fold combine (K$ {}) s"
-  
-lemma votes_per_inst_code[code]: "votes_per_inst (set (x#xs)) = combine x (votes_per_inst (set xs))"
-proof -
-  let ?fold_expr = "\<lambda> s . Finite_Set.fold combine (K$ {}) s"
-  from insert_idem[of "set xs" x] have "?fold_expr (set (x#xs)) = combine x (?fold_expr (set xs))"
-    by (simp add:votes_per_inst_def option_as_set_def eq_fold split!:option.splits)
-  thus ?thesis by (auto simp add:votes_per_inst_def)
-qed
+lemma votes_per_inst_code[code]:
+  "pre_votes_per_inst (set (x#xs)) = c x (pre_votes_per_inst (set xs))" 
+  using insert_idem[of "set xs" x]
+  by (simp add: eq_fold pre_votes_per_inst_def) 
 
-definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ (votes_per_inst per_inst)"
+definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ votes_per_inst"
   
 definition new_log where "new_log \<equiv> (\<lambda> (s, m) .
     case s of Decided _ \<Rightarrow> s | _ \<Rightarrow> (if m = {} then Free else Active))

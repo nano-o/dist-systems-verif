@@ -63,61 +63,42 @@ locale receive_1b_lemmas = receive_1b onebs as log for onebs as log +
         \<Longrightarrow> v = v'"
 begin
 
-lemma votes_per_inst_2_decl:
-  "(\<lambda> i . {the (onebs $ a $ i) | a . a \<in> as \<and> onebs $ a $ i \<noteq> None}) = op$ votes_per_inst_2"
-  apply (simp only:fun_eq_iff, rule allI)
-  subgoal for i
-  proof -
-    let ?f="\<lambda>(gai, ri). if gai \<noteq> None then insert (the gai) ri else ri"
-    have 1:"?f = (\<lambda> (vo, vs) . option_as_set vo \<union> vs)"
-      by (auto simp add:option_as_set_def fun_eq_iff split!:option.splits)
-    have 2:"votes_per_inst_2 = Finite_Set.fold (\<lambda> a vs . ?f o$ ($ (onebs $ a), vs $)) (K$ {}) as"
-      by (simp only:votes_per_inst_2_def 1 Let_def)
-    note 3 = comprehension_to_fold_2[OF fin, where ?g="op$ onebs" and ?f=the and ?P="flip op\<noteq> None"]
-    show ?thesis by (simp only:2 3) 
-  qed
-  done
+lemma votes_per_inst_decl:
+  "votes_per_inst $ i = {the (onebs $ a $ i) | a . a \<in> as \<and> onebs $ a $ i \<noteq> None}"
+proof -
+  let ?f="\<lambda>(gai, ri). if gai \<noteq> None then insert (the gai) ri else ri"
+  have 1:"?f = (\<lambda> (vo, vs) . option_as_set vo \<union> vs)"
+    by (auto simp add:option_as_set_def fun_eq_iff split!:option.splits)
+  have 2:"votes_per_inst = Finite_Set.fold (\<lambda> a vs . ?f o$ ($ (onebs $ a), vs $)) (K$ {}) as"
+    by (simp only:votes_per_inst_def 1 Let_def pre_votes_per_inst_def c_def[abs_def])
+  note 3 = comprehension_to_fold_2[OF fin, where ?g="op$ onebs" and ?f=the and ?P="flip op\<noteq> None"]
+  show ?thesis by (simp only:2 3)
+qed
   
-lemma per_inst_lemma:
-  "\<And> ff . ff \<in> per_inst \<Longrightarrow> finfun_default ff = None"
-  using receive_1b_lemmas_axioms receive_1b_lemmas_def
-  using per_inst_def
-  by (metis (no_types, hide_lams) image_iff) 
-
 lemma votes_per_inst_default:
-  fixes s assumes "finite s" and "\<And> ff . ff \<in> s \<Longrightarrow> finfun_default ff = None"
-  shows "finfun_default (votes_per_inst s) = {}"
-proof (simp add:votes_per_inst_def)
-  show "finfun_default (Finite_Set.fold combine (K$ {}) s) = {}" using assms
-  proof (induct s)
-    case empty
-    then show ?case by (simp add:combine_def finfun_default_const)
-  next
-    case (insert x F)
-    have 1:"Finite_Set.fold combine (K$ {}) (insert x F)
-      = combine x (Finite_Set.fold combine (K$ {}) F)" using insert_idem
-      by (metis eq_fold insert.hyps(1))
-    have "finfun_default (Finite_Set.fold combine (K$ {}) F) = {}"
-      by (simp add: insert.hyps(3) insert.prems)
-    moreover have "finfun_default x = None"
-      by (simp add: insert.prems) 
-    ultimately have "finfun_default ($ x, Finite_Set.fold combine (K$ {}) F $) = (None, {})"
+  assumes "\<And> a . finfun_default (onebs $ a) = None"
+  shows "finfun_default votes_per_inst = {}" using fin
+proof (simp add:votes_per_inst_def, induct)
+  case empty
+  then show ?case by (simp add:pre_votes_per_inst_def)
+next
+  case (insert x F)
+    have 1:"Finite_Set.fold c (K$ {}) (insert x F) = c x (Finite_Set.fold c (K$ {}) F)" using insert_idem
+      by (simp add: eq_fold insert.hyps(1))
+    have "finfun_default (Finite_Set.fold c (K$ {}) F) = {}" using insert.hyps(3) insert.prems
+      by (simp add: pre_votes_per_inst_def)
+    moreover have "finfun_default (onebs $ x) = None"
+      by (simp add: assms)  
+    ultimately have "finfun_default ($ onebs $ x, Finite_Set.fold c (K$ {}) F $) = (None, {})"
       by (simp add: diag_default)
-    hence "finfun_default ( (\<lambda>(vo, vs). option_as_set vo \<union> vs) \<circ>$
-                 ($x, Finite_Set.fold combine (K$ {}) F$)) = {}"
-      by (simp add:comp_default option_as_set_def)
-    thus ?case apply (simp add:1) by (auto simp add:combine_def) 
-  qed
+    with 1 show ?case by (simp add:c_def pre_votes_per_inst_def comp_default option_as_set_def)
 qed
 
 lemma max_per_inst_default:
   "finfun_default (max_per_inst) = {}"
 proof -
-  have "finfun_default (votes_per_inst per_inst) = {}"
-  proof -
-    have "finite per_inst" using fin by (simp add:per_inst_def)
-    thus ?thesis by (simp add:per_inst_lemma votes_per_inst_default)
-  qed
+  have "finfun_default votes_per_inst = {}"
+    using votes_default votes_per_inst_default by auto
   thus ?thesis by (simp add:max_per_inst_def max_by_key_def comp_default)
 qed
 
@@ -125,40 +106,50 @@ lemma new_log_default:
   "finfun_default new_log = inst_status.Free" using log_default
   by (auto simp add:new_log_def max_per_inst_default comp_default diag_default)
 
-lemma votes_decl: 
-  "op$ (votes_per_inst per_inst) = (\<lambda> i . {(v,b) . \<exists> a \<in> as . onebs $ a $ i = Some (v,b)})"
-  sorry
-
-lemma votes_per_inst_decl: 
-  "votes_per_inst per_inst $ i = {(v,b) . \<exists> a \<in> as . onebs $ a $ i = Some (v,b)}"
-  sorry
-
 lemma conservative_per_inst:
   fixes v v' b i
-    assumes "(v,b) \<in> votes_per_inst per_inst $ i"
-    and "(v',b) \<in> votes_per_inst per_inst $ i"
-  shows "v = v'" using conservative assms votes_per_inst_decl by auto
-
-lemma test:
-  assumes "max_by_key ps snd \<noteq> {}"
-  obtains p where "max_by_key ps snd = {p}"
-    using max_by_key_ordered 
-  oops
+    assumes "(v,b) \<in> votes_per_inst $ i"
+    and "(v',b) \<in> votes_per_inst $ i"
+  shows "v = v'" using conservative assms votes_per_inst_decl
+proof -
+  have "(v, b) \<in> {the (onebs $ a $ i) |a. a \<in> as \<and> onebs $ a $ i \<noteq> None}"
+    by (metis assms(1) votes_per_inst_decl)
+  then have f1: "\<exists>a. (v, b) = the (onebs $ a $ i) \<and> a \<in> as \<and> onebs $ a $ i \<noteq> None"
+  proof -
+    show ?thesis
+      using \<open>(v, b) \<in> {the (onebs $ a $ i) |a. a \<in> as \<and> onebs $ a $ i \<noteq> None}\<close> by auto
+  qed
+  have "(v', b) \<in> {the (onebs $ a $ i) |a. a \<in> as \<and> onebs $ a $ i \<noteq> None}"
+    by (metis assms(2) votes_per_inst_decl)
+  then have "\<exists>a. (v', b) = the (onebs $ a $ i) \<and> a \<in> as \<and> onebs $ a $ i \<noteq> None"
+  proof -
+    show ?thesis
+      using \<open>(v', b) \<in> {the (onebs $ a $ i) |a. a \<in> as \<and> onebs $ a $ i \<noteq> None}\<close> by auto
+  qed
+  then show ?thesis
+    using f1 by (metis conservative option.collapse)
+qed
 
 lemma max_per_inst_lemma:
   "\<forall> i . max_per_inst $ i = max_by_key {(v,b) . (\<exists> a \<in> as . onebs $ a $ i = Some (v,b))} snd"
-  oops
+  apply (rule allI) 
+  apply (simp add:votes_per_inst_decl max_per_inst_def)
+  by (smt Collect_cong case_prodE case_prodI option.sel)
   
-lemma max_per_inst_lemma_2:
+lemma new_log_lemma:
   "\<forall> i . let m = max_by_key {(v,b) . (\<exists> a \<in> as . onebs $ a $ i = Some (v,b))} snd in
      case log $ i of Decided _ \<Rightarrow> new_log $ i = log $ i
      | _ \<Rightarrow> if m = {} then new_log $ i = Free 
-        else new_log $ i = Active"
-  oops
-  
+        else new_log $ i = Active" 
+  apply (rule allI) apply (auto simp add:Let_def new_log_def split!:inst_status.splits)
+     apply (metis empty_iff max_per_inst_lemma)
+    apply (metis empty_iff max_per_inst_lemma)
+   apply (metis empty_iff max_per_inst_lemma)
+  by (metis empty_iff max_per_inst_lemma)
+
 lemma test:
   "new_log $ i = Active \<longleftrightarrow> (\<exists> b . Phase2a i b v \<in> msgs)"
-  apply (simp add:msgs_def) 
+  apply (auto simp add:msgs_def)
   oops
   
 end
