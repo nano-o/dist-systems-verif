@@ -14,7 +14,7 @@ record ('v,'a,'l) ampr1_state =
   ballot :: "'a \<Rightarrow> bal"
   vote :: "inst \<Rightarrow> 'a \<Rightarrow> bal \<rightharpoonup> 'v"
   suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
-  onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> ('v\<times>bal))"
+  onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> ('v\<times>bal))" (* TODO: why the firt map, and not just a function? *)
   (* leader :: "'a \<Rightarrow> bool" TODO: was this needed? *)
 
 global_interpretation dsa:distributed_safe_at quorums ballot vote for quorums ballot vote 

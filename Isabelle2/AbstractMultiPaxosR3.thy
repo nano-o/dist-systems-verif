@@ -27,7 +27,9 @@ record ('a, 'v) acc =
     -- {* Last ballot in which the acceptor voted. *}
   votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
   onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option)"
-    -- {* The oneb messages received when the acceptor tries to acquire leadership. *}
+    -- {* The oneb messages received when the acceptor tries to acquire leadership. 
+      TODO: Here we have a problem because we cannot distinguish between not receive a 1b
+      and receiving a 1b message in which the acceptor never voted in any instance. *}
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a set"
     -- {* the twob messages received (they are broadcast). *}
 
@@ -139,6 +141,7 @@ definition propose where "propose s v \<equiv>
   leadership acquisition attempt. *} 
 
 subsection {* The @{text receive_fwd} action *}
+
 definition receive_fwd where "receive_fwd s v \<equiv>
   let l = leader (ballot s) in
     if l = id s
@@ -167,9 +170,9 @@ context amp_r3 begin
 definition try_acquire_leadership where "try_acquire_leadership s \<equiv>
   let
     b = next_bal (ballot s) (id s);
-    s'' = s\<lparr>onebs := (onebs s)(b $:= ((onebs s)$ b)((id s) $:= votes s)), ballot := b\<rparr>;
+    s' = s\<lparr>onebs := (onebs s)(b $:= ((onebs s)$ b)((id s) $:= votes s)), ballot := b\<rparr>;
     msgs = send_all s (Phase1a b)
-  in (s, msgs)"
+  in (s', msgs)"
 
 subsection {* The @{text receive_1a} action *}
 
