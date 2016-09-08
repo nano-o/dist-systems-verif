@@ -16,7 +16,7 @@ interpretation dsa:distributed_safe_at quorums ballot vote for ballot vote .
 subsection {* Automation setup *}
 
 lemmas ioa_defs =
-   is_trans_def actions_def trans_def start_def
+   is_trans_def actions_def trans_def start_def start_s_def
    externals_def ioa_def asig_def
 
 declare ioa_defs[inv_proofs_defs]
@@ -147,8 +147,7 @@ lemma inv3: "invariant the_ioa inv3"
     thus ?thesis apply (simp add:inv3_def split:option.splits) 
       by (metis (no_types, lifting) ampr1_ioa.do_vote_def ampr1_state.select_convs(5) ampr1_state.surjective ampr1_state.update_convs(3) \<open>do_vote a i v s t\<close>)
   qed
-  apply (auto simp add:inv_proofs_defs  split!:option.splits)
-  by (metis less_trans nat_less_le)
+  by (meson dual_order.trans nat_less_le)
 declare inv3[invs]
 
 (* nitpick[no_assms, show_consts, verbose, card 'a = 3, card 'v = 2, card nat = 2, card "'v option" = 3, card "nat option" = 3,
@@ -162,28 +161,28 @@ lemma inv5:"invariant the_ioa inv5"
   apply instantiate_invs_2
   apply (unfold_to_trans_rel)
   apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
-        apply (auto simp add:inv_proofs_defs  split:option.splits)[2] defer defer 
-      apply (auto simp add:inv_proofs_defs  split:option.splits)[3] defer
-   apply (simp add:inv5_def split!:option.splits)
-   apply metis 
-  subgoal premises prems for s t x a b
-  proof -
-    show ?thesis using \<open>join_ballot a b s t\<close> \<open>inv5 s\<close> distributed_safe_at.acc_max_is_a_vote
-      apply (auto simp add:inv5_def split!:option.splits)
-      subgoal proof -
-        fix i :: nat and aa :: 'v and ba :: nat
-        assume a1: "dsa.acc_max (vote s i) a b = Some (aa, ba)"
-        have "\<forall>n f a. \<exists>na. (na < n \<or> dsa.acc_max f a n = None) \<and> (f a na \<noteq> (None::'v option) \<or> dsa.acc_max f a n = None)"
-          by (simp add: dsa.acc_max_code)
-        then show "\<exists>n<b. \<exists>v. vote s i a n = Some v"
-          using a1 by (metis (no_types) not_Some_eq)
-      qed
+       apply (auto simp add:inv_proofs_defs  split:option.splits)
+        apply (metis (no_types, lifting) dsa.acc_max_def option.distinct(1) option.exhaust_sel)
        apply blast
-      apply blast 
-      done
-  qed
-  done
+      apply blast
+     apply (metis (full_types))
+    apply meson
+   apply meson
+  by meson
 declare inv5[invs]
+
+definition inv5_2 where inv5_2_def[inv_proofs_defs]:
+  "inv5_2 s \<equiv> \<forall> a b f i v b' . onebs s a b = Some f \<and> f i = Some (v,b') 
+    \<longrightarrow> (vote s i a b' = Some v)"
+lemma inv5_2:"invariant the_ioa inv5_2"
+  apply (rule invariantI)
+   apply (force simp add:inv_proofs_defs)
+  apply instantiate_invs_2
+  apply (unfold_to_trans_rel)
+  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
+       apply (auto simp add:inv_proofs_defs  split:option.splits)
+  by (meson dsa.acc_max_is_a_vote)
+declare inv5_2[invs]
 
 definition inv4 where inv4_def[inv_proofs_defs]:
   "inv4 s \<equiv> \<forall> i b q . (q \<in> quorums \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)) \<longrightarrow> (
@@ -201,10 +200,12 @@ proof -
     interpret p:dsa_properties quorums "ballot s" "vote s i" by unfold_locales
     have 2:"a_max a = dsa.acc_max (vote s i) a b" if "a \<in> q" for a using \<open>inv3 s\<close> 1 that
       by (simp add:inv3_def a_max_def split!:option.splits)
-    have "\<exists> x . m = {x}" using p.max_vote_unique[OF 4 6 5 3 \<open>q \<in> quorums\<close>] 2 oops
-      by (fastforce simp add:m_def a_max_def dsa.max_quorum_votes_def split!:option.splits) }
+    have "\<exists> x . m = {x}" using p.max_vote_unique[OF 4 6 5 3 \<open>q \<in> quorums\<close>] 2
+      apply (simp add:m_def a_max_def dsa.max_quorum_votes_def split!:option.splits)
+      by (metis (no_types) acc_max_def distributed_safe_at.max_quorum_votes_def surj_pair) }
   hence "inv4 s" if "inv3 s" and "inv5 s" and "conservative_array s" for s::"('v,'a,'l)ampr1_state" using that
-    apply (auto simp add:inv4_def inv3_def inv5_def  split!:option.splits) 
+    apply (auto simp add:inv4_def inv3_def inv5_def ballot_array.conservative_array_def 
+        ballot_array.conservative_def split!:option.splits)
   oops
 
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
