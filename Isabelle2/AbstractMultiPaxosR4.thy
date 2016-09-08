@@ -87,14 +87,15 @@ definition receive_2a where "receive_2a s s' \<equiv> \<exists> a i b v . \<exis
 abbreviation(input) decided where "decided s i \<equiv> 
   case (log s i) of Decided _ \<Rightarrow> True | _ \<Rightarrow> False"
   
-definition receive_2b where "receive_2b s s' \<equiv> \<exists> a i b v . \<exists> p \<in> network s .
+definition receive_2b where "receive_2b s s' act  \<equiv> \<exists> a i b v . \<exists> p \<in> network s .
   p = Packet a (Phase2b a i b v) \<and> (
   let sa = lstate s a; ba = ballot sa in 
     ~ decided sa i \<and> ( 
     let s1 = sa\<lparr>twobs := (twobs sa)(i := (twobs sa i)(b := insert a (twobs sa i b)))\<rparr> in 
       (\<exists> q \<in> quorums . twobs s1 i b = q
-        \<and> s' = s\<lparr>lstate := (lstate s)(a := s1\<lparr>log := (log sa)(i := Decided v)\<rparr>)\<rparr> )
-      \<or> (s' = s\<lparr>lstate := (lstate s)(a := s1) \<rparr>) ) )"
+        \<and> s' = s\<lparr>lstate := (lstate s)(a := s1\<lparr>log := (log sa)(i := Decided v)\<rparr>)\<rparr>
+        \<and> act = Learn i v)
+      \<or> (s' = s\<lparr>lstate := (lstate s)(a := s1)\<rparr> \<and> act = Internal) ) )"
 
 subsection {* The 1b action. *}
 
@@ -117,4 +118,18 @@ definition receive_1b where "receive_1b s s' \<equiv> \<exists> a b vs . \<exist
         \<and> s' = s\<lparr>lstate := (lstate s)(a := s1\<lparr>log := new_log sa b q\<rparr>), 
           network := network s \<union> (Set.bind (Set.bind UNIV (msgs_after_1b sa b q)) (to_all sa))\<rparr> ) ) )"
   
+definition trans_rel where 
+  "trans_rel \<equiv> { (s, act, s') . 
+    (\<exists> a v . act = Propose v \<and> propose s s' a v) 
+    \<or> receive_2b s s' act
+    \<or> (act = Internal \<and> (
+      receive_fwd s s'
+      \<or> (\<exists> a . try_acquire_leadership s s' a)
+      \<or> receive_1a s s'
+      \<or> receive_2a s s'
+      \<or> receive_1b s s') ) }"
+  
+definition ioa where
+  "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, ioa.start = {start}, ioa.trans = trans_rel\<rparr>"
+
 end
