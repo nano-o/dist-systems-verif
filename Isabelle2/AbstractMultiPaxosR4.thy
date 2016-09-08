@@ -45,57 +45,56 @@ definition start where "start \<equiv>
       votes = \<lambda> i . None, onebs = \<lambda> b a . None, twobs = \<lambda> i b . {}\<rparr>,
    network = {}\<rparr>"
 
-definition send_all where send_all_def:
-  "send_all s m \<equiv> { Packet a m | a . a \<in> acceptors s \<and> a \<noteq> id s}"
+definition to_all where to_all_def:
+  "to_all s m \<equiv> { Packet a m | a . a \<in> acceptors s \<and> a \<noteq> id s}"
 
 section {* The actions *}
 
-definition do_2a where "do_2a s s' msgs v \<equiv>
-  \<exists> i . log s i = Free \<and> (let b = ballot s in
-      s' = s\<lparr>log := (log s)(i := Active),
-        twobs := (twobs s)(i := (twobs s i)(b := {id s}))\<rparr>
-      \<and> msgs = send_all s (Phase2a i b v))"
+definition do_2a where "do_2a s s' a v \<equiv>
+  \<exists> i . let sa = lstate s a; b = ballot sa in 
+    s' = s\<lparr>lstate := (lstate s)(a := sa\<lparr>log := (log sa)(i := Active),
+        twobs := (twobs sa)(i := (twobs sa i)(b := {id sa}))\<rparr>),
+    network := network s \<union> to_all sa (Phase2a i b v)\<rparr>"
   
-definition propose where "propose s s' msgs v \<equiv>
-  let l = leader (ballot s) in
-    if l = id s
-    then do_2a s s' msgs v
-    else s' = s \<and> msgs = {Packet l (Fwd v)}"
+definition propose where "propose s s' a v \<equiv>
+  let sa = lstate s a; b = ballot sa; l = leader b in
+    if l = a
+    then do_2a s s' a v
+    else s' = s\<lparr>network := network s \<union> {Packet l (Fwd v)}\<rparr>"
 
-definition receive_fwd where "receive_fwd s s' msgs v \<equiv>
-  propose s s' msgs v"
+definition receive_fwd where "receive_fwd s s' \<equiv>
+  \<exists> a v . \<exists> p \<in> network s . p = Packet a (Fwd v) \<and> propose s s' a v"
 
-definition try_acquire_leadership where "try_acquire_leadership s s' msgs \<equiv>
-  let b = next_bal (ballot s) (id s) in 
-    s' = s\<lparr>onebs := (onebs s)(b := (onebs s b)(id s := Some (votes s))), ballot := b\<rparr>
-    \<and> msgs = send_all s (Phase1a b)"
+definition try_acquire_leadership where "try_acquire_leadership s s' a \<equiv>
+  let sa = lstate s a; b = ballot sa; b = next_bal b a in 
+    s' = s\<lparr>lstate := (lstate s)(a := sa\<lparr>onebs := (onebs sa)(b := (onebs sa b)(a := Some (votes sa))), ballot := b\<rparr>),
+      network := network s \<union> to_all sa (Phase1a b)\<rparr>"
   
-definition receive_1a where "receive_1a s s' msgs b \<equiv> if b > ballot s 
-  then s' = s\<lparr>ballot := b\<rparr> \<and> msgs = {Packet (leader b) (Phase1b (id s) b (votes s))}
-  else s' = s \<and> msgs = {}"
-
+definition receive_1a where "receive_1a s s' \<equiv> \<exists> b a . \<exists> p \<in> network s . p = Packet a (Phase1a b) \<and> (
+  let sa = lstate s a; ba = ballot sa in b > ba 
+    \<and> s' = s\<lparr>lstate := (lstate s)(a := sa\<lparr>ballot := b\<rparr>), 
+      network := {Packet (leader b) (Phase1b a b (votes sa))}\<rparr> )"
  
-definition receive_2a where "receive_2a s s' msgs i b v \<equiv> 
-  if b \<ge> ballot s then 
-    s' = s\<lparr>votes := (votes s)(i := Some (v, b)),
-      twobs := (twobs s)(i := (twobs s i)(b := insert (id s) (twobs s i b))),
-      ballot := b\<rparr>
-    \<and> msgs = send_all s (Phase2b (id s) i b v)
-  else s' = s \<and> msgs = {}"
+definition receive_2a where "receive_2a s s' \<equiv> \<exists> a i b v . \<exists> p \<in> network s .
+  p = Packet a (Phase2a i b v) \<and> ( 
+    let sa = lstate s a; ba = ballot sa in 
+      b \<ge> ba
+      \<and> s' = s\<lparr>lstate := (lstate s)(a := sa\<lparr>votes := (votes sa)(i := Some (v, b)),
+          twobs := (twobs sa)(i := (twobs sa i)(b := insert a (twobs sa i b))),
+          ballot := b\<rparr>),
+        network := network s \<union> to_all sa (Phase2b a i b v)\<rparr> )"
 
 abbreviation(input) decided where "decided s i \<equiv> 
   case (log s i) of Decided _ \<Rightarrow> True | _ \<Rightarrow> False"
   
-definition receive_2b where "receive_2b s s' msgs i b a v \<equiv>
-  ~ decided s i
-  \<and> (let s1 = s\<lparr>twobs := (twobs s)(i := (twobs s i)(b := insert a (twobs s i b)))\<rparr> in
-    True)
-  (* if (~ decided s i) then 
-    let s1 = s\<lparr>twobs := (twobs s)(i := (twobs s i)(b := insert a (twobs s i b)))\<rparr> in
-      if \<exists> q \<in> quorums . twobs s i b = q then 
-        \<exists> q \<in> quorums . twobs s i b = q
-      else s' = s1 \<and> msgs = {}
-  else s' = s \<and> msgs = {} *)"
+definition receive_2b where "receive_2b s s' \<equiv> \<exists> a i b v . \<exists> p \<in> network s .
+  p = Packet a (Phase2b a i b v) \<and> (
+  let sa = lstate s a; ba = ballot sa in 
+    ~ decided sa i \<and> ( 
+    let s1 = sa\<lparr>twobs := (twobs sa)(i := (twobs sa i)(b := insert a (twobs sa i b)))\<rparr> in 
+      (\<exists> q \<in> quorums . twobs s1 i b = q
+        \<and> s' = s\<lparr>lstate := (lstate s)(a := s1\<lparr>log := (log sa)(i := Decided v)\<rparr>)\<rparr> )
+      \<or> (s' = s\<lparr>lstate := (lstate s)(a := s1) \<rparr>) ) )"
 
 subsection {* The 1b action. *}
 
@@ -109,13 +108,13 @@ definition msgs_after_1b where "msgs_after_1b s b q \<equiv>
     (let m = max_by_key {(v,b) . (\<exists> a \<in> q . (the (onebs s b a)) i = Some (v,b))} snd in
       if m = {} then {} else {Phase2a i b v | v . v \<in> fst ` m})"
 
-definition receive_1b where "receive_1b s s' msgs a b vs \<equiv> if b = ballot s then
-  let s1 = s\<lparr>onebs := (onebs s)(b := (onebs s b)(a := Some vs))\<rparr> in
-    (if \<exists> q \<in> quorums . \<forall> a \<in> q . onebs s b a \<noteq> None 
-      then \<exists> q \<in> quorums . \<forall> a \<in> q . onebs s b a \<noteq> None 
-        \<and> s' = s1\<lparr>log := new_log s b q\<rparr>
-        \<and> msgs = \<Union> ((msgs_after_1b s b q) ` UNIV)
-      else s' = s1 \<and> msgs = {})
-  else s' = s \<and> msgs = {}"
+definition receive_1b where "receive_1b s s' \<equiv> \<exists> a b vs . \<exists> p \<in> network s .
+  p = Packet a (Phase1b a b vs) \<and> (
+  let sa = lstate s a; ba = ballot sa in
+    b = ba \<and> (
+    let s1 = sa\<lparr>onebs := (onebs sa)(b := (onebs sa b)(a := Some vs))\<rparr> in
+      (\<exists> q \<in> quorums . \<forall> a \<in> q . onebs sa b a \<noteq> None 
+        \<and> s' = s\<lparr>lstate := (lstate s)(a := s1\<lparr>log := new_log sa b q\<rparr>), 
+          network := network s \<union> (Set.bind (Set.bind UNIV (msgs_after_1b sa b q)) (to_all sa))\<rparr> ) ) )"
   
 end
