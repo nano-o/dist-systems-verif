@@ -47,6 +47,10 @@ definition join_ballot where
         onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')) ,
         leader := (ampr1_state.leader s)(a := False)\<rparr>"
 
+definition max_vote where max_vote_def[simp]:"max_vote s b i q \<equiv>
+  let a_max = \<lambda> a . the (onebs s a b) i; m = dsa.max_quorum_votes q a_max
+          in if m = {} then None else Some (fst (the_elem m))"
+  
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in
     leader b = a
@@ -54,10 +58,7 @@ definition acquire_leadership where
     \<and> \<not> ampr1_state.leader s a
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
     \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True),
-        suggestion := \<lambda> i . (suggestion s i)(b :=
-          let a_max = \<lambda> a . the (onebs s a b) i; m = dsa.max_quorum_votes q a_max
-          in if m = {} then None else Some (fst (the_elem m)))\<rparr>"
-          -- {* This is well-defined only when m has at most cardinality one (i.e. the array is conservative). *}
+        suggestion := \<lambda> i . (suggestion s i)(b := max_vote s b i q)\<rparr>"
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s

@@ -154,40 +154,23 @@ declare inv3[invs]
     card "('v \<times> nat) option" = 5, card "'v \<times> nat" = 4, card unit = 1, card "('v, 'a) ampr1_state" = 32, card 'l = 1, expect=none]  *)
 
 definition inv5 where inv5_def[inv_proofs_defs]:
-  "inv5 s \<equiv> \<forall> a b f i . onebs s a b = Some f \<and> f i \<noteq> None \<longrightarrow> (\<exists> b' < b . vote s i a b' \<noteq> None)"
+  "inv5 s \<equiv> \<forall> a b f i v b' . onebs s a b = Some f \<and> f i = Some (v,b') 
+    \<longrightarrow> (vote s i a b' = Some v)"
 lemma inv5:"invariant the_ioa inv5"
   apply (rule invariantI)
    apply (force simp add:inv_proofs_defs)
   apply instantiate_invs_2
   apply (unfold_to_trans_rel)
   apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
-       apply (auto simp add:inv_proofs_defs  split:option.splits)
-        apply (metis (no_types, lifting) dsa.acc_max_def option.distinct(1) option.exhaust_sel)
-       apply blast
-      apply blast
-     apply (metis (full_types))
-    apply meson
-   apply meson
-  by meson
+       apply (auto simp add:inv_proofs_defs)
+  by (meson dsa.acc_max_is_a_vote)
 declare inv5[invs]
 
-definition inv5_2 where inv5_2_def[inv_proofs_defs]:
-  "inv5_2 s \<equiv> \<forall> a b f i v b' . onebs s a b = Some f \<and> f i = Some (v,b') 
-    \<longrightarrow> (vote s i a b' = Some v)"
-lemma inv5_2:"invariant the_ioa inv5_2"
-  apply (rule invariantI)
-   apply (force simp add:inv_proofs_defs)
-  apply instantiate_invs_2
-  apply (unfold_to_trans_rel)
-  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
-       apply (auto simp add:inv_proofs_defs  split:option.splits)
-  by (meson dsa.acc_max_is_a_vote)
-declare inv5_2[invs]
-
 definition inv4 where inv4_def[inv_proofs_defs]:
-  "inv4 s \<equiv> \<forall> i b q . (q \<in> quorums \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)) \<longrightarrow> (
-    let a_max = \<lambda> a . the (onebs s a b) i; m = dsa.max_quorum_votes q a_max
-    in \<exists> a \<in> q . the (onebs s a b) i \<noteq> None \<longrightarrow> (\<exists> x . m = {x}))"
+  "inv4 s \<equiv> \<forall> i b q . let m = dsa.max_quorum_votes q (\<lambda> a . the (onebs s a b) i) in
+    q \<in> quorums \<and> m \<noteq> {} \<longrightarrow> the_elem m \<in> m"
+  -- {* The @{term "q \<in> quorums"} assumption is just there to derive that q is finite 
+  in @{term dsa_properties} *}
 
 lemma inv4: "invariant the_ioa inv4"
 proof -
