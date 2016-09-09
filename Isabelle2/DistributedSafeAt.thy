@@ -22,7 +22,7 @@ definition max_quorum_votes where
 definition proved_safe_at where
   -- {* @{term proved_safe_at} can be computed locally by a leader when it knows acc_max over q *}
   "proved_safe_at q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
-    v \<in> (fst ` max_quorum_votes q (\<lambda> a . acc_max a b))"
+    v \<in> (fst ` max_quorum_votes q ((flip acc_max b)))"
 
 lemma acc_max_code[code]:
   fixes get_vote
@@ -88,12 +88,19 @@ lemma acc_max_is_a_vote:
   assumes "acc_max a bound = Some (v,b)"
   shows "vote a b = Some v" 
 proof -
-  have "max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd = {(v,b)}"
+  let ?votes="{(v,b) . b < bound \<and> vote a b = Some v}"
+  have "max_by_key ?votes snd = {(v,b)}"
     by (simp add: acc_max_is_max_by_key assms)
-  moreover have "{(v,b) . b < bound \<and> vote a b = Some v} \<noteq> {}" using assms 
+  moreover have "?votes \<noteq> {}" using assms 
     by (auto simp add:acc_max_def split!:if_splits)
-  ultimately show ?thesis using votes_finite max_by_key_in_and_ge(2)[of "{(v, b). b < bound \<and> vote a b = Some v}"] by blast
+  ultimately show ?thesis using votes_finite max_by_key_in_and_ge(2)[of "?votes"] by blast
 qed
+
+lemma acc_max_None:
+  assumes "acc_max a bound = None"
+    and "b < bound"
+  shows "vote a b = None" using acc_max_is_a_vote
+  by (metis (no_types, lifting) assms distributed_safe_at.acc_max_def option.simps(3)) 
 
 end
 
@@ -101,7 +108,7 @@ locale dsa_properties = quorums quorums + distributed_safe_at quorums ballot vot
   for quorums ballot vote
 begin
 
-lemma max_vote_unique:
+lemma max_vote_unique_aux:
   assumes "b' < b" and "a \<in> q" and "vote a b' = Some w" and "conservative_array" and "q \<in> quorums"
   obtains x where "max_quorum_votes q (\<lambda> a . acc_max a b) = {x}"
 proof -
@@ -123,6 +130,24 @@ proof -
     apply (simp add:max_quorum_votes_def) by blast
 qed
 
+lemma max_vote_unique:
+  -- {* TODO: strengthen this lemma a little bit for the proof of R1 (inv4?) *}
+  assumes "conservative_array" and "q \<in> quorums"
+  obtains x where "max_quorum_votes q (\<lambda> a . acc_max a b) = {x}" 
+  | "max_quorum_votes q (\<lambda> a . acc_max a b) = {}"
+proof -
+  have "max_quorum_votes q (flip acc_max b) = {}" if "\<And> a b' . \<lbrakk>a \<in> q; b' < b\<rbrakk> \<Longrightarrow> vote a b' = None" 
+  proof - 
+    note 1 = that
+    let ?maxs="\<Union>x\<in>q. option_as_set (acc_max x b)"
+    have "acc_max a b = None" if "a \<in> q" for a using that 1 by (metis distributed_safe_at.acc_max_def) 
+    hence "?maxs = {}" unfolding option_as_set_def by (metis (mono_tags, lifting) SUP_bot_conv(2) option.case_eq_if) 
+    thus ?thesis unfolding max_quorum_votes_def Let_def  max_by_key_def by auto
+  qed
+  thus ?thesis using that max_vote_unique_aux assms
+    by (metis (full_types) option.exhaust) 
+qed
+  
 context begin
 
 private lemma l1:
