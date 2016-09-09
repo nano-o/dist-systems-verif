@@ -33,6 +33,18 @@ proof -
     by (metis (no_types, lifting) 2 3 1 4)
 qed
 
+lemma votes_finite_2:
+  fixes votes bound q
+  assumes "finite q"
+  defines "votes \<equiv> {(v,b) . b < bound \<and> (\<exists> a \<in> q . vote a b = Some v)}"
+  shows "finite votes" 
+proof -
+  have "votes = (\<Union>a\<in> q . {(v,b) . b < bound \<and> vote a b = Some v})"
+    using assms(2) by auto
+  thus ?thesis using votes_finite
+    by (simp add: assms(1)) 
+qed
+
 end
 
 locale ballot_array_props = ballot_array quorums + quorums quorums for quorums
