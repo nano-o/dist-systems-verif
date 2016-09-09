@@ -16,16 +16,16 @@ subsection {* Correctness of the @{term proved_safe_at} computation *}
 context ballot_array
 begin
 
-lemma votes_finite:
-  fixes votes  a bound
-  defines "votes \<equiv> {(v,b) . b < bound \<and> vote a b = Some v}"
-  shows "finite votes" 
-proof -
+definition a_votes where "a_votes a bound \<equiv> {(v,b) . b < bound \<and> vote a b = Some v}"
+
+lemma a_votes_finite:
+  shows "finite (a_votes a bound)"
+proof - 
   have 1:"finite (S \<bind> f)" if "finite S" and "\<And> x . x \<in> S \<Longrightarrow> finite (f x)" for S f
     by (simp add: bind_UNION that)
-  have 2:"votes = {b . b < bound} \<bind> (\<lambda> b . case vote a b of Some v \<Rightarrow> {(v,b)} | None  \<Rightarrow> {})"
+  have 2:"a_votes a bound = {b . b < bound} \<bind> (\<lambda> b . case vote a b of Some v \<Rightarrow> {(v,b)} | None  \<Rightarrow> {})"
     (is "?votes = Set.bind ?bals ?f")
-    by (auto simp add: Set.bind_def votes_def split!:option.split)
+    by (auto simp add: Set.bind_def a_votes_def split!:option.split)
   have 3:"finite ?bals"
     by simp 
   have 4:"finite (?f b)" for b by (simp split!:option.split)
@@ -33,23 +33,23 @@ proof -
     by (metis (no_types, lifting) 2 3 1 4)
 qed
 
-lemma votes_finite_2:
-  fixes votes bound q
-  assumes "finite q"
-  defines "votes \<equiv> {(v,b) . b < bound \<and> (\<exists> a \<in> q . vote a b = Some v)}"
-  shows "finite votes" 
-proof -
-  have "votes = (\<Union>a\<in> q . {(v,b) . b < bound \<and> vote a b = Some v})"
-    using assms(2) by auto
-  thus ?thesis using votes_finite
-    by (simp add: assms(1)) 
-qed
-
 end
 
 locale ballot_array_props = ballot_array quorums + quorums quorums for quorums
 begin
 
+definition q_votes where "q_votes q bound \<equiv> {(v,b) . b < bound \<and> (\<exists> a \<in> q . vote a b = Some v)}"
+
+lemma q_votes_finite:
+  assumes "q \<in> quorums"
+  shows "finite (q_votes q bound)" 
+proof -
+  have 1:"q_votes q bound = (\<Union>a\<in> q . {(v,b) . b < bound \<and> vote a b = Some v})"
+    by (auto simp add:q_votes_def)
+  show ?thesis using assms(1) a_votes_finite quorums_axioms
+    by (auto simp add:a_votes_def 1 quorums_def)
+qed
+  
 context 
 begin 
 
@@ -128,7 +128,7 @@ lemma proved_safe_at_cases:
     (a) k a
   where "a \<in> q" and "vote a k = Some v" and "k < i"
     and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
-  | (b) "\<And> a k . \<lbrakk>a \<in> q; k < i\<rbrakk>  \<Longrightarrow> vote a k = None"  
+  | (b) "\<And> a k . \<lbrakk>a \<in> q; k < i\<rbrakk>  \<Longrightarrow> vote a k = None"
 proof -
   have "q \<in> quorums" and ballot_q:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" 
     using \<open>proved_safe_at_abs q i v\<close> by (auto simp add:proved_safe_at_abs_def)
@@ -141,13 +141,8 @@ proof -
     have 1:"v \<in> (fst ` (max_by_key ?votes snd))"  using True \<open>proved_safe_at_abs q i v\<close>
       by (simp add:proved_safe_at_abs_def)
     with this obtain x where 4:"x \<in> max_by_key ?votes snd" and 5:"fst x = v" by blast
-    have 2:"finite ?votes"
-    proof -
-      have "finite q"
-        using \<open>q \<in> quorums\<close> quorums_axioms quorums_def by auto
-      then show ?thesis
-        using ballot_array.votes_finite_2 by blast
-    qed
+    have 2:"finite ?votes" using \<open>q \<in> quorums\<close> q_votes_finite
+      by (simp add: q_votes_def) 
     have 3:"?votes \<noteq> {}" using True by auto 
     have 6:"\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; snd x < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None" and 9:"snd x < i"
       using 4 3 apply (auto simp add:max_by_key[OF 2, of snd]) by (meson not_le option.exhaust)
