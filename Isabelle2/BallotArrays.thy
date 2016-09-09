@@ -26,9 +26,9 @@ definition conservative_array where
 
 text {* Here the @{term Max} is the one from @{text Lattices_Big} *}
 
-definition proved_safe_at_abs_2 where
+definition proved_safe_at_abs where
   -- {* Any value that has been proved safe at ballot b can be voted for in ballot b. *}
-  "proved_safe_at_abs_2 q b v \<equiv>
+  "proved_safe_at_abs q b v \<equiv>
     q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
     (if \<exists> a \<in> q . \<exists> b' . b' < b \<and> vote a b' \<noteq> None
     then let votes = {(w,b') . b' < b \<and> (\<exists> a \<in> q . vote a b' = Some w)}

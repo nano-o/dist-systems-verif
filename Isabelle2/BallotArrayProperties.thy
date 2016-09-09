@@ -40,15 +40,14 @@ begin
 
 definition q_votes where "q_votes q bound \<equiv> {(v,b) . b < bound \<and> (\<exists> a \<in> q . vote a b = Some v)}"
 
+lemma q_votes_q_votes:
+  "q_votes q bound = (\<Union> a\<in>q . a_votes a bound)"
+    by (auto simp add:q_votes_def a_votes_def)
+  
 lemma q_votes_finite:
   assumes "q \<in> quorums"
-  shows "finite (q_votes q bound)" 
-proof -
-  have 1:"q_votes q bound = (\<Union>a\<in> q . {(v,b) . b < bound \<and> vote a b = Some v})"
-    by (auto simp add:q_votes_def)
-  show ?thesis using assms(1) a_votes_finite quorums_axioms
-    by (auto simp add:a_votes_def 1 quorums_def)
-qed
+  shows "finite (q_votes q bound)" using assms(1) a_votes_finite quorums_axioms
+  by (auto simp add:a_votes_def q_votes_q_votes quorums_def)
   
 context 
 begin 

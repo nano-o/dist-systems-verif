@@ -2,7 +2,7 @@ theory DistributedSafeAt
 imports BallotArrays BallotArrayProperties "~~/src/HOL/Library/Monad_Syntax" Utils
 begin
 
-subsection {* Computing safe values in a distributed implementation *}
+section {* Computing safe values in a distributed implementation *}
   
 locale distributed_safe_at = ballot_array
 begin
@@ -11,19 +11,22 @@ definition acc_max where
   -- {* @{term acc_max} can be computed locally by an acceptor. *}
   "acc_max a bound \<equiv> 
     if (\<exists> b < bound . vote a b \<noteq> None)
-    then Some (the_elem (max_by_key {(v,b) . b < bound \<and> vote a b = Some v} snd))
+    then Some (the_elem (max_by_key (a_votes a bound) snd))
     else None"
 
+definition a_max where 
+  "a_max b \<equiv> option_as_set o flip acc_max b"
+  
 definition max_quorum_votes where
-  "max_quorum_votes q a_max \<equiv> 
-    let acc_maxs = Union ((\<lambda> a . option_as_set (a_max a)) ` q)
-    in max_by_key acc_maxs snd"
+  "max_quorum_votes q b \<equiv> max_by_key (\<Union> a \<in> q . a_max b a) snd"
 
 definition proved_safe_at where
   -- {* @{term proved_safe_at} can be computed locally by a leader when it knows acc_max over q *}
   "proved_safe_at q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
-    v \<in> (fst ` max_quorum_votes q ((flip acc_max b)))"
+    v \<in> (fst ` max_quorum_votes q b)"
 
+subsection {* Properties of acc_max. *}
+  
 lemma acc_max_code[code]:
   fixes get_vote
   defines "get_vote a b \<equiv> vote a b \<bind> (\<lambda> v . Some (v,b))"
@@ -50,63 +53,99 @@ next
     using acc_max_def by auto 
 qed
 
-lemma acc_max_singleton: 
+context begin
+
+private
+lemma a_votes_max: 
   assumes "b < bound" and "vote a b \<noteq> None"
-  fixes votes 
-  defines "votes \<equiv> {(v,b) . b < bound \<and> vote a b = Some v}"
-  obtains val bal where "max_by_key votes snd = {(val,bal)}"
+  obtains vm bm where "max_by_key (a_votes a bound) snd = {(vm,bm)}"
 proof -
-  obtain x where "max_by_key votes snd = {x}"
+  obtain x where "max_by_key (a_votes a bound) snd = {x}"
   proof -
-    have 1:"votes \<noteq> {}" (is "?votes \<noteq> {}") using assms
-      by (auto simp add:acc_max_def votes_def split!: if_split_asm)
-    have 2:"finite votes" using votes_finite by (auto simp add:votes_def)
-    have 3:"snd x \<noteq> snd y" if "x \<in> ?votes" and "y \<in> ?votes" and "x \<noteq> y" for x y
-      by (metis (mono_tags, lifting) votes_def BNF_Def.Collect_case_prodD option.simps(1) prod_eq_iff that)
-    show ?thesis using that max_by_key_ordered 1 2 3
+    have 1:"(a_votes a bound) \<noteq> {}" (is "?votes \<noteq> {}") using assms
+      by (auto simp add:acc_max_def a_votes_def split!: if_split_asm)
+    have 2:"snd x \<noteq> snd y" if "x \<in> (a_votes a bound)" and "y \<in> ?votes" and "x \<noteq> y" for x y
+      using that by (simp add:a_votes_def, case_tac x, case_tac y, auto)
+    show ?thesis using that max_by_key_ordered 1 2 a_votes_finite
       by (metis (full_types))
   qed
   thus ?thesis using that
     by fastforce 
 qed
 
-lemma acc_max_is_max_by_key:
-  fixes votes a bound v b
-  defines "votes \<equiv> {(v,b) . b < bound \<and> vote a b = Some v}"
+lemma acc_max_Some_aux:
   assumes "acc_max a bound = Some (v,b)"
-  shows "max_by_key votes snd = {(v,b)}"
-proof -
-  obtain b' where 1:"b' < bound" and 2:"vote a b' \<noteq> None" using assms
-    by (metis acc_max_code option.simps(3))
-  from acc_max_singleton[OF 1 2] obtain val bal where 4:"max_by_key votes snd = {(val,bal)}"
-    using votes_def by blast
-  thus ?thesis using assms(2) apply (simp add:acc_max_def votes_def)
-    by (metis option.inject option.simps(3) prod.inject the_elem_eq)
-qed
-
-lemma acc_max_is_a_vote:
-  assumes "acc_max a bound = Some (v,b)"
-  shows "vote a b = Some v" 
-proof -
-  let ?votes="{(v,b) . b < bound \<and> vote a b = Some v}"
-  have "max_by_key ?votes snd = {(v,b)}"
-    by (simp add: acc_max_is_max_by_key assms)
-  moreover have "?votes \<noteq> {}" using assms 
-    by (auto simp add:acc_max_def split!:if_splits)
-  ultimately show ?thesis using votes_finite max_by_key_in_and_ge(2)[of "?votes"] by blast
-qed
+  shows "max_by_key (a_votes a bound) snd = {(v,b)}"
+  by (metis (mono_tags, lifting) a_votes_max assms distributed_safe_at.acc_max_def option.sel option.simps(3) the_elem_eq)
 
 lemma acc_max_None:
   assumes "acc_max a bound = None"
+  shows "max_by_key (a_votes a bound) snd = {}"  using assms
+  using max_by_key[OF a_votes_finite, of a bound snd] 
+  by (auto simp add:acc_max_def a_votes_def split!:if_splits option.splits)
+  
+lemma acc_max_Some_inverse:
+  assumes "acc_max a bound = Some (v,b)" 
+  shows "(v,b) = the_elem (max_by_key (a_votes a bound) snd)"
+    using assms by (simp add:acc_max_def split!:if_splits)
+    
+lemma acc_max_Some:
+  assumes "acc_max a bound = Some (v,b)"
+  shows "vote a b = Some v" and "\<And> b' . \<lbrakk>b' < bound; b < b'\<rbrakk> \<Longrightarrow> vote a b' = None" 
+proof -
+  have 1:"max_by_key (a_votes a bound) snd = {(v,b)}" using acc_max_Some_aux assms by auto
+  have 2:"max_by_key (a_votes a bound) snd = {x \<in> (a_votes a bound) . 
+    \<forall> y \<in> (a_votes a bound) . snd y \<le> snd x}" using max_by_key a_votes_finite by auto
+  show "vote a b = Some v" using 1 2 assms
+    by (auto simp add:a_votes_def)
+  have "(v,b) \<in> a_votes a bound" and "\<And> y . y \<in> a_votes a bound \<Longrightarrow> snd y \<le> b"
+    using 2 by (fastforce simp add:1)+
+  thus "\<And> b' . \<lbrakk>b' < bound; b < b'\<rbrakk> \<Longrightarrow> vote a b' = None" 
+    apply (auto simp add:a_votes_def)
+    by (metis not_less option.collapse)
+qed
+
+lemma acc_max_None_no_vote:
+  assumes "acc_max a bound = None"
     and "b < bound"
-  shows "vote a b = None" using acc_max_is_a_vote
-  by (metis (no_types, lifting) assms distributed_safe_at.acc_max_def option.simps(3)) 
+  shows "vote a b = None"
+  by (metis (no_types, lifting) assms(1) assms(2) distributed_safe_at.acc_max_def option.simps(3))
 
 end
+
+lemma "a_max b a = max_by_key (a_votes a b) snd"
+  apply (auto simp add:a_max_def option_as_set_def split!:option.splits)
+
+end
+
+subsection {* Properties of @{term distributed_safe_at.proved_safe_at} *}
 
 locale dsa_properties = quorums quorums + distributed_safe_at quorums ballot vote 
   for quorums ballot vote
 begin
+
+lemma max_quorum_votes:
+  "max_quorum_votes q (flip acc_max b) = 
+  max_by_key {(v,b') . b' < b \<and> (\<exists> a \<in> q . vote a b' = Some v)}  snd"
+  (is "?lhs = max_by_key ?vs snd")
+proof -
+  let ?vsa = "\<lambda> a . max_by_key {(v,b') . b' < b \<and> vote a b' = Some v} snd"
+  have "Union ((option_as_set o (flip acc_max b)) ` q) = (\<Union>a\<in>q. (?vsa a) )"
+    using acc_max_Some_aux acc_max_None
+    apply (simp add:option_as_set_def split!:option.splits)
+    subgoal proof -
+      fix a :: 'b and ba :: nat and x :: 'a
+      assume a1: "\<And>a bound v b. acc_max a bound = Some (v, b) \<Longrightarrow> max_by_key {(v, b). b < bound \<and> vote a b = Some v} snd = {(v, b)}"
+      assume a2: "x \<in> q"
+      assume a3: "(a, ba) \<in> (case acc_max x b of None \<Rightarrow> {} | Some y \<Rightarrow> {y})"
+      then have "acc_max x b \<noteq> None"
+        by (metis (no_types) empty_iff option.case_eq_if)
+      then have "(a, ba) \<in> max_by_key {(ba, n). n < b \<and> vote x n = Some ba} snd"
+        using a3 a1 by force
+      then show "\<exists>aa\<in>q. (a, ba) \<in> max_by_key {(ba, n). n < b \<and> vote aa n = Some ba} snd"
+        using a2 by blast
+    qed oops
+  
 
 lemma max_vote_unique_aux:
   assumes "b' < b" and "a \<in> q" and "vote a b' = Some w" and "conservative_array" and "q \<in> quorums"
