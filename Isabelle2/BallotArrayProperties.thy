@@ -133,7 +133,7 @@ next
     define voted where "voted \<equiv> {l . \<exists> a \<in> q . l < i \<and> vote a l \<noteq> None }"
     define k where "k \<equiv> Max voted"
     from True \<open>proved_safe_at_abs q i v\<close> obtain a where "a \<in> q" and "vote a k = Some v"
-      by (auto simp add:proved_safe_at_abs_def k_def voted_def)
+      apply (auto simp add:proved_safe_at_abs_def k_def voted_def) sorry
     moreover have "k < i" and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
     proof -
       have "k \<in> voted" and "\<And> x . x \<in> voted \<Longrightarrow> x \<le> k"
