@@ -116,6 +116,47 @@ proof -
   show ?thesis using chosen_at_same 1 2 by (metis linorder_neqE_nat)
 qed
 
+subsection {* Proof that the proved_safe_at computation is correct. *}
+
+lemma proved_safe_at_cases:
+  assumes "proved_safe_at_abs q i v"
+    -- {* There are two cases: 
+    (a) an acceptor a in the quorum q voted in round k < i, 
+    and k is the maximum round smaller than i in which an acceptor in q voted;
+    (b) no acceptor in the quorum q voted in any round k < i *}
+  obtains 
+    (a) k a
+  where "a \<in> q" and "vote a k = Some v" and "k < i"
+    and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
+  | (b) "\<And> a k . \<lbrakk>a \<in> q; k < i\<rbrakk>  \<Longrightarrow> vote a k = None"  
+proof -
+  have "q \<in> quorums" and ballot_q:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" 
+    using \<open>proved_safe_at_abs q i v\<close> by (auto simp add:proved_safe_at_abs_def)
+  show ?thesis 
+  proof (cases "\<exists> a \<in> q . \<exists> l . l < i \<and> vote a l \<noteq> None")
+    case False thus ?thesis using that by blast
+  next
+    case True
+    let ?votes="{(w,m) . m < i \<and> (\<exists> a \<in> q . vote a m = Some w)}"
+    have 1:"v \<in> (fst ` (max_by_key ?votes snd))"  using True \<open>proved_safe_at_abs q i v\<close>
+      by (simp add:proved_safe_at_abs_def)
+    with this obtain x where 4:"x \<in> max_by_key ?votes snd" and 5:"fst x = v" by blast
+    have 2:"finite ?votes"
+    proof -
+      have "finite q"
+        using \<open>q \<in> quorums\<close> quorums_axioms quorums_def by auto
+      then show ?thesis
+        using ballot_array.votes_finite_2 by blast
+    qed
+    have 3:"?votes \<noteq> {}" using True by auto 
+    have 6:"\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; snd x < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None" and 9:"snd x < i"
+      using 4 3 apply (auto simp add:max_by_key[OF 2, of snd]) by (meson not_le option.exhaust)
+    obtain a where 7:"a \<in> q" and 8:"vote a (snd x) = Some v" using \<open>x \<in> max_by_key ?votes snd\<close> 5
+      by (auto simp add:max_by_key[OF 2, of snd])
+    show ?thesis using that using 5 7 8 9 6 by auto
+  qed
+qed
+
 text {* The main lemma. Inspired by section 2.2.2 of the paper "Fast Paxos", by Leslie Lamport. *}
 
 lemma proved_safe_at_abs_imp_safe_at:
@@ -127,41 +168,10 @@ proof (cases "i = 0")
     by (metis not_less0 safe_at_def)
 next
   case False
-  have "q \<in> quorums" and ballot_q:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" using \<open>proved_safe_at_abs q i v\<close> by (auto simp add:proved_safe_at_abs_def)
-  text {* There are two cases: 
-    (a) an acceptor a in the quorum q voted in round k < i, 
-    and k is the maximum round smaller than i in which an acceptor in q voted;
-    (b) no acceptor in the quorum q voted in any round k < i 
-    TODO: turn this into a lemma? *}
-  consider
-    (a) k a
-      where "a \<in> q" and "vote a k = Some v" and "k < i"
-      and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
-  | (b) "\<And> a k . \<lbrakk>a \<in> q; k < i\<rbrakk>  \<Longrightarrow> vote a k = None" 
-  proof (cases "\<exists> a \<in> q . \<exists> l . l < i \<and> vote a l \<noteq> None")
-    case False thus ?thesis using that by blast
-  next
-    case True
-    define voted where "voted \<equiv> {l . \<exists> a \<in> q . l < i \<and> vote a l \<noteq> None }"
-    define k where "k \<equiv> Max voted"
-    from True \<open>proved_safe_at_abs q i v\<close> obtain a where "a \<in> q" and "vote a k = Some v"
-      apply (auto simp add:proved_safe_at_abs_def k_def voted_def) sorry
-    moreover have "k < i" and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None"
-    proof -
-      have "k \<in> voted" and "\<And> x . x \<in> voted \<Longrightarrow> x \<le> k"
-      proof -
-        have "finite voted" and "voted \<noteq> {}" using True
-          using True voted_def finite_nat_set_iff_bounded voted_def by auto
-        thus "k \<in> voted" and "\<And> x . x \<in> voted \<Longrightarrow> x \<le> k" by (metis Max_in k_def, metis Max_ge k_def)
-      qed
-      thus "k < i" and "\<And> a\<^sub>2 l . \<lbrakk>a\<^sub>2 \<in> q; k < l; l < i\<rbrakk> \<Longrightarrow> vote a\<^sub>2 l = None" 
-        by (force simp add:voted_def)+
-    qed
-    ultimately show ?thesis using that by blast
-  qed
-  text {* now we prove the thesis by considering the cases (a) and (b) separately *}
-  thus ?thesis
-  proof (cases)
+  have "q \<in> quorums" and ballot_q:"\<And> a . a \<in> q \<Longrightarrow> ballot a \<ge> i" 
+    using \<open>proved_safe_at_abs q i v\<close> by (auto simp add:proved_safe_at_abs_def)
+  show ?thesis using \<open>proved_safe_at_abs q i v\<close>
+  proof (cases rule:proved_safe_at_cases)
     case b
     text {* We prove that no value is choosable at any @{text "j < i"}; 
       therefore, anything is safe at i *}
@@ -177,7 +187,7 @@ next
       ultimately have False by auto }
     thus "safe_at v i" by (auto simp add:safe_at_def)
   next
-    case a
+    case (a k a)
     have "v' = v" if "choosable v' j" and "j < i" for j v'
     proof -
       text {* First obtain an acceptor that has voted for v' in j *}
