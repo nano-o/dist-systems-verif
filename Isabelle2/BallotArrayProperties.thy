@@ -33,12 +33,12 @@ proof -
     by (metis (no_types, lifting) 2 3 1 4)
 qed
 
+definition q_votes where "q_votes q bound \<equiv> {(v,b) . b < bound \<and> (\<exists> a \<in> q . vote a b = Some v)}"
+
 end
 
 locale ballot_array_props = ballot_array quorums + quorums quorums for quorums
 begin
-
-definition q_votes where "q_votes q bound \<equiv> {(v,b) . b < bound \<and> (\<exists> a \<in> q . vote a b = Some v)}"
 
 lemma q_votes_q_votes:
   "q_votes q bound = (\<Union> a\<in>q . a_votes a bound)"

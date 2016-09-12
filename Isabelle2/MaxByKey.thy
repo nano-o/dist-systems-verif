@@ -66,7 +66,7 @@ lemma max_by_key_finite:
   by (simp add:max_by_key[OF assms])
     
 private
-lemma max_by_key_lemma: 
+lemma max_by_key_lemma:
   assumes "finite S1" and "finite S2"
   shows "max_by_key (max_by_key S1 f \<union> max_by_key S2 f) f = max_by_key (S1 \<union> S2) f" 
     (is "?m (?m S1 \<union> ?m S2) = ?m (S1 \<union> S2)")
