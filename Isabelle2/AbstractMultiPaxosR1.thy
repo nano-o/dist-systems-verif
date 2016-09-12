@@ -14,7 +14,7 @@ record ('v,'a,'l) ampr1_state =
   ballot :: "'a \<Rightarrow> bal"
   vote :: "inst \<Rightarrow> 'a \<Rightarrow> bal \<rightharpoonup> 'v"
   suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
-  onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<rightharpoonup> ('v\<times>bal))"
+  onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<Rightarrow> ('v\<times>bal) set)"
   leader :: "'a \<Rightarrow> bool"
 
 global_interpretation dsa:distributed_safe_at quorums ballot vote for quorums ballot vote 
@@ -40,16 +40,16 @@ definition propose where
 
 definition join_ballot where
   "join_ballot a b s s' \<equiv>
-    let onebs' = \<lambda> i . dsa.acc_max (vote s i) a b
+    let onebs' = \<lambda> i . acc_max (vote s i) a b
     in
       b > (ballot s a)
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
         onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')) ,
         leader := (ampr1_state.leader s)(a := False)\<rparr>"
-
-definition max_vote where max_vote_def[simp]:"max_vote s b i q \<equiv>
-  let a_max = \<lambda> a . the (onebs s a b) i; m = dsa.max_quorum_votes q a_max
-          in if m = {} then None else Some (fst (the_elem m))"
+  
+definition max_vote where max_vote_def[simp]: "max_vote s b i q \<equiv>
+  let m = max_quorum_votes (vote s i) q b
+  in if m = {} then None else Some (the_elem (fst ` m))"
   
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in
