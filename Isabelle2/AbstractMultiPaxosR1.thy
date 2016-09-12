@@ -47,11 +47,11 @@ definition join_ballot where
         leader := (ampr1_state.leader s)(a := False)\<rparr>"
   
   
-definition max_vote where max_vote_def[simp]:
-  "max_vote s b i q \<equiv> max_by_key (\<Union> a \<in> q . the (onebs s a b) i) snd"
+definition max_vote where max_vote_def:
+  "max_vote s i b q \<equiv> max_by_key (\<Union> a \<in> q . the (onebs s a b) i) snd"
 
-definition sugg where sugg_def[simp]: "sugg s b i q \<equiv>
-  let m = max_vote s b i q in if m = {} then None else Some (the_elem (fst ` m))"
+definition sugg where sugg_def: "sugg s i b q \<equiv>
+  let m = max_vote s i b q in if m = {} then None else Some (the_elem (fst ` m))"
   
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in
@@ -60,7 +60,7 @@ definition acquire_leadership where
     \<and> \<not> ampr1_state.leader s a
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
     \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True),
-        suggestion := \<lambda> i . (suggestion s i)(b := sugg s b i q)\<rparr>"
+        suggestion := \<lambda> i . (suggestion s i)(b := sugg s i b q)\<rparr>"
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s

@@ -30,10 +30,13 @@ begin
 sublocale ballot_array_props 
   by (unfold_locales)
 
+context begin
+
+private
 lemma max_quorum_votes:
   assumes "q \<in> quorums"
   shows "max_quorum_votes q b =
-  max_by_key {(v,b') . b' < b \<and> (\<exists> a \<in> q . vote a b' = Some v)} snd"
+  max_by_key (q_votes q b) snd"
   (is "?lhs = max_by_key ?vs snd")
 proof -
   define Ss where "Ss \<equiv> {a_votes a b | a . a \<in> q}"
@@ -43,12 +46,12 @@ proof -
   moreover have "{(v, b'). b' < b \<and> (\<exists>a\<in>q. vote a b' = Some v)} = \<Union> Ss"
     unfolding Ss_def a_votes_def by auto
   moreover have "(\<Union>a\<in>q. acc_max a b) = (\<Union>S\<in>Ss . max_by_key S snd)" unfolding Ss_def acc_max_def by auto
-  ultimately show ?thesis using max_by_key_subsets[of Ss snd] unfolding max_quorum_votes_def  by auto
+  ultimately show ?thesis using max_by_key_subsets[of Ss snd] unfolding max_quorum_votes_def q_votes_def by auto
 qed 
  
-lemma max_vote_unique:
+lemma max_vote_e_or_singleton:
   assumes "conservative_array" and "q \<in> quorums"
-  obtains x where "max_quorum_votes q b = {x}" 
+  obtains x where "max_quorum_votes q b = {x}"
   | "max_quorum_votes q b = {}"
 proof (cases "\<exists> a \<in> q . \<exists> b' < b . vote a b' \<noteq> None")
   case True
@@ -60,22 +63,20 @@ proof (cases "\<exists> a \<in> q . \<exists> b' < b . vote a b' \<noteq> None")
     using assms(1) that unfolding vs_def conservative_array_def conservative_def q_votes_def
     by (auto split!:option.splits) 
   moreover have "max_quorum_votes q b = max_by_key vs snd" unfolding vs_def q_votes_def
-    by (simp add:max_quorum_votes[OF assms(2)])
+    by (simp add:max_quorum_votes[OF assms(2)] q_votes_def)
   ultimately
   obtain x where "max_quorum_votes q b = {x}" using max_by_key_ordered by metis
   thus ?thesis using that by auto
 next
   case False
-  then show ?thesis using that max_quorum_votes[OF assms(2)] unfolding max_by_key_def by fastforce
+  then show ?thesis using that max_quorum_votes[OF assms(2)] unfolding max_by_key_def q_votes_def by fastforce
 qed
-
-context begin
 
 private lemma safe_at_imp_safe_at_abs:
   assumes "proved_safe_at q b v" and "q \<in> quorums"
   shows "proved_safe_at_abs q b v"
   using  assms unfolding proved_safe_at_def
-  by (simp add:max_quorum_votes[OF assms(2)] proved_safe_at_abs_def)
+  by (simp add:max_quorum_votes[OF assms(2)] proved_safe_at_abs_def q_votes_def)
 
 lemma proved_safe_at_imp_safe_at:
   assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"

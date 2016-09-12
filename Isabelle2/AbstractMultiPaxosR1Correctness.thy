@@ -11,7 +11,8 @@ locale ampr1_proof = IOA + quorums quorums + ampr1_ioa quorums for
   defines "the_ioa \<equiv> ioa"
 begin
 
-interpretation dsa:distributed_safe_at quorums ballot vote for ballot vote .
+sublocale dsa_p:dsa_properties quorums ballot vote for ballot vote 
+  by (unfold_locales)
 
 subsection {* Automation setup *}
 
@@ -117,7 +118,7 @@ by (metis ballot_array_prefix_axioms_def ballot_array_prefix_def quorums_axioms 
 
 definition inv3 where inv3_def[inv_proofs_defs]:
   "inv3 s \<equiv> \<forall> a b maxs i . onebs s a b = Some maxs \<longrightarrow>
-  maxs i = acc_max (vote s i) a b \<and> ballot s a \<ge> b"
+  maxs i = dsa.acc_max (vote s i) a b \<and> ballot s a \<ge> b"
   
 lemma inv3: "invariant the_ioa inv3"
   apply (rule invariantI)
@@ -128,7 +129,7 @@ lemma inv3: "invariant the_ioa inv3"
       (simp add:inv_proofs_defs  split:option.splits; fail)?)
    apply (auto simp add:inv_proofs_defs  split:option.splits)[1]
    apply (meson nat_less_le order_trans)
-  apply (auto simp add:inv_proofs_defs acc_max_def dsa.acc_max_def dsa.a_votes_def 
+  apply (auto simp add:inv_proofs_defs dsa.acc_max_def dsa.acc_max_def dsa.a_votes_def 
       distributed_safe_at.acc_max_def  split:option.splits)
    apply (smt Collect_cong not_less prod.case_eq_if)
   by (smt Collect_cong not_less prod.case_eq_if)
@@ -163,7 +164,7 @@ method instantiate_inv uses inv = (
   rm_reachable )
 
 definition inv11 where inv11_def[inv_proofs_defs]:
-  "inv11 s \<equiv> \<forall> a b f i . onebs s a b = Some f \<longrightarrow> f i = acc_max (vote s i) a b"
+  "inv11 s \<equiv> \<forall> a b f i . onebs s a b = Some f \<longrightarrow> f i = dsa.acc_max (vote s i) a b"
 lemma inv11:"invariant the_ioa inv11"
   apply (rule invariantI)
    apply (simp add:inv_proofs_defs dsa.q_votes_def max_by_key_def)
@@ -177,29 +178,44 @@ lemma inv11:"invariant the_ioa inv11"
 declare inv11[invs]
   
 definition inv4 where inv4_def[inv_proofs_defs]:
-  "inv4 s \<equiv> \<forall> i b q . q \<in> quorums \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None) \<longrightarrow>
-  ( max_by_key (\<Union> a \<in> q . the (onebs s a b) i) snd = (max_by_key (dsa.q_votes (vote s i) q b) snd))"
+  "inv4 s \<equiv> \<forall> i b q . (\<forall> a \<in> q . onebs s a b \<noteq> None) \<longrightarrow>
+  (max_vote s i b q = dsa.max_quorum_votes (vote s i) q b)"
 lemma inv4:"invariant the_ioa inv4"
 proof -
-  have "inv4 s" if "inv11 s" for s
-  proof -
-    show ?thesis 
-    proof (simp add:inv4_def, clarify)
-      fix i b ::nat and q :: "'a set"
-      assume "q \<in> quorums" and 1:"\<forall>a\<in>q. \<exists>y. onebs s a b = Some y"
-      interpret dsa_properties quorums "ballot s" "vote s i" by (unfold_locales)
-      show "max_by_key (\<Union>a\<in>q. the (onebs s a b) i) snd = max_by_key (dsa.q_votes (vote s i) q b) snd"
-      proof -
-        have 1:"the (onebs s a b) i = acc_max (vote s i) a b" if "a \<in> q" for a
-          using that \<open>inv11 s\<close> 1 by (auto simp add:inv11_def)
-        interpret dsa_properties quorums "ballot s" "vote s i" by (unfold_locales)
-        show ?thesis using 1 max_quorum_votes[OF \<open>q\<in> quorums\<close>]
-          by (simp add:dsa.q_votes_def acc_max_def distributed_safe_at.max_quorum_votes_def)
-      qed
+  have "inv4 s" if "inv11 s" for s using that
+    apply (simp add:inv4_def inv11_def dsa.max_quorum_votes_def max_vote_def)
+    by (smt SUP_cong option.sel)
+  thus ?thesis
+    using IOA.invariant_def inv11 by blast 
+qed
+
+definition inv12 where inv12_def[inv_proofs_defs]:
+  "inv12 s \<equiv> \<forall> b i q v . sugg s i b q = Some v \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None) \<and> q \<in> quorums
+    \<longrightarrow> dsa.proved_safe_at (ballot s) (vote s i) q b v"
+lemma inv12:"invariant the_ioa inv12"
+proof -
+  have "inv12 s" if "inv4 s" and "inv3 s" and "conservative_array s" for s unfolding inv12_def
+  proof  (clarify)
+    fix b i q v 
+    assume 1:"sugg s i b q = Some v" and 2:"\<forall>a\<in>q. onebs s a b \<noteq> None" and "q\<in>quorums"
+    show "dsa.proved_safe_at (ballot s) (vote s i) q b v"
+    proof (cases "max_vote s i b q = {}")
+      case True
+      then show ?thesis using 1 unfolding sugg_def by auto
+    next
+      case False
+      have 3:"ballot_array.conservative_array (vote s i)" using \<open>conservative_array s\<close> by auto
+      have "v = (the_elem (fst ` (dsa.max_quorum_votes (vote s i) q b)))" using 1 2 \<open>inv4 s\<close>
+        by (auto simp add:inv4_def sugg_def)
+      hence "fst ` (dsa.max_quorum_votes (vote s i) q b) = {v}" 
+        using dsa_p.max_vote_e_or_singleton[OF 3 \<open>q\<in>quorums\<close>, of b] False that(1) 2
+        by (metis (no_types, lifting) image_empty image_insert inv4_def the_elem_eq)
+      thus "dsa.proved_safe_at (ballot s) (vote s i) q b v" using \<open>q\<in>quorums\<close> 2 \<open>inv3 s\<close>
+        unfolding dsa.proved_safe_at_def inv3_def by auto
     qed
   qed
   thus ?thesis
-    using IOA.invariant_def inv11 by blast 
+    by (metis (mono_tags, lifting) IOA.invariant_def conservative inv3 inv4) 
 qed
 
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
@@ -207,42 +223,24 @@ declare ballot_array.safe_def[inv_proofs_defs]
 
 lemma aqcuire_leadership_ok:
   fixes a q s t i v safe_at 
-  defines "safe_at w \<equiv> ballot_array.safe_at quorums (ballot t) (vote t i) w (ballot t a)"
-  assumes "acquire_leadership a q s t" and "inv3 s" and "safe s" and "conservative_array t"
+  defines "safe_at w \<equiv> dsa.safe_at (ballot t) (vote t i) w (ballot t a)"
+  assumes "acquire_leadership a q s t" and "inv12 s" and "inv4 s" and "safe s"
   shows "case suggestion t i (ballot t a) of Some v \<Rightarrow> safe_at v | None \<Rightarrow> safe_at v"
-    -- {* Note that all values are safe when the suggestion in None. *}
 proof -
-  let ?b = "ballot s a"
-  have 2:"?b = ballot t a" using \<open>acquire_leadership a q s t\<close> by (auto simp add:inv_proofs_defs safe_at_def) 
-  define proved_safe_at where "proved_safe_at = dsa.proved_safe_at (ballot t) (vote t i) q ?b"
-  have 5:"case suggestion t i (ballot t a) of Some v \<Rightarrow>  proved_safe_at v | None \<Rightarrow> proved_safe_at  v"
-  proof -  
-    have "q \<in> quorums" by (metis acquire_leadership_def \<open>acquire_leadership a q s t\<close>) 
-    moreover
-    have "\<And> a2 . a2 \<in> q \<Longrightarrow> ?b \<le> ballot t a2" using \<open>acquire_leadership a q s t\<close> \<open>inv3 s\<close> 
-      apply (auto simp add:inv_proofs_defs) by (metis (no_types, lifting) option.simps(5))
-    moreover
-    have "dsa.max_quorum_votes q (\<lambda> a2 . the (onebs t a2 ?b) i) = 
-      dsa.max_quorum_votes q (\<lambda> a2 . dsa.acc_max (vote t i) a2 ?b)"
-    proof -
-      have "dsa.max_quorum_votes q (\<lambda> a2 . the (onebs s a2 ?b) i) = 
-        dsa.max_quorum_votes q (\<lambda> a2 . dsa.acc_max (vote s i) a2 ?b)"
-      proof -
-        have "case onebs s a2 ?b of Some f \<Rightarrow> f i = dsa.acc_max (vote s i) a2 ?b 
-              | None \<Rightarrow> False" if "a2 \<in> q" for a2 using \<open>acquire_leadership a q s t\<close> \<open>inv3 s\<close> that
-          by (auto simp add:inv_proofs_defs split:option.splits)
-        hence "the (onebs s a2 ?b) i = dsa.acc_max (vote s i) a2 ?b" if "a2 \<in> q" for a2 using that
-          by (smt option.case_eq_if)
-        thus ?thesis by (auto simp add:dsa.max_quorum_votes_def split!:option.splits)
-      qed
-      thus ?thesis using \<open>acquire_leadership a q s t\<close> by (auto simp add:inv_proofs_defs)
-    qed                                         
-    ultimately show ?thesis using \<open>acquire_leadership a q s t\<close> 
-      apply (auto simp add:dsa.proved_safe_at_def proved_safe_at_def split:option.splits)
+  let ?b = "ballot s a" 
+  have 2:"?b = ballot t a" using \<open>acquire_leadership a q s t\<close> by (auto simp add:inv_proofs_defs safe_at_def)
+  show ?thesis
+  proof (cases "suggestion t i ?b")
+    case None
+    have "suggestion t i ?b = sugg s i ?b q" using \<open>acquire_leadership a q s t\<close>
+      by auto
+    with None have "sugg s i ?b q = None" by auto
+    have "max_vote s i ?b q = {}" using \<open>acquire_leadership a q s t\<close> None
+      by (auto simp add:sugg_def split!:if_splits) 
+    then show ?thesis (* TODO *) sorry
+  next
+    show ?thesis sorry
   qed
-  have 6:"safe t" using \<open>acquire_leadership a q s t\<close> \<open>safe s\<close> by (auto simp add:inv_proofs_defs)
-  interpret p:dsa_properties "ballot t" "vote t i" quorums by unfold_locales
-  show ?thesis using 2 5 6 p.proved_safe_at_imp_safe_at assms(4) by (metis option.case_eq_if option.distinct(1) option.sel p.safe_def)
 qed
 
 definition inv8 where inv8_def[inv_proofs_defs]:
