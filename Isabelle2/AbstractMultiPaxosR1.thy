@@ -17,13 +17,12 @@ record ('v,'a,'l) ampr1_state =
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<Rightarrow> ('v\<times>bal) set)"
   leader :: "'a \<Rightarrow> bool"
 
-global_interpretation dsa:distributed_safe_at quorums ballot vote for quorums ballot vote 
-  defines acc_max = dsa.acc_max and max_quorum_votes = dsa.max_quorum_votes .
-
 locale ampr1_ioa =
   fixes quorums::"'a set set" and leader :: "bal \<Rightarrow> 'a"
   -- {* @{term leader} determines the leader of a ballot. *}
 begin
+
+sublocale dsa:distributed_safe_at quorums ballot vote for ballot vote .
 
 definition start_s where
   -- {* The initial state *}
@@ -40,16 +39,19 @@ definition propose where
 
 definition join_ballot where
   "join_ballot a b s s' \<equiv>
-    let onebs' = \<lambda> i . acc_max (vote s i) a b
+    let onebs' = \<lambda> i . dsa.acc_max (vote s i) a b
     in
       b > (ballot s a)
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
         onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')) ,
         leader := (ampr1_state.leader s)(a := False)\<rparr>"
   
-definition max_vote where max_vote_def[simp]: "max_vote s b i q \<equiv>
-  let a_max = \<lambda> a . the (onebs s a b) i; m = max_by_key (\<Union> a \<in> q . a_max a) snd
-  in if m = {} then None else Some (the_elem (fst ` m))"
+  
+definition max_vote where max_vote_def[simp]:
+  "max_vote s b i q \<equiv> max_by_key (\<Union> a \<in> q . the (onebs s a b) i) snd"
+
+definition sugg where sugg_def[simp]: "sugg s b i q \<equiv>
+  let m = max_vote s b i q in if m = {} then None else Some (the_elem (fst ` m))"
   
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in
@@ -58,7 +60,7 @@ definition acquire_leadership where
     \<and> \<not> ampr1_state.leader s a
     \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
     \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True),
-        suggestion := \<lambda> i . (suggestion s i)(b := max_vote s b i q)\<rparr>"
+        suggestion := \<lambda> i . (suggestion s i)(b := sugg s b i q)\<rparr>"
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
