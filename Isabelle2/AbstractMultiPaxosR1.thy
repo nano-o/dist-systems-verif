@@ -48,7 +48,7 @@ definition join_ballot where
         leader := (ampr1_state.leader s)(a := False)\<rparr>"
   
 definition max_vote where max_vote_def[simp]: "max_vote s b i q \<equiv>
-  let m = max_quorum_votes (vote s i) q b
+  let a_max = \<lambda> a . the (onebs s a b) i; m = max_by_key (\<Union> a \<in> q . a_max a) snd
   in if m = {} then None else Some (the_elem (fst ` m))"
   
 definition acquire_leadership where
@@ -88,7 +88,7 @@ fun trans_rel where
     \<or> (\<exists> a q . acquire_leadership a q r r'))"
 | "trans_rel r (Learn i v) r' = learn i v r r'"
 
-lemma trans_cases[consumes 1]:
+lemma trans_cases:
   assumes "trans_rel r a r'"
   obtains 
   (propose) c where "propose c r r'"

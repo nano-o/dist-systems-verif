@@ -38,10 +38,6 @@ method unfold_to_trans_rel =
 
 subsection {* Auxiliary invariants *}
 
-definition inv6 where inv6_def[inv_proofs_defs]:
-  "inv6 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> ampr1_state.leader s a))
-    \<longrightarrow> suggestion s i b = None"
-
 definition inv7 where inv7_def[inv_proofs_defs]:
   "inv7 s \<equiv> \<forall> a . ampr1_state.leader s a \<longrightarrow> leader (ballot s a) = a"
 
@@ -54,6 +50,10 @@ apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
 apply (auto simp add:inv_proofs_defs)
 done
 declare inv7[invs]
+
+definition inv6 where inv6_def[inv_proofs_defs]:
+  "inv6 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> ampr1_state.leader s a))
+    \<longrightarrow> suggestion s i b = None"
 
 lemma inv6: "invariant the_ioa inv6"
 apply (rule invariantI)
@@ -94,7 +94,7 @@ lemma conservative: "invariant the_ioa conservative_array"
 proof -
   have "\<And> s . inv1 s \<Longrightarrow> conservative_array s"
     by (auto simp add:inv_proofs_defs split:option.splits) (metis option.sel)
-  with inv1 show ?thesis  using IOA.invariant_def by blast 
+  with inv1 show ?thesis  using IOA.invariant_def by blast
 qed
 declare conservative[invs]
 
@@ -116,80 +116,91 @@ lemma safe_mono:
 by (metis ballot_array_prefix_axioms_def ballot_array_prefix_def quorums_axioms trans_imp_prefix_order) 
 
 definition inv3 where inv3_def[inv_proofs_defs]:
-  "inv3 s \<equiv> \<forall> a b . case onebs s a b of None \<Rightarrow> True
-    | Some maxs \<Rightarrow> 
-      (\<forall> i . maxs i = dsa.acc_max (vote s i) a b)
-      \<and> (ballot s a \<ge> b)"
-
+  "inv3 s \<equiv> \<forall> a b maxs i . onebs s a b = Some maxs \<longrightarrow>
+  maxs i = acc_max (vote s i) a b \<and> ballot s a \<ge> b"
+  
 lemma inv3: "invariant the_ioa inv3"
   apply (rule invariantI)
    apply (force simp add:inv_proofs_defs)
   apply instantiate_invs_2
   apply (unfold_to_trans_rel)
-  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
-        apply (auto simp add:inv_proofs_defs  split:option.splits)[2]
-      defer defer apply (auto simp add:inv_proofs_defs  split:option.splits)[3]
-   defer
-  subgoal premises prems for s t act a i v
-  proof -
-    { fix a2 b maxs
-      assume a1:"onebs s a2 b = Some maxs"
-      from a1 prems(1) have 1:"\<And> j . maxs j = dsa.acc_max (vote s j) a2 b" 
-        by (simp add:inv3_def split:option.splits if_split if_split_asm)
-      from a1 \<open>inv3 s\<close> \<open>do_vote a i v s t\<close> have 2:"ballot t a2 \<ge> b" by (simp add:inv3_def split:option.splits)
-      { fix j assume "j \<noteq> i \<or> a \<noteq> a2"
-        hence "maxs j = dsa.acc_max (vote t j) a2 b" using 1 \<open>do_vote a i v s t\<close> by (auto simp add:dsa.acc_max_def) }
-      note 3 = this
-      { fix j assume "j = i \<and> a = a2"
-        hence "maxs j = dsa.acc_max (vote t j) a2 b" using 1 \<open>do_vote a i v s t\<close> a1 2 apply (simp add:dsa.acc_max_def)
-          by (smt Collect_cong ampr1_state.select_convs(2) ampr1_state.surjective ampr1_state.update_convs(3) dual_order.strict_trans1 neq_iff split_cong) }
-      note this 2 3 }
-    thus ?thesis apply (simp add:inv3_def split:option.splits) 
-      by (metis (no_types, lifting) ampr1_ioa.do_vote_def ampr1_state.select_convs(5) ampr1_state.surjective ampr1_state.update_convs(3) \<open>do_vote a i v s t\<close>)
-  qed
-  by (meson dual_order.trans nat_less_le)
+  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm;
+      (simp add:inv_proofs_defs  split:option.splits; fail)?)
+   apply (auto simp add:inv_proofs_defs  split:option.splits)[1]
+   apply (meson nat_less_le order_trans)
+  apply (auto simp add:inv_proofs_defs acc_max_def dsa.acc_max_def dsa.a_votes_def 
+      distributed_safe_at.acc_max_def  split:option.splits)
+   apply (smt Collect_cong not_less prod.case_eq_if)
+  by (smt Collect_cong not_less prod.case_eq_if)
 declare inv3[invs]
 
 (* nitpick[no_assms, show_consts, verbose, card 'a = 3, card 'v = 2, card nat = 2, card "'v option" = 3, card "nat option" = 3,
     card "('v \<times> nat) option" = 5, card "'v \<times> nat" = 4, card unit = 1, card "('v, 'a) ampr1_state" = 32, card 'l = 1, expect=none]  *)
 
 definition inv5 where inv5_def[inv_proofs_defs]:
-  "inv5 s \<equiv> \<forall> a b f i v b' . onebs s a b = Some f \<and> f i = Some (v,b') 
+  "inv5 s \<equiv> \<forall> a b f i v b' . onebs s a b = Some f \<and> f i = {(v,b')}
     \<longrightarrow> (vote s i a b' = Some v)"
 lemma inv5:"invariant the_ioa inv5"
   apply (rule invariantI)
    apply (force simp add:inv_proofs_defs)
   apply instantiate_invs_2
   apply (unfold_to_trans_rel)
-  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
-       apply (auto simp add:inv_proofs_defs)
-  by (meson dsa.acc_max_is_a_vote)
-declare inv5[invs]
+  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm) oops
+(* declare inv5[invs] *)
 
+bundle trace_simp = [[simp_trace_new interactive mode=full]]
+
+method instantiate_inv uses inv = (
+  (* Deduce that all invariants hold in s *)
+  ( insert inv,
+    instantiate_invs )?,
+  (* Deduce that all invariants hold in t (first deduce that t is reachable) *)
+  match premises in R[thin]:"reachable ?ioa ?s" and T:"?s \<midarrow>?a\<midarrow>?ioa\<longrightarrow> ?t" \<Rightarrow> 
+    \<open>insert reachable_n[OF R T]\<close>,
+  ( insert inv,
+    instantiate_invs )?,
+  (* Get rid of the reachability assumption *)
+  rm_reachable )
+
+definition inv11 where inv11_def[inv_proofs_defs]:
+  "inv11 s \<equiv> \<forall> a b f i . onebs s a b = Some f \<longrightarrow> f i = acc_max (vote s i) a b"
+lemma inv11:"invariant the_ioa inv11"
+  apply (rule invariantI)
+   apply (simp add:inv_proofs_defs dsa.q_votes_def max_by_key_def)
+  apply (instantiate_inv inv:inv3)
+  apply (unfold_to_trans_rel)
+  apply ((induct_tac rule:trans_cases, simp; rm_trans_rel_assm))
+       apply ((simp_all add:inv_proofs_defs))[2] defer
+     apply ((simp_all add:inv_proofs_defs))[3]
+  apply (simp (no_asm_use) add:inv_proofs_defs)
+  by blast
+declare inv11[invs]
+  
 definition inv4 where inv4_def[inv_proofs_defs]:
-  "inv4 s \<equiv> \<forall> i b q . let m = dsa.max_quorum_votes q (\<lambda> a . the (onebs s a b) i) in
-    q \<in> quorums \<and> m \<noteq> {} \<longrightarrow> the_elem m \<in> m"
-  -- {* The @{term "q \<in> quorums"} assumption is just there to derive that q is finite 
-  in @{term dsa_properties} *}
-
-lemma inv4: "invariant the_ioa inv4"
+  "inv4 s \<equiv> \<forall> i b q . q \<in> quorums \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None) \<longrightarrow>
+  ( max_by_key (\<Union> a \<in> q . the (onebs s a b) i) snd = (max_by_key (dsa.q_votes (vote s i) q b) snd))"
+lemma inv4:"invariant the_ioa inv4"
 proof -
-  { fix i b q a b' w and s::"('v,'a,'l)ampr1_state"
-    assume "q \<in> quorums" and "inv3 s" and 1:"\<And> a . a \<in> q \<Longrightarrow> onebs s a b \<noteq> None"
-    and 3:"ballot_array.conservative_array (vote s i)"
-    and 4:"b' < b" and 5:"vote s i a b' = Some w" and 6:"a \<in> q"
-    define a_max where "a_max \<equiv> \<lambda> a . the (onebs s a b) i"
-    define m where "m \<equiv> dsa.max_quorum_votes q a_max"
-    interpret p:dsa_properties quorums "ballot s" "vote s i" by unfold_locales
-    have 2:"a_max a = dsa.acc_max (vote s i) a b" if "a \<in> q" for a using \<open>inv3 s\<close> 1 that
-      by (simp add:inv3_def a_max_def split!:option.splits)
-    have "\<exists> x . m = {x}" using p.max_vote_unique[OF 4 6 5 3 \<open>q \<in> quorums\<close>] 2
-      apply (simp add:m_def a_max_def dsa.max_quorum_votes_def split!:option.splits)
-      by (metis (no_types) acc_max_def distributed_safe_at.max_quorum_votes_def surj_pair) }
-  hence "inv4 s" if "inv3 s" and "inv5 s" and "conservative_array s" for s::"('v,'a,'l)ampr1_state" using that
-    apply (auto simp add:inv4_def inv3_def inv5_def ballot_array.conservative_array_def 
-        ballot_array.conservative_def split!:option.splits)
-  oops
+  have "inv4 s" if "inv11 s" for s
+  proof -
+    show ?thesis 
+    proof (simp add:inv4_def, clarify)
+      fix i b ::nat and q :: "'a set"
+      assume "q \<in> quorums" and 1:"\<forall>a\<in>q. \<exists>y. onebs s a b = Some y"
+      interpret dsa_properties quorums "ballot s" "vote s i" by (unfold_locales)
+      show "max_by_key (\<Union>a\<in>q. the (onebs s a b) i) snd = max_by_key (dsa.q_votes (vote s i) q b) snd"
+      proof -
+        have 1:"the (onebs s a b) i = acc_max (vote s i) a b" if "a \<in> q" for a
+          using that \<open>inv11 s\<close> 1 by (auto simp add:inv11_def)
+        interpret dsa_properties quorums "ballot s" "vote s i" by (unfold_locales)
+        show ?thesis using 1 max_quorum_votes[OF \<open>q\<in> quorums\<close>]
+          by (simp add:dsa.q_votes_def acc_max_def distributed_safe_at.max_quorum_votes_def)
+      qed
+    qed
+  qed
+  thus ?thesis
+    using IOA.invariant_def inv11 by blast 
+qed
 
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
 declare ballot_array.safe_def[inv_proofs_defs]
@@ -240,9 +251,10 @@ definition inv8 where inv8_def[inv_proofs_defs]:
 
 definition inv2 where
   -- {* a suggestion is safe. *}
-  inv2_def[inv_proofs_defs]:"inv2 s \<equiv> \<forall> i b . case suggestion s i b of Some v \<Rightarrow> safe_at s i v b | None \<Rightarrow> True"
+  inv2_def[inv_proofs_defs]:
+  "inv2 s \<equiv> \<forall> i b . case suggestion s i b of Some v \<Rightarrow> safe_at s i v b | None \<Rightarrow> True"
 
-lemma inv8_inv2_safe:"invariant the_ioa (\<lambda> s . inv8 s \<and> inv2 s \<and> safe s)"
+lemma inv8_inv2_safe:"invariant the_ioa (\<lambda> s . inv8 s \<and> inv2 s \<and> safe s)" oops
 apply (rule invariantI)
     apply (force simp add:inv_proofs_defs ballot_array.safe_at_def)
   apply instantiate_invs_2
@@ -303,34 +315,31 @@ apply (rule invariantI)
 done
 declare inv8_inv2_safe[invs]
 
-definition inv5 where
-  inv5_def[inv_proofs_defs]:"inv5 s \<equiv> \<forall> i a b . ballot s a < b \<longrightarrow> vote s i a b = None"
+definition inv9 where
+  inv9_def[inv_proofs_defs]:"inv9 s \<equiv> \<forall> i a b . ballot s a < b \<longrightarrow> vote s i a b = None"
 
-lemma  inv5:"invariant the_ioa inv5"
+lemma  inv9:"invariant the_ioa inv9"
 apply (rule invariantI)
 apply (force simp add:inv_proofs_defs)
-apply instantiate_invs_2
-apply (unfold_to_trans_rel)
-apply (induct_tac rule:trans_cases, simp)
-apply (auto simp add:inv_proofs_defs split:option.splits)
+  apply (unfold_to_trans_rel)
+  apply ((induct_tac rule:trans_cases, simp); rm_reachable; rm_trans_rel_assm;
+      (simp add:inv_proofs_defs; fail)?)
 done
-declare inv5[invs]
+declare inv9[invs]
 
-lemma chosen_mono: assumes "chosen s i v" and "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "inv5 s"
+lemma chosen_mono: assumes "chosen s i v" and "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t"
   shows "chosen t i v" using assms
 apply (unfold_to_trans_rel)
 apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm)
 apply (auto simp add:inv_proofs_defs split:option.splits)[3] defer
 apply (auto simp add:inv_proofs_defs split:option.splits)[1]
 apply (cases s, cases t, auto simp add:inv_proofs_defs ballot_array.chosen_def ballot_array.chosen_at_def split:option.splits)
-by (metis option.distinct(1))
-(* nitpick[no_assms, show_consts, verbose,expect=none unknown, card 'a = 3, card 'v = 2, card 'l = 1, card 'v option = 3, card nat = 2, card nat option = 3,
-  card "(nat \<Rightarrow> ('v \<times> nat) option) option" = 10, card "('v \<times> nat) option" = 5] *)
+  by (metis option.distinct(1))
 
-definition inv4 where inv4_def[inv_proofs_defs]:
-  "inv4 s \<equiv> \<forall> i l . case learned s l i of Some v \<Rightarrow> chosen s i v | None \<Rightarrow> True"
+definition inv10 where inv4_def[inv_proofs_defs]:
+  "inv10 s \<equiv> \<forall> i l . case learned s l i of Some v \<Rightarrow> chosen s i v | None \<Rightarrow> True"
 
-lemma  inv4:"invariant the_ioa inv4"
+lemma  inv10:"invariant the_ioa inv4"
 apply (rule invariantI)
 apply (force simp add:inv_proofs_defs)
 apply instantiate_invs_2
