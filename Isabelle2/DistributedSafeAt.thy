@@ -113,8 +113,21 @@ lemma acc_max_None_no_vote:
 
 end
 
-lemma "a_max b a = max_by_key (a_votes a b) snd"
-  apply (auto simp add:a_max_def option_as_set_def split!:option.splits)
+lemma a_max_lemma:"a_max b a = max_by_key (a_votes a b) snd"
+  -- {* Why not use @{term max_by_key} directly instead of wrapping it in an option? 
+  It seems simpler to use a set of votes everywhere, even though we now its a singleton or
+  an empty set. *}
+proof (cases "acc_max a b")
+  case None
+  then show ?thesis
+    apply (simp add:a_max_def option_as_set_def)
+    by (metis distributed_safe_at.acc_max_None)
+next
+  case (Some a)
+  then show ?thesis 
+    apply (simp add:a_max_def option_as_set_def)
+    by (metis distributed_safe_at.acc_max_Some_aux old.prod.exhaust)
+qed
 
 end
 
