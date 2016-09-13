@@ -224,22 +224,47 @@ declare ballot_array.safe_def[inv_proofs_defs]
 lemma aqcuire_leadership_ok:
   fixes a q s t i v safe_at 
   defines "safe_at w \<equiv> dsa.safe_at (ballot t) (vote t i) w (ballot t a)"
-  assumes "acquire_leadership a q s t" and "inv12 s" and "inv4 s" and "safe s"
+  assumes "acquire_leadership a q s t" and "inv12 s" and "inv4 s" and "inv3 s" and "safe s"
+    and "conservative_array s"
   shows "case suggestion t i (ballot t a) of Some v \<Rightarrow> safe_at v | None \<Rightarrow> safe_at v"
 proof -
   let ?b = "ballot s a" 
-  have 2:"?b = ballot t a" using \<open>acquire_leadership a q s t\<close> by (auto simp add:inv_proofs_defs safe_at_def)
+  have 3:"?b = ballot t a" using \<open>acquire_leadership a q s t\<close> by (auto simp add:inv_proofs_defs safe_at_def)
+  have 1:"q\<in>quorums" and 2:"\<And> a . a \<in> q \<Longrightarrow> ballot s a \<ge> ?b" using \<open>inv3 s\<close> \<open>acquire_leadership a q s t\<close> 
+    by (auto simp add:inv3_def) 
+  have 4:"vote s = vote t" and 5:"ballot s = ballot t" using \<open>acquire_leadership a q s t\<close> by auto
+  have 6:"suggestion t i ?b = sugg s i ?b q" using \<open>acquire_leadership a q s t\<close> by auto
   show ?thesis
   proof (cases "suggestion t i ?b")
     case None
-    have "suggestion t i ?b = sugg s i ?b q" using \<open>acquire_leadership a q s t\<close>
-      by auto
-    with None have "sugg s i ?b q = None" by auto
-    have "max_vote s i ?b q = {}" using \<open>acquire_leadership a q s t\<close> None
-      by (auto simp add:sugg_def split!:if_splits) 
-    then show ?thesis (* TODO *) sorry
+    with 6 have 7:"sugg s i ?b q = None" by auto
+    have "dsa.proved_safe_at (ballot s) (vote s i) q ?b v"
+    proof -
+      have "max_vote s i ?b q = {}" using 7 by (auto simp add:sugg_def split!:if_splits) 
+      hence "dsa.max_quorum_votes (vote s i) q ?b = {}" using \<open>inv4 s\<close>
+        using assms(2) inv4_def by fastforce 
+      thus ?thesis using 1 2 by (auto simp add:dsa.proved_safe_at_def)
+    qed
+    with \<open>safe s\<close> and \<open>conservative_array s\<close> show ?thesis using 6 7 4 5 3 1
+      by (simp add: dsa_p.proved_safe_at_imp_safe_at safe_at_def)
   next
-    show ?thesis sorry
+    case (Some w)
+    from Some 6 have 7:"sugg s i ?b q = Some w" by auto
+    have "dsa.proved_safe_at (ballot s) (vote s i) q ?b w"
+    proof -
+      have "w = the_elem (fst ` (max_vote s i ?b q))" using 7 by (auto simp add:sugg_def split!:if_splits) 
+      hence "w = the_elem (fst ` (dsa.max_quorum_votes (vote s i) q ?b))" using \<open>inv4 s\<close>
+        using assms(2) by (auto simp add:inv4_def)
+      moreover obtain x where "dsa.max_quorum_votes (vote s i) q ?b = {x}" 
+      proof -
+        have "dsa.max_quorum_votes (vote s i) q ?b \<noteq> {}" using 7 \<open>inv4 s\<close> assms(2)
+          unfolding inv4_def by (simp add:sugg_def)
+        thus ?thesis using dsa_p.max_vote_e_or_singleton 1  \<open>conservative_array s\<close> that by blast
+      qed
+      ultimately show ?thesis using 1 2 by (simp add:dsa.proved_safe_at_def) 
+    qed
+    with \<open>safe s\<close> and \<open>conservative_array s\<close> show ?thesis using 6 7 4 5 3 1
+      by (simp add: dsa_p.proved_safe_at_imp_safe_at safe_at_def)
   qed
 qed
 
