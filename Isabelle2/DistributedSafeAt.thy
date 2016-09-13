@@ -90,13 +90,20 @@ next
     by (auto simp add:max_quorum_votes[OF assms(2)] proved_safe_at_abs_def q_votes_def)
 qed
 
-
-lemma proved_safe_at_imp_safe_at:
+private
+lemma proved_safe_at_imp_safe_at_aux:
   assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"
     and "proved_safe_at q i v" and "conservative_array" and "q \<in> quorums"
   shows "safe_at v (i::nat)" using safe_at_imp_safe_at_abs assms proved_safe_at_abs_imp_safe_at
   by blast
 
+lemma proved_safe_at_imp_safe_at:
+  -- {* A weaker version of the above, but which is easier to use in proofs. *}
+  assumes "safe"
+    and "proved_safe_at q i v" and "conservative_array" and "q \<in> quorums"
+  shows "safe_at v (i::nat)" using assms proved_safe_at_imp_safe_at_aux
+  by (metis option.simps(5) safe_def)
+  
 end
 
 end
