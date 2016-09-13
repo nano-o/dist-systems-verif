@@ -9,7 +9,9 @@ subsection {* State and actions *}
 record ('v,'a) amp_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> nat"
-  vote :: "nat \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  vote :: "inst \<Rightarrow> 'a \<Rightarrow> bal \<Rightarrow> 'v option"
+  -- {* TODO: according to Isabelle's canonical argument order, 
+  it shoudl be @{typ "'a \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v option"} *}
 
 locale amp_ioa =
   fixes quorums::"'a set set"

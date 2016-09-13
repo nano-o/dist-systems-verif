@@ -2,12 +2,7 @@ theory AbstractMultiPaxosR1
 imports  IOA BallotArrays DistributedSafeAt Paxos_Sig
 begin
 
-text {*
-1) Acceptors vote for a suggestion, and leaders use the distributed implementation of the safe-at computation.
-2) Explicit 1b messages.
-5) Localizing suggestions (the leader function).
-6) Explicit leadership acquisition.
-*}
+text {* TODO: according to Isabelle's canonical argument order, @{typ bal} should come before @{typ inst} *}
 
 record ('v,'a,'l) ampr1_state =
   propCmd :: "'v set"
