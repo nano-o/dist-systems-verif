@@ -17,7 +17,7 @@ definition max_quorum_votes where
 definition proved_safe_at where
   -- {* @{term proved_safe_at} can be computed locally by a leader when it knows acc_max over q *}
   "proved_safe_at q b v \<equiv> q \<in> quorums \<and> (\<forall> a \<in> q . ballot a \<ge> b) \<and>
-    v \<in> (fst ` max_quorum_votes q b)"
+    (v \<in> (fst ` max_quorum_votes q b) \<or> max_quorum_votes q b = {})"
 
 end 
 
@@ -75,8 +75,21 @@ qed
 private lemma safe_at_imp_safe_at_abs:
   assumes "proved_safe_at q b v" and "q \<in> quorums"
   shows "proved_safe_at_abs q b v"
-  using  assms unfolding proved_safe_at_def
-  by (simp add:max_quorum_votes[OF assms(2)] proved_safe_at_abs_def q_votes_def)
+proof (cases "max_quorum_votes q b = {}")
+  case True
+  hence "max_by_key (q_votes q b) snd = {}"  by (simp add:max_quorum_votes[OF \<open>q\<in>quorums\<close>])
+  moreover have "finite (q_votes q b)" by (simp add: assms(2) q_votes_finite) 
+  ultimately have "q_votes q b = {}" by (meson max_by_key_ne) 
+  hence "\<not> (\<exists> a \<in> q . \<exists> b' . b' < b \<and> vote a b' \<noteq> None)" 
+    apply (auto simp add:q_votes_def) by (meson option.exhaust)
+  then show ?thesis using assms by (auto simp add:proved_safe_at_abs_def proved_safe_at_def)
+next
+  case False
+  then show ?thesis 
+    using  assms unfolding proved_safe_at_def
+    by (auto simp add:max_quorum_votes[OF assms(2)] proved_safe_at_abs_def q_votes_def)
+qed
+
 
 lemma proved_safe_at_imp_safe_at:
   assumes "\<And> a j w . \<lbrakk>j < i; vote a j = Some w\<rbrakk> \<Longrightarrow> safe_at w j"
