@@ -52,7 +52,7 @@ lemma q_votes_finite:
 context 
 begin 
 
-lemma "safe_at v (0::nat)"
+lemma safe_at_0:"safe_at v (0::nat)"
 by (auto simp add:safe_at_def)
 
 (* Only used in safe \<Rightarrow> agreement *)
