@@ -48,12 +48,14 @@ definition max_vote where max_vote_def:
 definition sugg where sugg_def: "sugg s i b q \<equiv>
   let m = max_vote s i b q in if m = {} then None else Some (the_elem (fst ` m))"
   
+definition joined where "joined s q b \<equiv> \<forall> a \<in> q . onebs s a b \<noteq> None"
+  
 definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in
     leader b = a
     \<and> q \<in> quorums
     \<and> \<not> ampr1_state.leader s a
-    \<and> (\<forall> a \<in> q . onebs s a b \<noteq> None)
+    \<and> joined s q b
     \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True),
         suggestion := \<lambda> i . (suggestion s i)(b := sugg s i b q)\<rparr>"
 
