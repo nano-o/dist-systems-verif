@@ -119,8 +119,8 @@ lemma safe_mono:
 by (metis ballot_array_prefix_axioms_def ballot_array_prefix_def quorums_axioms trans_imp_prefix_order) 
 
 definition inv3 where inv3_def[inv_defs]:
-  "inv3 s \<equiv> \<forall> a b maxs i . onebs s a b = Some maxs \<longrightarrow>
-  maxs i = dsa.acc_max (vote s i) a b \<and> ballot s a \<ge> b"
+  "inv3 s \<equiv> \<forall> a b f i . onebs s a b = Some f \<longrightarrow>
+  f i = dsa.acc_max (vote s i) a b \<and> ballot s a \<ge> b"
   
 lemma inv3: "invariant the_ioa inv3"
   apply (rule invariantI)
@@ -140,54 +140,27 @@ lemma inv3: "invariant the_ioa inv3"
 (* nitpick[no_assms, show_consts, verbose, card 'a = 3, card 'v = 2, card nat = 2, card "'v option" = 3, card "nat option" = 3,
     card "('v \<times> nat) option" = 5, card "'v \<times> nat" = 4, card unit = 1, card "('v, 'a) ampr1_state" = 32, card 'l = 1, expect=none]  *)
 
-definition inv5 where inv5_def[inv_defs]:
-  "inv5 s \<equiv> \<forall> a b f i v b' . onebs s a b = Some f \<and> f i = {(v,b')}
-    \<longrightarrow> (vote s i a b' = Some v)"
-lemma inv5:"invariant the_ioa inv5"
-  apply (rule invariantI)
-   apply (force simp add:inv_defs ioa_defs)
-  apply instantiate_invs_2
-  apply (unfold_to_trans_rel)
-  apply ((induct_tac rule:trans_cases, simp); rm_trans_rel_assm) oops
-(* declare inv5[invs] *)
-
 bundle trace_simp = [[simp_trace_new interactive mode=full]]
 
 method instantiate_inv uses inv = (
-  (* Deduce that all invariants hold in s *)
   ( insert inv,
     instantiate_invs )?,
-  (* Deduce that all invariants hold in t (first deduce that t is reachable) *)
   match premises in R[thin]:"reachable ?ioa ?s" and T:"?s \<midarrow>?a\<midarrow>?ioa\<longrightarrow> ?t" \<Rightarrow> 
     \<open>insert reachable_n[OF R T]\<close>,
   ( insert inv,
     instantiate_invs )?,
-  (* Get rid of the reachability assumption *)
   rm_reachable )
-
-definition inv11 where inv11_def[inv_defs]:
-  "inv11 s \<equiv> \<forall> a b f i . onebs s a b = Some f \<longrightarrow> f i = dsa.acc_max (vote s i) a b"
-lemma inv11:"invariant the_ioa inv11"
-  apply (rule invariantI)
-   apply (simp add:inv_defs ioa_defs dsa.q_votes_def max_by_key_def)
-  apply (instantiate_inv inv:inv3)
-  apply (unfold_to_trans_rel)
-  apply ((induct_tac rule:trans_cases, simp; rm_trans_rel_assm))
-       apply ((simp_all add:inv_defs))[2] defer
-     apply ((simp_all add:inv_defs))[3]
-  apply (simp (no_asm_use) add:inv_defs)
-  by blast
   
 definition inv4 where inv4_def[inv_defs]:
   "inv4 s \<equiv> \<forall> i b q . (\<forall> a \<in> q . onebs s a b \<noteq> None) \<longrightarrow>
   (max_vote s i b q = dsa.max_quorum_votes (vote s i) q b)"
 lemma inv4:"invariant the_ioa inv4"
 proof -
-  have "inv4 s" if "inv11 s" for s using that
-    apply (simp add:inv4_def inv11_def dsa.max_quorum_votes_def max_vote_def)
+  have "inv4 s" if "inv3 s" for s using that
+    apply (simp add:inv4_def inv3_def dsa.max_quorum_votes_def max_vote_def)
     by (smt SUP_cong option.sel)
   thus ?thesis
-    using IOA.invariant_def inv11 by blast 
+    using IOA.invariant_def inv3 by blast 
 qed
 
 definition inv12 where inv12_def[inv_defs]:
