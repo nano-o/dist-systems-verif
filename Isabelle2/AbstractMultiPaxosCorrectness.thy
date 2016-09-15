@@ -53,14 +53,13 @@ abbreviation conservative_array where
 
 lemma conservative_inductive:
   "invariant the_ioa conservative_array"
-apply (try_solve_inv2 inv_proofs_defs:inv_proofs_defs invs:invs)
-    apply (force simp add:ballot_array.conservative_def)
-  apply (case_tac a) 
+  apply (try_solve_inv2 case_thm:trans_cases inv_proofs_defs:inv_proofs_defs ballot_array.conservative_def invs:invs)
+  apply (case_tac a)
   apply (auto simp add:inv_proofs_defs split:option.split_asm)
 done
 declare conservative_inductive[invs]
 
-subsection {* @{term safe}  is inductive relative to @{term conservative_array}} *}
+subsection {* @{term safe} is inductive relative to @{term conservative_array}} *}
 
 text {* 
 We first prove that when the algorithm takes a step, the old state is a prefix
