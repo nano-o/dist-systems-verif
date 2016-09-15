@@ -60,12 +60,12 @@ method inv_cases uses invs declares inv_defs =
 subsection {* Invariants *}
 
 definition inv1 where inv1_def[inv_defs]:
-  "inv1 s \<equiv> \<forall> a . ampr1_state.leader s a \<longrightarrow> leader (ballot s a) = a"
+  "inv1 s \<equiv> \<forall> a . is_leader s a \<longrightarrow> leader (ballot s a) = a"
 
 lemma inv1: "invariant the_ioa inv1" by (try_inv)
 
 definition inv2 where inv2_def[inv_defs]:
-  "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> ampr1_state.leader s a))
+  "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> is_leader s a))
     \<longrightarrow> suggestion s i b = None"
 
 lemma inv2: "invariant the_ioa inv2"  by (try_inv invs:inv1)
@@ -236,7 +236,7 @@ definition inv5 where
   inv5_def[inv_defs]:
   "inv5 s \<equiv> safe s 
     \<and> (\<forall> i b . case suggestion s i b of Some v \<Rightarrow> safe_at s i v b 
-      | None \<Rightarrow> (ampr1_state.leader s (leader b) \<and> ballot s (leader b) = b) \<longrightarrow> (\<forall> v . safe_at s i v b))"
+      | None \<Rightarrow> (is_leader s (leader b) \<and> ballot s (leader b) = b) \<longrightarrow> (\<forall> v . safe_at s i v b))"
 
 method insert_safe_mono = 
   match premises in P:"?s \<midarrow>?a\<midarrow>the_ioa\<longrightarrow> ?t" \<Rightarrow> \<open>insert safe_mono[OF P]\<close>
@@ -257,9 +257,9 @@ lemma inv5:"invariant the_ioa inv5"
   subgoal premises prems for s t _ a i v unfolding inv5_def (* do_vote *)
   proof (rule conjI)
     note mono = \<open>\<And>i v b. safe_at s i v b \<Longrightarrow> safe_at t i v b\<close>
-    from \<open>do_vote a i v s t\<close> have "suggestion t = suggestion s" and "ampr1_state.leader t = ampr1_state.leader  s" and "ballot t = ballot s" by auto
+    from \<open>do_vote a i v s t\<close> have "suggestion t = suggestion s" and "is_leader t = is_leader  s" and "ballot t = ballot s" by auto
     with \<open>inv5 s\<close> and mono show " \<forall>i b. case suggestion t i b of None \<Rightarrow>
-      ampr1_state.leader t (leader b) \<and> ballot t (leader b) = b \<longrightarrow> (\<forall>v. safe_at t i v b)
+      is_leader t (leader b) \<and> ballot t (leader b) = b \<longrightarrow> (\<forall>v. safe_at t i v b)
       | Some v \<Rightarrow> safe_at t i v b" apply (auto simp add:inv5_def split:option.splits) by (metis option.distinct(1))
     show "safe t" using mono \<open>inv5 s\<close> \<open>inv3 t\<close> \<open>suggestion t = suggestion s\<close> by (auto simp add:inv3_def inv5_def dsa.safe_def split:option.splits; metis)
   qed
@@ -272,9 +272,9 @@ lemma inv5:"invariant the_ioa inv5"
     note aqcuire_leadership_safe[OF \<open>acquire_leadership a q s t\<close> \<open>inv4 s\<close> \<open>safe s\<close> \<open>conservative_array s\<close>]
     moreover have "ballot t = ballot s" and "vote t = vote s" 
       and "\<And> b i . b \<noteq> ballot s a \<Longrightarrow> suggestion t i b = suggestion s i b" 
-      and "ampr1_state.leader t = (ampr1_state.leader s)(a := True)" using \<open>acquire_leadership a q s t\<close> by simp_all
+      and "is_leader t = (is_leader s)(a := True)" using \<open>acquire_leadership a q s t\<close> by simp_all
     ultimately show " \<forall>i b. case suggestion t i b of None \<Rightarrow>
-      ampr1_state.leader t (leader b) \<and> ballot t (leader b) = b \<longrightarrow> (\<forall>v. safe_at t i v b)
+      is_leader t (leader b) \<and> ballot t (leader b) = b \<longrightarrow> (\<forall>v. safe_at t i v b)
       | Some v \<Rightarrow> safe_at t i v b" using mono \<open>inv5 s\<close> \<open>inv1 s\<close> mono
       apply (simp add:inv5_def inv1_def split:option.splits)
       by (metis (no_types, lifting) option.case_eq_if option.distinct(1) option.sel)
@@ -287,6 +287,29 @@ definition inv6 where
 lemma  inv6:"invariant the_ioa inv6"
 by (try_inv)
 
+definition inv7 where inv7_def[inv_defs]:
+  "inv7 s \<equiv> \<forall> i a b v . vote s i a b = Some v \<longrightarrow> safe_at s i v b"
+
+lemma inv7:"invariant the_ioa inv7"
+  apply (inv_cases_2 invs:inv5)
+        apply (auto simp add:inv7_def ioa_defs inv5_def option.splits) (* automatic from here *)
+  subgoal proof -
+    fix s :: "('b, 'a, ?'l) ampr1_state" and aa :: 'a and i :: nat and v :: 'b
+    assume a1: "vote s i aa (ballot s aa) = None"
+    assume a2: "suggestion s i (ballot s aa) = Some v"
+    assume a3: "\<forall>i a b v. vote s i a b = Some v \<longrightarrow> safe_at s i v b"
+    assume a4: "\<forall>i b. case suggestion s i b of None \<Rightarrow> is_leader s (leader b) \<and> ballot s (leader b) = b \<longrightarrow> (\<forall>v. safe_at s i v b) | Some v \<Rightarrow> safe_at s i v b"
+    assume a5: "\<And>ia va b. safe_at s ia va b \<Longrightarrow> dsa.safe_at (ballot s) (if ia = i then (vote s i)(aa := vote s i aa(ballot s aa \<mapsto> v)) else vote s ia) va b"
+    have "\<And>n na. suggestion s n na = None \<or> safe_at s n (the (suggestion s n na)) na"
+      using a4 by (simp add: option.case_eq_if)
+    then have "safe_at s i v (ballot s aa)"
+      using a3 a2 a1 by (metis option.sel)
+    then show "dsa.safe_at (ballot s) ((vote s i)(aa := vote s i aa(ballot s aa \<mapsto> v))) v (ballot s aa)"
+      using a5 by presburger
+  qed
+   apply presburger
+  by fastforce
+  
 end
 
 end

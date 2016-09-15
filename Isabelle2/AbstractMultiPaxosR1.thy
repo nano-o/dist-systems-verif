@@ -10,7 +10,7 @@ record ('v,'a,'l) ampr1_state =
   vote :: "inst \<Rightarrow> 'a \<Rightarrow> bal \<rightharpoonup> 'v"
   suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<Rightarrow> ('v\<times>bal) set)"
-  leader :: "'a \<Rightarrow> bool"
+  is_leader :: "'a \<Rightarrow> bool"
 
 locale ampr1_ioa =
   fixes quorums::"'a set set" and leader :: "bal \<Rightarrow> 'a"
@@ -39,7 +39,7 @@ definition join_ballot where
       b > (ballot s a)
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
         onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')) ,
-        leader := (ampr1_state.leader s)(a := False)\<rparr>"
+        is_leader := (is_leader s)(a := False)\<rparr>"
   
   
 definition max_vote where max_vote_def:
@@ -54,15 +54,15 @@ definition acquire_leadership where
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in
     leader b = a
     \<and> q \<in> quorums
-    \<and> \<not> ampr1_state.leader s a
+    \<and> \<not> is_leader s a
     \<and> joined s q b
-    \<and> s' = s\<lparr>leader := (ampr1_state.leader s)(a := True),
+    \<and> s' = s\<lparr>is_leader := (is_leader s)(a := True),
         suggestion := \<lambda> i . (suggestion s i)(b := sugg s i b q)\<rparr>"
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
         \<and> ballot s a = b
-        \<and> ampr1_state.leader s a
+        \<and> is_leader s a
         \<and> suggestion s i b = None
         \<and> s' = s\<lparr>suggestion := (suggestion s)(i := (suggestion s i)(b \<mapsto> v))\<rparr>"
 
