@@ -37,44 +37,54 @@ lemma is_trans_simp[simp]:
   "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t = trans_rel s a t"
   by (simp add:is_trans_def the_ioa_def ioa_def trans_def)
   
-method try_ind_step =
-  -- {* performs case analysis and tries to solve each case with force, leaving unsolved cases untouched. *}
-  (simp only:is_trans_simp, ((induct_tac rule:trans_cases | print_term "''case analysis failed''"), simp?);
-    (rm_trans_rel_assm; (force simp add:inv_defs split:option.splits)?))
+method my_fail for msg::"char list" = (print_term msg; fail)
 
-method try_inv uses invs declares inv_defs =
-  (rule invariantI;
-    (match premises in
-      P:"?s \<in> ioa.start ?ioa" \<Rightarrow> \<open>(insert P; force simp add:inv_defs ioa_defs) | print_term "''base case failed''"\<close> 
-      \<bar> R:"reachable ?ioa ?x" and P:"_"(multi) \<Rightarrow> 
-        \<open>(insert P, instantiate_invs_2 invs:invs, try_ind_step) | print_term "''ind case failed''"\<close> )
-    )
-
-method inv_cases uses invs declares inv_defs =
+text {* If any of m1, m2, or m3 fail, then the whole method fails. *}
+method inv_cases methods m1 m2 m3 uses invs declares inv_defs =
   (rule invariantI; (
-      ((match premises in "?s \<in> ioa.start ?ioa" \<Rightarrow> \<open>-\<close>))
-      | instantiate_invs_2 invs:invs; simp only:is_trans_simp;
-        ((induct_tac rule:trans_cases | print_term "''case analysis failed''"), simp?); rm_trans_rel_assm
+      ((match premises in "?s \<in> ioa.start ?ioa" \<Rightarrow> \<open>-\<close>); m1 )
+    | ((instantiate_invs_2 invs:invs | my_fail "''instantiation failed''");
+        (m2 | my_fail "''method 2 failed''"); simp only:is_trans_simp;
+          ((induct_tac rule:trans_cases | my_fail "''case analysis failed''"), simp?); rm_trans_rel_assm; m3)
         ) )
+
+method force_inv uses invs declares inv_defs =
+  inv_cases \<open>(force simp add:inv_defs ioa_defs)?\<close> \<open>-\<close> \<open>(force simp add:inv_defs split:option.splits)?\<close>
+  invs:invs inv_defs:inv_defs
+
+method simp_inv uses invs declares inv_defs =
+  inv_cases \<open>simp add:inv_defs ioa_defs\<close> \<open>-\<close> \<open>(simp add:inv_defs split:option.splits; fail)?\<close>
+  invs:invs inv_defs:inv_defs
+
+method inv_cases_2 uses invs declares inv_defs =
+  inv_cases \<open>-\<close> \<open>-\<close> \<open>-\<close> invs:invs inv_defs:inv_defs
 
 subsection {* Invariants *}
 
 definition inv1 where inv1_def[inv_defs]:
   "inv1 s \<equiv> \<forall> a . is_leader s a \<longrightarrow> leader (ballot s a) = a"
 
-lemma inv1: "invariant the_ioa inv1" by (try_inv)
+lemma inv1: "invariant the_ioa inv1" by (force_inv)
 
 definition inv2 where inv2_def[inv_defs]:
   "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> is_leader s a))
     \<longrightarrow> suggestion s i b = None"
 
-lemma inv2: "invariant the_ioa inv2"  by (try_inv invs:inv1)
+lemma inv2: "invariant the_ioa inv2"
+  apply (simp_inv invs:inv1)
+   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force)
+  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; simp)
+  by (metis fun_upd_apply nat_neq_iff)
 
 definition inv3 where inv3_def[inv_defs]:
   -- {* acceptors only vote for the suggestion. *}
   "inv3 s \<equiv> \<forall> i a b . let v = vote s a i b in v \<noteq> None \<longrightarrow> v = suggestion s i b"
-
-lemma inv3: "invariant the_ioa inv3"  by (try_inv invs:inv1 inv2)
+  
+lemma inv3: "invariant the_ioa inv3" 
+  apply (simp_inv invs:inv1 inv2)
+   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force)
+  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; simp)
+  by (metis fun_upd_apply option.distinct(1))
 
 definition conservative where
   "conservative s \<equiv>  \<forall> i . ballot_array.conservative_array (flip (vote s) i)"
@@ -101,6 +111,11 @@ proof -
   by (metis ballot_array_prefix_axioms_def ballot_array_prefix_def quorums_axioms) 
 qed
 
+method insert_safe_mono = 
+  match premises in P:"?s \<midarrow>?a\<midarrow>the_ioa\<longrightarrow> ?t" \<Rightarrow> \<open>insert safe_mono[OF P]\<close>
+method inv_cases_3 uses invs declares inv_defs =
+  inv_cases \<open>-\<close> \<open>instantiate_invs_2 invs:invs; insert_safe_mono\<close> \<open>-\<close>
+
 context begin
 
 definition inv4 where inv4_def[inv_defs]:
@@ -113,18 +128,20 @@ text {* To show that @{term inv4} is invariant, we will use two auxiliary invari
 text {* First, we show that an acceptor that has sent a oneb for ballot b has indeed joined b, and that it includes
   its maximum vote before b. *}
 
+private
 definition inv4_1 where "inv4_1 s \<equiv> \<forall> a b f i . onebs s a b = Some f 
       \<longrightarrow> f i = dsa.acc_max (flip (vote s) i) a b \<and> ballot s a \<ge> b"
 
 text {* Then, we show that @{term max_vote} is the maximum vote before b over a quorum that has joined b. *}
 
+private
 definition inv4_2 where "inv4_2 s \<equiv> \<forall> i b q . joined s q b \<longrightarrow> 
     (max_vote s i b q = dsa.max_quorum_votes (flip (vote s) i) q b) \<and> (\<forall> a \<in> q . ballot s a \<ge> b)"
   
 private 
 lemma inv4_1:"invariant the_ioa inv4_1"
   -- {* The @{term do_vote} case necessitates to show that the value of @{term dsa.acc_max} dose not change as a result of the vote.  *}
-  apply (try_inv inv_defs:inv4_1_def)
+  apply (force_inv inv_defs:inv4_1_def)
   subgoal premises prems for s t _ a2 i2 v unfolding inv4_1_def
       -- {* the @{term do_vote} case *}
   proof (clarify, rule conjI)
@@ -205,29 +222,36 @@ declare ballot_array.safe_def[inv_defs]
 lemma aqcuire_leadership_safe:
   fixes a q s t i v safe_at 
   defines "safe_at w \<equiv> dsa.safe_at (ballot t) (flip (vote t) i) w (ballot t a)"
-  assumes "acquire_leadership a q s t" and "inv4 s" and "safe s" and "conservative s"
-  shows "case suggestion t i (ballot t a) of Some v \<Rightarrow> safe_at v | None \<Rightarrow> safe_at v"
+  assumes "acquire_leadership a q s t" and "inv4 s" and "safe s" and "conservative s" and "inv2 s"
+  shows "case suggestion t i (ballot t a) of Some v \<Rightarrow> safe_at v | None \<Rightarrow> (safe_at v \<or> decided_below s i (ballot t a))"
     -- {* Using @{thm inv4} and @{thm dsa_p.proved_safe_at_imp_safe_at}, we show that chaging leader is safe. *}
 proof -
   let ?b = "ballot s a"
   have 1:"q \<in> quorums" and 2:"joined s q ?b" using \<open>inv4 s\<close> \<open>acquire_leadership a q s t\<close> by (auto simp add:inv4_def) 
   hence 3:"case sugg s i ?b q of None \<Rightarrow> \<forall>v. dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b v 
     | Some v \<Rightarrow> dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b v" using \<open>inv4 s\<close> using inv4_def by blast 
-  have 4:"vote s = vote t" and 5:"ballot s = ballot t"
-    and 6:"suggestion t i ?b = sugg s i ?b q" using \<open>acquire_leadership a q s t\<close> by auto 
-  show ?thesis
-  proof (cases "suggestion t i ?b")
-    case None
-    with \<open>acquire_leadership a q s t\<close> have "sugg s i ?b q = None" by auto
-    with 3 have "dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b v" by simp 
-    thus ?thesis  using "1" "4" "5" None assms(4) assms(5) dsa_p.proved_safe_at_imp_safe_at 
-      by (simp add: safe_at_def conservative_def dsa_p.proved_safe_at_imp_safe_at)
+  have 4:"vote s = vote t" and 5:"ballot s = ballot t" using \<open>acquire_leadership a q s t\<close> by auto
+  consider (a) "suggestion t i ?b = sugg s i ?b q" | (b) "suggestion t i ?b = None \<and> decided_below s i ?b"
+    using \<open>acquire_leadership a q s t\<close> \<open>inv2 s\<close> by (auto simp add:inv2_def; metis fun_upd_apply)
+  thus ?thesis proof (cases)
+    case a
+    show ?thesis 
+    proof (cases "suggestion t i ?b")
+      case None
+      with \<open>acquire_leadership a q s t\<close> a have "sugg s i ?b q = None" by auto
+      with 3 have "dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b v" by simp 
+      thus ?thesis  using "1" "4" "5" None assms(4) assms(5) dsa_p.proved_safe_at_imp_safe_at 
+        by (simp add: safe_at_def conservative_def dsa_p.proved_safe_at_imp_safe_at)
+    next
+      case (Some w)
+      from Some a have 7:"sugg s i ?b q = Some w" by auto
+      hence "dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b w" using "3" by auto 
+      with \<open>safe s\<close> and \<open>conservative s\<close> show ?thesis using a 7 4 5 3 1
+        by (simp add: conservative_def dsa_p.proved_safe_at_imp_safe_at safe_at_def)
+    qed
   next
-    case (Some w)
-    from Some 6 have 7:"sugg s i ?b q = Some w" by auto
-    hence "dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b w" using "3" by auto 
-    with \<open>safe s\<close> and \<open>conservative s\<close> show ?thesis using 6 7 4 5 3 1
-      by (simp add: conservative_def dsa_p.proved_safe_at_imp_safe_at safe_at_def)
+    case b
+    then show ?thesis by (simp add: "5") 
   qed
 qed
 
@@ -236,23 +260,16 @@ definition inv5 where
   inv5_def[inv_defs]:
   "inv5 s \<equiv> safe s 
     \<and> (\<forall> i b . case suggestion s i b of Some v \<Rightarrow> safe_at s i v b 
-      | None \<Rightarrow> (is_leader s (leader b) \<and> ballot s (leader b) = b) \<longrightarrow> (\<forall> v . safe_at s i v b))"
+      | None \<Rightarrow> (is_leader s (leader b) \<and> \<not> decided_below s i b \<and> ballot s (leader b) = b) \<longrightarrow> (\<forall> v . safe_at s i v b))"
+  -- {*TODO : why do we need @{term "ballot s (leader b) = b"}? *}
 
-method insert_safe_mono = 
-  match premises in P:"?s \<midarrow>?a\<midarrow>the_ioa\<longrightarrow> ?t" \<Rightarrow> \<open>insert safe_mono[OF P]\<close>
-
-method inv_cases_2 uses invs declares inv_defs =
-  (rule invariantI; (
-      ((match premises in "?s \<in> ioa.start ?ioa" \<Rightarrow> \<open>-\<close>))
-      | instantiate_invs_2 invs:invs; insert_safe_mono, simp only:is_trans_simp;
-        ((induct_tac rule:trans_cases | print_term "''case analysis failed''"), simp?); rm_trans_rel_assm
-        ) )
-
-lemma inv5:"invariant the_ioa inv5"
+lemma inv5:"invariant the_ioa inv5" 
   apply (inv_cases_2 invs:inv4 inv3 inv1 conservative)
         apply (simp (no_asm_use) add:inv_defs ioa_defs split!:option.splits, simp add: dsa_p.safe_at_0) (* base case *)
-       apply (force simp add:inv5_def split:option.splits) (* propose *)
-      apply (force simp add:inv_defs split:option.splits) (* learn *)
+       apply (force simp add:inv5_def decided_below_def split:option.splits) (* propose *)
+      apply (force simp add:inv_defs split:option.splits) (* learn *) 
+     apply (simp add:inv_defs split:option.splits)
+  oops
      apply (simp add:inv_defs split:option.splits; metis option.distinct(1)) (* join_ballot *)
   subgoal premises prems for s t _ a i v unfolding inv5_def (* do_vote *)
   proof (rule conjI)
