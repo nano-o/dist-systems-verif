@@ -7,7 +7,7 @@ text {* TODO: according to Isabelle's canonical argument order, @{typ bal} shoul
 record ('v,'a,'l) ampr1_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
-  vote :: "inst \<Rightarrow> 'a \<Rightarrow> bal \<rightharpoonup> 'v"
+  vote :: "'a \<Rightarrow> inst \<Rightarrow> bal \<rightharpoonup> 'v"
   suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<Rightarrow> ('v\<times>bal) set)"
   is_leader :: "'a \<Rightarrow> bool"
@@ -23,7 +23,7 @@ definition start_s where
   -- {* The initial state *}
   "start_s \<equiv> \<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> i a . Map.empty), 
     suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty,
-    leader = \<lambda> a . leader 0 = a\<rparr>"
+    is_leader = \<lambda> a . leader 0 = a\<rparr>"
 
 definition start where "start \<equiv> {start_s}"
   
@@ -31,10 +31,10 @@ subsection {* The transitions *}
 
 definition propose where
   "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
-
+term dsa.acc_max
 definition join_ballot where
   "join_ballot a b s s' \<equiv>
-    let onebs' = \<lambda> i . dsa.acc_max (vote s i) a b
+    let onebs' = \<lambda> i . dsa.acc_max (flip (vote s) i) a b
     in
       b > (ballot s a)
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
@@ -68,12 +68,12 @@ definition suggest where "suggest a i b v s s' \<equiv>
 
 definition do_vote where
   "do_vote a i v s s' \<equiv> let b = ballot s a in
-          vote s i a b = None
+          vote s a i b = None
         \<and> suggestion s i b = Some v
-        \<and> s' = s\<lparr>vote := (vote s)(i := (vote s i)(a := (vote s i a)(b := Some v)))\<rparr>"
+        \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(i := (vote s a i)(b := Some v)))\<rparr>"
 
 abbreviation chosen where
-  "chosen s i v \<equiv> ballot_array.chosen quorums (vote s i) v"
+  "chosen s i v \<equiv> ballot_array.chosen quorums (flip (vote s) i) v"
 
 definition learn where
   "learn i v s s' \<equiv> chosen s i v \<and> s' = s"
