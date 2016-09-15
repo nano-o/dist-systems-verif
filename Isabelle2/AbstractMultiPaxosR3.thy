@@ -1,6 +1,6 @@
 chapter {* Distributed and executable algorithm *}
 
-theory AbstractMultiPaxosR3 
+theory AbstractMultiPaxosR3
   imports Utils FinFun_Supplemental MaxByKey IOA Quorums Paxos_Sig
 begin
 
@@ -26,10 +26,10 @@ record ('a, 'v) acc =
   log :: "inst \<Rightarrow>f 'v inst_status"
     -- {* Last ballot in which the acceptor voted. *}
   votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
-  onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option)"
+  onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option)"
     -- {* The oneb messages received when the acceptor tries to acquire leadership. 
-      TODO: Here we have a problem because we cannot distinguish between not receive a 1b
-      and receiving a 1b message in which the acceptor never voted in any instance. *}
+    Note that we need the outermost option to signify that we did not receive a oneb message
+    from the acceptor, as opposed to receiving a oneb message from an acceptor that never voted.  *}
   twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a set"
     -- {* the twob messages received (they are broadcast). *}
 
