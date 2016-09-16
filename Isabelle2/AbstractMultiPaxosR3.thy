@@ -13,18 +13,16 @@ section {* Local state and transitions *}
 
 subsection {* Data structures *}
 
-datatype 'v inst_status =
-  Decided 'v | Active | Free
-  -- {* An instance is in status @{term Free} locally when the acceptor has not itself proposed 
-    or seen a decision in that instance, or seen a proposal. *}
-
 record ('a, 'v) acc =
   -- {* The local state of an acceptor. *}
   id :: 'a
   acceptors :: "'a set"
   ballot :: bal
-  log :: "inst \<Rightarrow>f 'v inst_status"
+  decision :: "inst \<Rightarrow>f 'v option"
     -- {* Last ballot in which the acceptor voted. *}
+  inst_status :: "bal \<Rightarrow>f (inst \<Rightarrow>f 'v option) option"
+    -- {* Mirrors the member of the same name in R1 *}
+  proposal :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
   votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
   onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option)"
     -- {* The oneb messages received when the acceptor tries to acquire leadership. 
@@ -38,8 +36,8 @@ datatype ('aa,'vv) msg =
   | Phase1b 'aa bal "inst \<Rightarrow>f ('vv \<times> bal) option"
   | Phase2a inst bal 'vv
   | Phase2b 'aa inst bal 'vv
+  | Fwd 'vv
   (* | Decision inst 'v *)
-| Fwd 'vv
   
 datatype ('aa,'vv) packet =
   Packet 'aa  "('aa,'vv) msg"
@@ -52,12 +50,12 @@ locale amp_r3 =
 begin
 
 definition local_start where "local_start a \<equiv>
-  \<lparr>id = a, acceptors = as, ballot = 0, log = K$ Free,
-    votes = K$ None, onebs = K$ K$ K$ None, twobs = K$ K$ {}\<rparr>"
+  \<lparr>id = a, acceptors = as, ballot = 0, decision = K$ None, inst_status = K$ None,
+  proposal = K$ K$ None, votes = K$ None, onebs = K$ K$ None, twobs = K$ K$ {}\<rparr>"
   
 end
 
-subsection {* The propose action *} 
+subsection {* The propose action *}
 
 definition send_all where send_all_def[code del]:
   "send_all s m \<equiv> { Packet a m | a . a \<in> acceptors s \<and> a \<noteq> id s}"
@@ -109,25 +107,26 @@ qed
 context amp_r3
 begin
 
-definition next_inst where "next_inst s \<equiv>
-  first_hole (finfun_to_list (log s))"
+definition next_inst where "next_inst s \<equiv> let b = ballot s in 
+  first_hole (finfun_to_list (the (inst_status s $ b)))"
   
 lemma next_inst_lemma:
   fixes s 
-  assumes "finfun_default (log s) = Free"
-  shows "(log s) $ (next_inst s) = Free"
+  assumes "inst_status s $ (ballot s) = Some f" and "finfun_default f = None"
+  shows "f $ (next_inst s) = None"
 proof -
-    let ?l="finfun_to_list (log s)" 
-    have 2:"distinct ?l" and 3:"sorted ?l" apply (simp add: distinct_finfun_to_list) by (simp add: sorted_finfun_to_list)
-    show "(log s) $ (next_inst s) = Free" using assms(1) first_hole_lemma[OF 3 2] apply simp apply (auto simp add:next_inst_def)
-    by (simp add: finfun_dom_conv)
+  let ?b="ballot s"
+  let ?l="finfun_to_list (the (inst_status s $ ?b))" 
+  have 2:"distinct ?l" and 3:"sorted ?l" by (simp_all add: distinct_finfun_to_list sorted_finfun_to_list)
+  moreover have "next_inst s = first_hole (finfun_to_list f)" using assms(1) unfolding next_inst_def  by auto
+  ultimately show "f $ (next_inst s) = None" using assms first_hole_lemma[OF 3 2] by (auto simp add:next_inst_def finfun_dom_conv)
 qed
   
 definition do_2a where "do_2a s v \<equiv>
   let
     i = next_inst s;
     b = ballot s;
-    s' = s\<lparr>log := (log s)(i $:= Active),
+    s' = s\<lparr>proposal := (proposal s)(i $:= (proposal s $ i)(b $:= Some v)),
       twobs := (twobs s)(i $:= (twobs s $ i)(b $:= {id s}))\<rparr>;
     msgs = send_all s (Phase2a i b v)
   in (s', msgs)"
@@ -137,8 +136,7 @@ definition propose where "propose s v \<equiv>
     if l = id s
     then (do_2a s v)
     else (s, {Packet l (Fwd v)})"
-  -- {* TODO: Here we loose the proposal if it happens during an unsuccessful
-  leadership acquisition attempt. *} 
+  -- {* TODO: Here we loose the proposal if it happens during an unsuccessful leadership acquisition attempt. *} 
 
 subsection {* The @{text receive_fwd} action *}
 
@@ -147,62 +145,55 @@ definition receive_fwd where "receive_fwd s v \<equiv>
     if l = id s
     then do_2a s v
     else (s, {Packet l (Fwd v)})"
-  -- {* TODO: Here we loose the proposal if it happens during an unsuccessful
-  leadership acquisition attempt. *}
+  -- {* TODO: Here we loose the proposal if it happens during an unsuccessful leadership acquisition attempt. *}
   
 end
 
 subsection {* The @{text try_acquire_leadership} action *}
 
-locale update_onebs =
-  fixes onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option)"
-  and votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
-  and  b :: bal and a :: 'a
-begin 
-definition new_onebs where "new_onebs \<equiv> onebs(b $:= (onebs $ b)(a $:= votes))"
-
-end
-global_interpretation uonebs:update_onebs onebs votes b a for onebs votes b a 
-  defines new_onebs = update_onebs.new_onebs .
-
 context amp_r3 begin
 
 definition try_acquire_leadership where "try_acquire_leadership s \<equiv>
   let
-    b = next_bal (ballot s) (id s);
-    s' = s\<lparr>onebs := (onebs s)(b $:= ((onebs s)$ b)((id s) $:= votes s)), ballot := b\<rparr>;
+    a = id s;
+    b = next_bal (ballot s) a;
+    s' = s\<lparr>onebs := (onebs s)(b $:= ((onebs s) $ b)(a $:= Some (votes s))), 
+      ballot := b\<rparr>;
     msgs = send_all s (Phase1a b)
   in (s', msgs)"
 
 subsection {* The @{text receive_1a} action *}
 
-definition receive_1a where "receive_1a s b \<equiv> if b > ballot s then
-      let 
-        msgs = {Packet (leader b) (Phase1b (id s) b (votes s))};
-        s' = s\<lparr>ballot := b\<rparr>
-      in (s', msgs)
-    else (s, {})"
-
+definition receive_1a where "receive_1a s b \<equiv> 
+  if b > ballot s then let
+      msgs = {Packet (leader b) (Phase1b (id s) b (votes s))};
+      s' = s\<lparr>ballot := b\<rparr>
+    in (s', msgs)
+  else (s, {})"
+  
 end 
 
 subsection {* The @{text receive_1b} action *}
 
 locale receive_1b =
-  fixes onebs :: "'a \<Rightarrow>f inst \<Rightarrow>f ('v\<times>bal) option"
-  fixes as :: "'a set"
-  fixes log :: "inst \<Rightarrow>f 'v inst_status"
+  fixes onebs :: "'a \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option"
+  fixes q :: "'a set"
+  fixes decision :: "inst \<Rightarrow>f 'v option"
+  fixes b :: bal
 begin
 
 text {* Why not do things with @{term finfun_rec}? *}
 
+text {* Intended to be used when a oneb message has been received from each member of q. *}
+
 definition c where 
-  "c a vs \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ (onebs $ a), vs $)"
+  "c a vs \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ the (onebs $ a), vs $)"
   
 definition pre_votes_per_inst where
   "pre_votes_per_inst S \<equiv> Finite_Set.fold c (K$ {}) S"
 
 definition votes_per_inst where
-  "votes_per_inst \<equiv> pre_votes_per_inst as"
+  "votes_per_inst \<equiv> pre_votes_per_inst q"
   
 sublocale folding_idem c "K$ {}"
   apply (unfold_locales)
@@ -216,49 +207,52 @@ lemma votes_per_inst_code[code]:
 
 definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ votes_per_inst"
   
-definition new_log where "new_log \<equiv> (\<lambda> (s, m) .
-    case s of Decided _ \<Rightarrow> s | _ \<Rightarrow> (if m = {} then Free else Active))
-  o$ ($ log, max_per_inst $)"
+definition new_status where "new_status \<equiv>
+  (map_option fst) o$ (\<lambda> m . if m = {} then None else Some (the_elem m)) o$ max_per_inst"
   
+definition to_propose where "to_propose \<equiv>
+  (\<lambda> (d,s) . case d of Some _ \<Rightarrow> {} | None \<Rightarrow> fst ` s) o$ ($ decision, max_per_inst $)"
+
+  (*
 definition msgs_2 where "msgs_2 \<equiv> let
-    is = ((\<lambda> s . case s of Decided _ \<Rightarrow> False | _ \<Rightarrow> True) o$ log);
+    is = ((\<lambda> s . case s of Decided _ \<Rightarrow> False | _ \<Rightarrow> True) o$ decision);
     to_propose = my_comp (\<lambda> i (b,m) . if m = {} \<or> \<not> b then {} else ((case_prod (flip (Phase2a i))) ` m))
       ($is, max_per_inst$)
-    in \<Union> {the (to_propose $ i) | i . i \<in> set (finfun_to_list to_propose)}"
+    in \<Union> {the (to_propose $ i) | i . i \<in> set (finfun_to_list to_propose)}" *)
   
 definition msgs where "msgs \<equiv>
   let 
-    is = finfun_to_list ((op= Active) o$ new_log);
-    to_propose = map (\<lambda> i . (i, the_elem (max_per_inst $ i))) is;
-    msg_list = map (\<lambda> (i,v,b) . (Phase2a i b v)) to_propose
-  in set msg_list"
+    is = finfun_to_list to_propose;
+    to_propose = map (\<lambda> i . (i, to_propose $ i)) is;
+    msg_list = map (\<lambda> (i,vs) . (Phase2a i b) ` vs) to_propose
+  in \<Union> (set msg_list)"
 
 lemma msgs_lemma:
-  "\<And> m . m \<in> msgs \<Longrightarrow> case m of (Phase2a _ _ _) \<Rightarrow> True |_ \<Rightarrow> False"
+  "\<And> m . m \<in> msgs \<Longrightarrow> case m of (Phase2a _ _ _) \<Rightarrow> True | _ \<Rightarrow> False"
   by (auto simp add:local.msgs_def) 
 
 end
 
-global_interpretation r1:receive_1b onebs as log for onebs as log
-  defines new_log = "receive_1b.new_log"
-    and msgs = "receive_1b.msgs"
+global_interpretation r1:receive_1b onebs as decision b for onebs as decision b
+  defines new_status = "r1.new_status" and msgs = "r1.msgs"
   .
 
 context amp_r3 begin
 
 definition receive_1b where "receive_1b s a b vs \<equiv>
-  let s' = s\<lparr>onebs := new_onebs (onebs s) vs b a\<rparr>
+  let s' = s\<lparr>onebs := (onebs s)(b $:= ((onebs s) $ b)(a $:= Some vs))\<rparr>
   in (if (set (finfun_to_list (onebs s' $ b)) = acceptors s)
+      \<and> inst_status s $ b = None
     then let
-        s'' = s'\<lparr>log := new_log (onebs s $ b) (acceptors s) (log s)\<rparr>;
-        msgs = msgs (onebs s $ b) (acceptors s) (log s)
+        s'' = s'\<lparr>inst_status := (inst_status s)(b $:= Some (new_status (onebs s $ b) (acceptors s)))\<rparr>;
+        msgs = msgs (onebs s $ b) (acceptors s) (decision s) (ballot s)
       in (s'', \<Union> {send_all s m | m . m \<in> msgs})
     else (s', {}))"
 
 subsection {* The @{text receive_2a} action *}
 
 abbreviation(input) decided where "decided s i \<equiv> 
-  case (log s $ i) of Decided _ \<Rightarrow> True | _ \<Rightarrow> False"
+  case (decision s $ i) of Some _ \<Rightarrow> True | _ \<Rightarrow> False"
   
 definition receive_2a where "receive_2a s i b v \<equiv>
   if b \<ge> ballot s then
@@ -277,12 +271,12 @@ definition receive_2b where "receive_2b s i b a v \<equiv>
       s' = s\<lparr>twobs := (twobs s)(i $:= (twobs s $ i)(b $:= insert a (twobs s $ i $ b)))\<rparr>
     in (
       if (twobs s' $ i $ b = (acceptors s))
-      then let s'' = s'\<lparr>log := (log s)(i $:= Decided v)\<rparr>
+      then let s'' = s'\<lparr>decision := (decision s)(i $:= Some v)\<rparr>
         in (s'', {})
       else (s', {}) )
   else (s, {})"
 
-subsection {* The @{text proces_msg} action *}
+subsection {* The @{text process_msg} action *}
 
 fun process_msg where
   "process_msg s (Phase1a b) = receive_1a s b"
@@ -306,7 +300,7 @@ definition global_start where "global_start \<equiv>
 
 inductive trans_rel :: "(('a,'v) global_state \<times> 'v paxos_action \<times> ('a,'v) global_state) \<Rightarrow> bool" where
   "\<lbrakk>(Packet a m) \<in> network s; process_msg ((lstate s) a) m = (sa', ms); m = Phase2b a i b v;
-    log ((lstate s) a) \<noteq> log sa'\<rbrakk>
+    decision ((lstate s) a) \<noteq> decision sa'\<rbrakk>
     \<Longrightarrow> trans_rel (s, Learn i v, 
       s\<lparr>lstate := (lstate s)(a := sa'), network := network s \<union> ms\<rparr>)"
 | "\<lbrakk>(Packet a m) \<in> network s; process_msg ((lstate s) a) m = (sa', ms)\<rbrakk>
@@ -332,7 +326,7 @@ lemma trans_cases:
     and "p = receive_2b (lstate r a) i b a v"
     and "local_step a p r r'"
     and "Packet a m \<in> network r" 
-    and "log (lstate r a) \<noteq> log (fst p)"
+    and "decision (lstate r a) \<noteq> decision (fst p)"
   | (acquire_leadership) a where "act = Internal" and "local_step a (try_acquire_leadership (lstate r a)) r r'"
   | (receive_1a) a b m p where "act = Internal" and "m = Phase1a b"
     and "p = receive_1a (lstate r a) b"
