@@ -57,34 +57,36 @@ method simp_inv uses invs declares inv_defs =
   inv_cases \<open>simp add:inv_defs ioa_defs\<close> \<open>-\<close> \<open>(simp add:inv_defs split:option.splits; fail)?\<close>
   invs:invs inv_defs:inv_defs
 
-method inv_cases_2 uses invs declares inv_defs =
-  inv_cases \<open>-\<close> \<open>-\<close> \<open>-\<close> invs:invs inv_defs:inv_defs
-
 subsection {* Invariants *}
-
-definition inv1 where inv1_def[inv_defs]:
-  "inv1 s \<equiv> \<forall> b . inst_status s b \<noteq> None \<longrightarrow> ballot s (leader b) \<ge> b"
-
-lemma inv1: "invariant the_ioa inv1" by (force_inv)
-
-definition inv2 where inv2_def[inv_defs]:
-  "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> inst_status s b = None))
-    \<longrightarrow> suggestion s i b = None"
-
-lemma inv2: "invariant the_ioa inv2"
-  apply (simp_inv invs:inv1)
-   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force split:option.splits)
-  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; simp) by (metis fun_upd_apply)
 
 definition inv3 where inv3_def[inv_defs]:
   -- {* acceptors only vote for the suggestion. *}
   "inv3 s \<equiv> \<forall> i a b . let v = vote s a i b in v \<noteq> None \<longrightarrow> v = suggestion s i b"
   
+context begin
+  -- {* Proof of @{term inv3} *}
+
+private definition inv1 where inv1_def[inv_defs]:
+  "inv1 s \<equiv> \<forall> b . inst_status s b \<noteq> None \<longrightarrow> ballot s (leader b) \<ge> b"
+  
+private lemma inv1: "invariant the_ioa inv1" by (force_inv)
+
+private definition inv2 where inv2_def[inv_defs]:
+  "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> inst_status s b = None))
+    \<longrightarrow> suggestion s i b = None"
+
+private lemma inv2: "invariant the_ioa inv2"
+  apply (simp_inv invs:inv1)
+   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force split:option.splits)
+  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; simp) by (metis fun_upd_apply)
+
 lemma inv3: "invariant the_ioa inv3" 
-  apply (simp_inv invs:inv1 inv2)
+  apply (simp_inv invs:inv2)
    apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force)
   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; auto split:option.splits)
   by (metis fun_upd_apply option.distinct(1))
+
+end
 
 definition conservative where
   "conservative s \<equiv>  \<forall> i . ballot_array.conservative_array (flip (vote s) i)"
@@ -126,7 +128,7 @@ definition inv4 where inv4_def[inv_defs]:"inv4 s \<equiv> \<forall> i b .
   | None \<Rightarrow> True"
   
 lemma inv4:"invariant the_ioa inv4"
-  apply (simp_inv invs:inv1 inv2; (simp add:ioa_defs inv_defs; case_tac s; case_tac t; clarify; simp split:option.splits))
+  apply (simp_inv; (simp add:ioa_defs inv_defs; case_tac s; case_tac t; clarify; simp split:option.splits))
       apply (metis option.collapse option.distinct(1))
      apply (metis option.collapse option.distinct(1)) 
     apply (metis option.collapse option.distinct(1)) 
@@ -137,16 +139,22 @@ lemma inv4:"invariant the_ioa inv4"
    apply (metis fun_upd_apply option.distinct(1))
   by (metis (mono_tags, lifting) fun_upd_apply)
 
-text {* To show that @{term inv4} is invariant, we will use two auxiliary invariants. *}
+definition inst_status_inv where inst_status_inv_def[inv_defs]:
+  "inst_status_inv s \<equiv> (\<forall> b . case inst_status s b of Some f \<Rightarrow> 
+    (\<forall> i . case f i of Some v \<Rightarrow> safe_at s i v b | None \<Rightarrow> (\<forall> v . safe_at s i v b))
+    | None \<Rightarrow> True)"
 
-text {* First, we show that an acceptor that has sent a oneb for ballot b has indeed joined b, and that it includes
-  its maximum vote before b. *}
+definition the_inv where the_inv_def[inv_defs]: "the_inv s \<equiv> 
+  safe s  \<and> inst_status_inv s"
+  
+context begin
+  --{* Proof of @{term the_inv} *}
 
+private
 definition inv5 where inv5_def[inv_defs]:"inv5 s \<equiv> \<forall> a b f i . onebs s a b = Some f 
       \<longrightarrow> f i = dsa.acc_max (flip (vote s) i) a b \<and> ballot s a \<ge> b"
 
-text {* Then, we show that @{term max_vote} is the maximum vote before b over a quorum that has joined b. *}
- 
+private
 lemma inv5:"invariant the_ioa inv5"
   -- {* The @{term do_vote} case necessitates to show that the value of @{term dsa.acc_max} dose not change as a result of the vote.  *}
   apply (force_inv inv_defs:inv5_def)
@@ -169,16 +177,9 @@ lemma inv5:"invariant the_ioa inv5"
   qed
   done
 
-definition inst_status_inv where inst_status_inv_def[inv_defs]:
-  "inst_status_inv s \<equiv> (\<forall> b . case inst_status s b of Some f \<Rightarrow> 
-    (\<forall> i . case f i of Some v \<Rightarrow> safe_at s i v b | None \<Rightarrow> (\<forall> v . safe_at s i v b))
-    | None \<Rightarrow> True)"
-
-definition the_inv where the_inv_def[inv_defs]: "the_inv s \<equiv> 
-  safe s  \<and> inst_status_inv s"
   
 lemma the_inv:"invariant the_ioa the_inv"
-  apply (inv_cases_3 invs:inv4 conservative inv5 inv2 inv1)
+  apply (inv_cases_3 invs:inv4 conservative inv5)
         apply (simp add:ioa_defs inv_defs safe_def ballot_array.safe_def safe_at_def dsa_p.safe_at_0)
        apply (simp add:ioa_defs inv_defs safe_def split:option.splits)
        apply (metis option.distinct(1))
@@ -250,9 +251,9 @@ lemma the_inv:"invariant the_ioa the_inv"
         qed
         moreover 
         have "v = (the_elem (fst ` (dsa.max_quorum_votes (flip (vote s) i) q ?b)))" using Some \<open>joined s q ?b\<close> 1
-          by (auto simp add:inv4_2_def sugg_def)
+          by (auto simp add: sugg_def)
         ultimately show ?thesis using \<open>q\<in>quorums\<close> \<open>joined s q ?b\<close> 1 2 Some
-          unfolding dsa.proved_safe_at_def inv4_2_def by auto
+          unfolding dsa.proved_safe_at_def by auto
       qed
       
       text {* Finally we conclude using lemma @{thm dsa_p.proved_safe_at_imp_safe_at} *}
@@ -282,23 +283,32 @@ lemma the_inv:"invariant the_ioa the_inv"
   qed
   done
   
-definition inv6 where
-  inv6_def[inv_defs]:"inv6 s \<equiv> \<forall> i a b . ballot s a < b \<longrightarrow> flip (vote s) i a b = None"
-
-lemma  inv6:"invariant the_ioa inv6"
-by (force_inv)
+end
 
 definition inv7 where inv7_def[inv_defs]:
-  "inv7 s \<equiv> \<forall> i a b v . flip (vote s) i a b = Some v \<longrightarrow> safe_at s i v b"
+  "inv7 s \<equiv> \<forall> i . ballot_array.safe quorums (ballot s) (flip (vote s) i)"
   
 lemma inv7:"invariant the_ioa inv7"
 proof -
-  have "inv7 s" if "the_inv s" and "inv3 s" and "inv4 s" for s using that
-    apply (simp add:inv_defs)
-    by (metis (no_types) option.simps(5) safe_def)
-  thus ?thesis
-    by (smt IOA.invariant_def inv4 inv3 the_inv) 
+  { fix s
+    assume "the_inv s" and "inv3 s" and "inv4 s"
+    hence "flip (vote s) i a b = Some v \<longrightarrow> safe_at s i v b" for a i b v  apply (simp add:inv_defs) by (metis (no_types) option.simps(5) safe_def)
+    hence "inv7 s"   by (simp add:ballot_array.safe_def safe_at_def inv7_def split:option.splits) }
+  thus ?thesis by (smt IOA.invariant_def inv4 inv3 the_inv) 
 qed
+
+context begin
+-- {* Is this stuff needed? *}
+
+private
+definition inv6 where
+  inv6_def[inv_defs]:"inv6 s \<equiv> \<forall> i a b . ballot s a < b \<longrightarrow> flip (vote s) i a b = None"
+  
+private
+lemma  inv6:"invariant the_ioa inv6"
+by (force_inv)
+
+end
 
 end
 

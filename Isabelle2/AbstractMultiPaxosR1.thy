@@ -2,8 +2,6 @@ theory AbstractMultiPaxosR1
 imports  IOA BallotArrays DistributedSafeAt Paxos_Sig
 begin
 
-text {* TODO: according to Isabelle's canonical argument order, @{typ bal} should come before @{typ inst} *}
-
 record ('v,'a,'l) ampr1_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
