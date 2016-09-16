@@ -10,9 +10,9 @@ record ('v,'a,'l) ampr1_state =
   vote :: "'a \<Rightarrow> inst \<Rightarrow> bal \<rightharpoonup> 'v"
   suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<Rightarrow> ('v\<times>bal) set)"
-  is_leader :: "'a \<Rightarrow> bool"
-  -- {* TODO: @{term is_leader} is redundant, as it is equivalent to being in an owned ballot and having received
-  a quorum of onebs. *}
+  inst_status :: "bal \<rightharpoonup> inst \<rightharpoonup> 'v"
+  -- {* if @{term "inst_status s b = Some m"}, them @{term "m i = None"} means that 
+  all values are safe, and @{term "m i = Some v"} means that only @{term v} is known safe. *}
 
 locale ampr1_ioa =
   fixes quorums::"'a set set" and leader :: "bal \<Rightarrow> 'a"
@@ -25,7 +25,7 @@ definition start_s where
   -- {* The initial state *}
   "start_s \<equiv> \<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> a i . Map.empty), 
     suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty,
-    is_leader = \<lambda> a . leader 0 = a\<rparr>"
+    inst_status = \<lambda> b . if b = 0 then Some Map.empty else None\<rparr>"
 
 definition start where "start \<equiv> {start_s}"
   
@@ -40,8 +40,7 @@ definition join_ballot where
     in
       b > (ballot s a)
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
-        onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs')) ,
-        is_leader := (is_leader s)(a := False)\<rparr>"
+        onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs'))\<rparr>"
   
   
 definition max_vote where max_vote_def:
@@ -52,30 +51,23 @@ definition sugg where sugg_def: "sugg s i b q \<equiv>
   
 definition joined where "joined s q b \<equiv> \<forall> a \<in> q . onebs s a b \<noteq> None"
   
-definition decided_below where "decided_below s i b \<equiv> 
-  \<exists> v b' . b' < b \<and> dsa.chosen_at (flip (vote s) i) v b"
-  
 definition acquire_leadership where
-  -- {* Upon acquiring leadership, the leader makes suggestions in all instances but an 
-  arbitrary subset of the instances whose outcome is already decided. This implies that new
-  suggestions (after acquiring leadership) can only be made in undecided intances, because a None
-  suggestion does indicates that the instance is safe only if it is not decided in a lower ballot. *}
+  -- {* Upon acquiring leadership, the leader makes suggestions in an 
+  arbitrary set of instances which have a unique safe value. *}
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in
     leader b = a
     \<and> q \<in> quorums
-    \<and> \<not> is_leader s a
     \<and> joined s q b
-    \<and> is_leader s' = (is_leader s)(a := True)
+    \<and> inst_status s' = (inst_status s)(b := Some (\<lambda> i . sugg s i b q))
     \<and> (\<forall> i . suggestion s' i = (suggestion s i)(b := sugg s i b q) 
-      \<or> (decided_below s i b \<and> suggestion s' i = (suggestion s i)))
+      \<or> suggestion s' i = (suggestion s i))
     \<and> propCmd s' = propCmd s \<and> ballot s' = ballot s \<and> vote s' = vote s \<and> onebs s' = onebs s"
 
 definition suggest where "suggest a i b v s s' \<equiv>
           v \<in> propCmd s
         \<and> ballot s a = b
-        \<and> is_leader s a
         \<and> suggestion s i b = None
-        \<and> \<not> decided_below s i b
+        \<and> (case inst_status s b of Some f \<Rightarrow> f i = None | _ \<Rightarrow> False)
         \<and> s' = s\<lparr>suggestion := (suggestion s)(i := (suggestion s i)(b \<mapsto> v))\<rparr>"
 
 definition do_vote where
