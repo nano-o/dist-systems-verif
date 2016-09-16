@@ -58,6 +58,7 @@ definition acquire_leadership where
     leader b = a
     \<and> q \<in> quorums
     \<and> joined s q b
+    \<and> inst_status s b = None
     \<and> inst_status s' = (inst_status s)(b := Some (\<lambda> i . sugg s i b q))
     \<and> (\<forall> i . suggestion s' i = (suggestion s i)(b := sugg s i b q) 
       \<or> suggestion s' i = (suggestion s i))
