@@ -7,11 +7,12 @@ begin
 
 locale ampr1_proof = IOA + quorums quorums + ampr1_ioa quorums for
      quorums :: "'a set set" +
-  fixes the_ioa 
+  fixes the_ioa :: "(('v, 'a, 'l) ampr1_state, 'v paxos_action) ioa"
   defines "the_ioa \<equiv> ioa"
 begin
 
-sublocale dsa_p:dsa_properties quorums ballot vote for ballot vote 
+interpretation dsa_p:dsa_properties quorums ballot vote for ballot :: "'a \<Rightarrow> bal" 
+  and vote :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
   by (unfold_locales)
 
 subsection {* Automation setup *}
@@ -62,19 +63,18 @@ method inv_cases_2 uses invs declares inv_defs =
 subsection {* Invariants *}
 
 definition inv1 where inv1_def[inv_defs]:
-  "inv1 s \<equiv> \<forall> a . is_leader s a \<longrightarrow> leader (ballot s a) = a"
+  "inv1 s \<equiv> \<forall> b . inst_status s b \<noteq> None \<longrightarrow> ballot s (leader b) \<ge> b"
 
 lemma inv1: "invariant the_ioa inv1" by (force_inv)
 
 definition inv2 where inv2_def[inv_defs]:
-  "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> \<not> is_leader s a))
+  "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> inst_status s b = None))
     \<longrightarrow> suggestion s i b = None"
 
 lemma inv2: "invariant the_ioa inv2"
   apply (simp_inv invs:inv1)
-   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force)
-  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; simp)
-  by (metis fun_upd_apply nat_neq_iff)
+   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force split:option.splits)
+  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; simp) by (metis fun_upd_apply)
 
 definition inv3 where inv3_def[inv_defs]:
   -- {* acceptors only vote for the suggestion. *}
@@ -83,7 +83,7 @@ definition inv3 where inv3_def[inv_defs]:
 lemma inv3: "invariant the_ioa inv3" 
   apply (simp_inv invs:inv1 inv2)
    apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force)
-  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; simp)
+  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; auto split:option.splits)
   by (metis fun_upd_apply option.distinct(1))
 
 definition conservative where
@@ -97,7 +97,7 @@ proof -
   with inv3 show ?thesis  using IOA.invariant_def by blast
 qed
 
-abbreviation safe_at where "safe_at s i \<equiv> ballot_array.safe_at quorums (ballot s) (flip (vote s) i)"
+definition safe_at where "safe_at s i \<equiv> dsa.safe_at (ballot s) (flip (vote s) i)"
 
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic. A key lemma to simplify invariant proofs. *}
@@ -107,48 +107,56 @@ proof -
   have "is_prefix (ballot s) (ballot t) (flip (vote s) i) (flip (vote t) i)" using \<open>s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t\<close>
     by (simp add:inv_defs ioa_defs; induct_tac rule:trans_cases, auto simp add:is_prefix_def inv_defs split:option.split_asm)
   thus ?thesis
-  using assms ballot_array_prefix.safe_at_mono
+  using assms ballot_array_prefix.safe_at_mono unfolding safe_at_def
   by (metis ballot_array_prefix_axioms_def ballot_array_prefix_def quorums_axioms) 
 qed
 
-method insert_safe_mono = 
+method insert_safe_mono =
   match premises in P:"?s \<midarrow>?a\<midarrow>the_ioa\<longrightarrow> ?t" \<Rightarrow> \<open>insert safe_mono[OF P]\<close>
 method inv_cases_3 uses invs declares inv_defs =
-  inv_cases \<open>-\<close> \<open>instantiate_invs_2 invs:invs; insert_safe_mono\<close> \<open>-\<close>
+  inv_cases \<open>-\<close> \<open>insert_safe_mono\<close> \<open>-\<close> invs:invs inv_defs:inv_defs
 
-context begin
+definition safe where "safe s \<equiv> \<forall> a i b . case vote s a i b of Some v \<Rightarrow> safe_at s i v b | _ \<Rightarrow> True"
 
-definition inv4 where inv4_def[inv_defs]:
-  "inv4 s \<equiv> \<forall> b i q . joined s q b \<and> q \<in> quorums \<longrightarrow> 
-  (case sugg s i b q of  Some v \<Rightarrow> dsa.proved_safe_at (ballot s) (flip (vote s) i) q b v
-  | None \<Rightarrow> (\<forall> v . dsa.proved_safe_at (ballot s) (flip (vote s) i) q b v))"
+definition inv4 where inv4_def[inv_defs]:"inv4 s \<equiv> \<forall> i b . 
+  case suggestion s i b of Some v \<Rightarrow> 
+    (case inst_status s b of Some f \<Rightarrow>
+      (case f i of None \<Rightarrow> True | Some w \<Rightarrow> v = w)
+    | None \<Rightarrow> False)
+  | None \<Rightarrow> True"
   
+lemma inv4:"invariant the_ioa inv4"
+  apply (simp_inv invs:inv1 inv2; (simp add:ioa_defs inv_defs; case_tac s; case_tac t; clarify; simp split:option.splits))
+      apply (metis option.collapse option.distinct(1))
+     apply (metis option.collapse option.distinct(1)) 
+    apply (metis option.collapse option.distinct(1)) 
+   apply auto
+      apply fastforce
+     apply (metis option.collapse option.distinct(1))
+    apply (metis fun_upd_apply option.distinct(1) option.inject)
+   apply (metis fun_upd_apply option.distinct(1))
+  by (metis (mono_tags, lifting) fun_upd_apply)
+
 text {* To show that @{term inv4} is invariant, we will use two auxiliary invariants. *}
 
 text {* First, we show that an acceptor that has sent a oneb for ballot b has indeed joined b, and that it includes
   its maximum vote before b. *}
 
-private
-definition inv4_1 where "inv4_1 s \<equiv> \<forall> a b f i . onebs s a b = Some f 
+definition inv5 where inv5_def[inv_defs]:"inv5 s \<equiv> \<forall> a b f i . onebs s a b = Some f 
       \<longrightarrow> f i = dsa.acc_max (flip (vote s) i) a b \<and> ballot s a \<ge> b"
 
 text {* Then, we show that @{term max_vote} is the maximum vote before b over a quorum that has joined b. *}
-
-private
-definition inv4_2 where "inv4_2 s \<equiv> \<forall> i b q . joined s q b \<longrightarrow> 
-    (max_vote s i b q = dsa.max_quorum_votes (flip (vote s) i) q b) \<and> (\<forall> a \<in> q . ballot s a \<ge> b)"
-  
-private 
-lemma inv4_1:"invariant the_ioa inv4_1"
+ 
+lemma inv5:"invariant the_ioa inv5"
   -- {* The @{term do_vote} case necessitates to show that the value of @{term dsa.acc_max} dose not change as a result of the vote.  *}
-  apply (force_inv inv_defs:inv4_1_def)
-  subgoal premises prems for s t _ a2 i2 v unfolding inv4_1_def
+  apply (force_inv inv_defs:inv5_def)
+  subgoal premises prems for s t _ a2 i2 v unfolding inv5_def
       -- {* the @{term do_vote} case *}
   proof (clarify, rule conjI)
     fix a b f i
     assume "onebs t a b = Some f"
     hence "onebs s a b = Some f" using \<open>do_vote a2 i2 v s t\<close> unfolding do_vote_def by auto
-    hence "f i = dsa.acc_max (flip (vote s) i) a b" and "b \<le> ballot s a" using \<open>inv4_1 s\<close> unfolding inv4_1_def by auto
+    hence "f i = dsa.acc_max (flip (vote s) i) a b" and "b \<le> ballot s a" using \<open>inv5 s\<close> unfolding inv5_def by auto
     have "dsa.acc_max (flip (vote t) i) a b = dsa.acc_max (flip (vote s) i) a b"
     proof -
       from \<open>b \<le> ballot s a\<close> have "\<And> b' . b' < b \<Longrightarrow> flip (vote s) i a b' = flip (vote t) i a b'" using  \<open>do_vote a2 i2 v s t\<close>
@@ -160,189 +168,138 @@ lemma inv4_1:"invariant the_ioa inv4_1"
     from \<open>b \<le> ballot s a\<close> and \<open>do_vote a2 i2 v s t\<close> show "b \<le> ballot t a" unfolding do_vote_def by auto
   qed
   done
+
+definition inst_status_inv where inst_status_inv_def[inv_defs]:
+  "inst_status_inv s \<equiv> (\<forall> b . case inst_status s b of Some f \<Rightarrow> 
+    (\<forall> i . case f i of Some v \<Rightarrow> safe_at s i v b | None \<Rightarrow> (\<forall> v . safe_at s i v b))
+    | None \<Rightarrow> True)"
+
+definition the_inv where the_inv_def[inv_defs]: "the_inv s \<equiv> 
+  safe s  \<and> inst_status_inv s"
   
-private
-lemma inv4_2:"invariant the_ioa inv4_2"
-proof - 
-  have "inv4_2 s" if "inv4_1 s" for s unfolding inv4_2_def
-  proof (clarsimp, rule conjI)
-    fix i b q
-    assume "joined s q b"
-    hence "(the (onebs s a b)) i = dsa.acc_max (flip (vote s) i) a b" if "a \<in> q" for a
-      using \<open>inv4_1 s\<close> that by (simp add: ampr1_ioa.joined_def inv4_1_def) 
-    thus "max_vote s i b q = dsa.max_quorum_votes (flip (vote s) i) q b" 
-      unfolding max_vote_def dsa.max_quorum_votes_def by auto
-    show "\<forall>a\<in>q. b \<le> ballot s a" using \<open>inv4_1 s\<close> \<open>joined s q b\<close> unfolding joined_def inv4_1_def by auto
+lemma the_inv:"invariant the_ioa the_inv"
+  apply (inv_cases_3 invs:inv4 conservative inv5 inv2 inv1)
+        apply (simp add:ioa_defs inv_defs safe_def ballot_array.safe_def safe_at_def dsa_p.safe_at_0)
+       apply (simp add:ioa_defs inv_defs safe_def split:option.splits)
+       apply (metis option.distinct(1))
+      apply (simp add:inv_defs split:option.splits)
+  subgoal premises prems for s t _ a b (* join_ballot *)
+  proof (auto simp add:the_inv_def)
+    from \<open>join_ballot a b s t\<close> have 1:"inst_status t = inst_status s" and 2:"vote t = vote s" by auto
+    note mono = \<open>(\<And>i v b. safe_at s i v b \<Longrightarrow> safe_at t i v b)\<close>
+    show "safe t" using \<open>the_inv s\<close>  2 mono
+      by (auto simp add:safe_def ballot_array.safe_def safe_at_def inv_defs split:option.splits)
+    show "inst_status_inv t" using 1 2 mono \<open>the_inv s\<close>
+      by (force simp add:inv_defs split:option.splits)
   qed
-  thus ?thesis using IOA.invariant_def  inv4_1 by blast 
-qed
-
-lemma inv4:"invariant the_ioa inv4"
-proof -
-  have "inv4 s" if "inv4_2 s" and "conservative s" for s unfolding inv4_def
-  proof (clarify)
-    fix b i q
-    assume  "joined s q b" and "q \<in> quorums"
-    have "max_vote s i b q = dsa.max_quorum_votes (flip (vote s) i) q b" by (metis \<open>joined s q b\<close>  \<open>inv4_2 s\<close> inv4_2_def)
-    let ?proved="dsa.proved_safe_at (ballot s) (flip (vote s) i) q b"
-    show "case sugg s i b q of  Some v \<Rightarrow> ?proved v | None \<Rightarrow> (\<forall> v . ?proved v)"
-    proof (cases "sugg s i b q")
-      case None
-      hence "dsa.max_quorum_votes (flip (vote s) i) q b = {}" unfolding sugg_def
-          \<open>max_vote s i b q = dsa.max_quorum_votes (flip (vote s) i) q b\<close> by auto
-      moreover from \<open>inv4_2 s\<close> and \<open>joined s q b\<close> have "\<And> a . a \<in> q \<Longrightarrow> ballot s a \<ge> b"
-        using inv4_2_def by blast 
-      ultimately show ?thesis using \<open>q \<in> quorums\<close> None unfolding dsa.proved_safe_at_def joined_def by auto 
-    next
-      case (Some v)
-        -- {* Here the difficulty lies in the use of @{term the_elem} in @{thm sugg_def} *}
-      obtain x where "dsa.max_quorum_votes (flip (vote s) i) q b = {x}"
-      proof -
-        from Some have "max_vote s i b q \<noteq> {}" unfolding sugg_def by auto
-        moreover
-        note \<open>max_vote s i b q = dsa.max_quorum_votes (flip (vote s) i) q b\<close>  and \<open>conservative s\<close> 
-        moreover note dsa_p.max_vote_e_or_singleton
-        ultimately show ?thesis using that unfolding conservative_def by (metis \<open>q \<in> quorums\<close>) 
-      qed
-      moreover 
-      have "v = (the_elem (fst ` (dsa.max_quorum_votes (flip (vote s) i) q b)))" using Some \<open>joined s q b\<close> \<open>inv4_2 s\<close>
-        by (auto simp add:inv4_2_def sugg_def)
-      ultimately show ?thesis using \<open>q\<in>quorums\<close> \<open>joined s q b\<close> \<open>inv4_2 s\<close> Some
-        unfolding dsa.proved_safe_at_def inv4_2_def by auto
-    qed
+  subgoal premises prems for s t _ a i v (* do_vote *)
+  proof (auto simp add:the_inv_def)
+    note mono = \<open>(\<And>i v b. safe_at s i v b \<Longrightarrow> safe_at t i v b)\<close>
+    have 1:"\<And> i b v . suggestion s i b = Some v \<Longrightarrow> safe_at s i v b" using \<open>the_inv s\<close> \<open>inv4 s\<close>
+      by (fastforce simp add:safe_def inv_defs split:option.splits)
+    show "safe t" using \<open>the_inv s\<close> mono \<open>do_vote a i v s t \<close> 1
+      by (auto simp add:safe_def inv_defs split:option.splits)
+    show "inst_status_inv t" using \<open>the_inv s\<close> mono \<open>do_vote a i v s t \<close>
+      apply (cases s, cases t, auto simp add: inv_defs safe_def split!:option.splits)
+      by (metis option.distinct(1))
   qed
-  thus ?thesis using IOA.invariant_def conservative inv4_2 by blast 
-qed
-
-end
-
-abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (flip (vote s) i)"
-declare ballot_array.safe_def[inv_defs]
-
-lemma aqcuire_leadership_safe:
-  fixes a q s t i v safe_at 
-  defines "safe_at w \<equiv> dsa.safe_at (ballot t) (flip (vote t) i) w (ballot t a)"
-  assumes "acquire_leadership a q s t" and "inv4 s" and "safe s" and "conservative s" and "inv2 s"
-  shows "case suggestion t i (ballot t a) of Some v \<Rightarrow> safe_at v | None \<Rightarrow> (safe_at v \<or> decided_below s i (ballot t a))"
-    -- {* Using @{thm inv4} and @{thm dsa_p.proved_safe_at_imp_safe_at}, we show that chaging leader is safe. *}
-proof -
-  let ?b = "ballot s a"
-  have 1:"q \<in> quorums" and 2:"joined s q ?b" using \<open>inv4 s\<close> \<open>acquire_leadership a q s t\<close> by (auto simp add:inv4_def) 
-  hence 3:"case sugg s i ?b q of None \<Rightarrow> \<forall>v. dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b v 
-    | Some v \<Rightarrow> dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b v" using \<open>inv4 s\<close> using inv4_def by blast 
-  have 4:"vote s = vote t" and 5:"ballot s = ballot t" using \<open>acquire_leadership a q s t\<close> by auto
-  consider (a) "suggestion t i ?b = sugg s i ?b q" | (b) "suggestion t i ?b = None \<and> decided_below s i ?b"
-    using \<open>acquire_leadership a q s t\<close> \<open>inv2 s\<close> by (auto simp add:inv2_def; metis fun_upd_apply)
-  thus ?thesis proof (cases)
-    case a
-    show ?thesis 
-    proof (cases "suggestion t i ?b")
-      case None
-      with \<open>acquire_leadership a q s t\<close> a have "sugg s i ?b q = None" by auto
-      with 3 have "dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b v" by simp 
-      thus ?thesis  using "1" "4" "5" None assms(4) assms(5) dsa_p.proved_safe_at_imp_safe_at 
-        by (simp add: safe_at_def conservative_def dsa_p.proved_safe_at_imp_safe_at)
-    next
-      case (Some w)
-      from Some a have 7:"sugg s i ?b q = Some w" by auto
-      hence "dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b w" using "3" by auto 
-      with \<open>safe s\<close> and \<open>conservative s\<close> show ?thesis using a 7 4 5 3 1
-        by (simp add: conservative_def dsa_p.proved_safe_at_imp_safe_at safe_at_def)
-    qed
-  next
-    case b
-    then show ?thesis by (simp add: "5") 
-  qed
-qed
-
-definition inv5 where
-  -- {* a suggestion is safe. *}
-  inv5_def[inv_defs]:
-  "inv5 s \<equiv> safe s 
-    \<and> (\<forall> i b . case suggestion s i b of Some v \<Rightarrow> safe_at s i v b 
-      | None \<Rightarrow> (is_leader s (leader b) \<and> \<not> decided_below s i b \<and> ballot s (leader b) = b) \<longrightarrow> (\<forall> v . safe_at s i v b))"
-  -- {*TODO : why do we need @{term "ballot s (leader b) = b"}? *}
-
-lemma inv5:"invariant the_ioa inv5" 
-  apply (inv_cases_2 invs:inv4 inv3 inv1 conservative)
-        apply (simp (no_asm_use) add:inv_defs ioa_defs split!:option.splits, simp add: dsa_p.safe_at_0) (* base case *)
-       apply (force simp add:inv5_def decided_below_def split:option.splits) (* propose *)
-      apply (force simp add:inv_defs split:option.splits) (* learn *) 
-     apply (simp add:inv_defs split:option.splits)
-  oops
-     apply (simp add:inv_defs split:option.splits; metis option.distinct(1)) (* join_ballot *)
-  subgoal premises prems for s t _ a i v unfolding inv5_def (* do_vote *)
-  proof (rule conjI)
-    note mono = \<open>\<And>i v b. safe_at s i v b \<Longrightarrow> safe_at t i v b\<close>
-    from \<open>do_vote a i v s t\<close> have "suggestion t = suggestion s" and "is_leader t = is_leader  s" and "ballot t = ballot s" by auto
-    with \<open>inv5 s\<close> and mono show " \<forall>i b. case suggestion t i b of None \<Rightarrow>
-      is_leader t (leader b) \<and> ballot t (leader b) = b \<longrightarrow> (\<forall>v. safe_at t i v b)
-      | Some v \<Rightarrow> safe_at t i v b" apply (auto simp add:inv5_def split:option.splits) by (metis option.distinct(1))
-    show "safe t" using mono \<open>inv5 s\<close> \<open>inv3 t\<close> \<open>suggestion t = suggestion s\<close> by (auto simp add:inv3_def inv5_def dsa.safe_def split:option.splits; metis)
-  qed
-   apply (simp add:inv_defs split:option.splits; metis option.distinct(1)) (* suggest *)
-  subgoal premises prems for s t _ a q unfolding inv5_def (* acquire_leadership *)
-  proof (rule conjI)
-    note mono = \<open>\<And>i v b. safe_at s i v b \<Longrightarrow> safe_at t i v b\<close>
-    show "safe t" using \<open>inv5 s\<close> mono and \<open>acquire_leadership a q s t\<close> by (simp add:inv5_def)
-    have "safe s" using inv5_def \<open>inv5 s\<close> by blast
-    note aqcuire_leadership_safe[OF \<open>acquire_leadership a q s t\<close> \<open>inv4 s\<close> \<open>safe s\<close> \<open>conservative s\<close>]
-    moreover have "ballot t = ballot s" and "vote t = vote s" 
-      and "\<And> b i . b \<noteq> ballot s a \<Longrightarrow> suggestion t i b = suggestion s i b" 
-      and "is_leader t = (is_leader s)(a := True)" using \<open>acquire_leadership a q s t\<close> by simp_all
-    ultimately show " \<forall>i b. case suggestion t i b of None \<Rightarrow>
-      is_leader t (leader b) \<and> ballot t (leader b) = b \<longrightarrow> (\<forall>v. safe_at t i v b)
-      | Some v \<Rightarrow> safe_at t i v b" using mono \<open>inv5 s\<close> \<open>inv1 s\<close> mono
-      -- {* TODO: make this cleaner. *}
-      apply (auto simp add:inv5_def inv1_def conservative_def split:option.splits)
-         apply (metis option.case_eq_if)
-        apply (metis option.simps(5))
-       apply (metis fun_upd_same inv1_def option.distinct(1) prems(8))
+  subgoal for s t _ _ _ _ _ (* suggest *)
+    apply (cases s, cases t, auto simp add: inv_defs safe_def split:option.splits)[1]
+    apply (metis option.distinct(1))
+    done
+  subgoal premises prems for s t _ a q (* acquire_leadership *)
+  proof (auto simp add:the_inv_def)
+    note mono = \<open>(\<And>i v b. safe_at s i v b \<Longrightarrow> safe_at t i v b)\<close>
+    show "safe t" using \<open>acquire_leadership a q s t\<close> \<open>the_inv s\<close> mono
+      by (auto simp add:safe_def inv_defs split:option.splits)
+    show "inst_status_inv t"
     proof -
-      fix i :: nat and b :: nat and x2 :: 'b
-      assume a1: "ballot t = ballot s"
-      assume a2: "vote t = vote s"
-      assume a3: "suggestion t i b = Some x2"
-      assume a4: "\<And>b i. b \<noteq> ballot s a \<Longrightarrow> suggestion t i b = suggestion s i b"
-      assume a5: "\<forall>i b. (ballot s (leader b) = b \<longrightarrow> is_leader s (leader b) \<longrightarrow> (\<exists>y. suggestion s i b = Some y) \<or> (\<forall>v. dsa.safe_at (ballot s) (\<lambda>y. vote s y i) v b)) \<and> (\<forall>x2. suggestion s i b = Some x2 \<longrightarrow> dsa.safe_at (ballot s) (\<lambda>y. vote s y i) x2 b)"
-      assume "\<And>i v. case suggestion t i (ballot s a) of None \<Rightarrow> dsa.safe_at (ballot t) (\<lambda>y. vote t y i) v (ballot t a) | Some v \<Rightarrow> dsa.safe_at (ballot t) (\<lambda>y. vote t y i) v (ballot t a)"
-      then have "\<And>n b. case suggestion t n (ballot s a) of None \<Rightarrow> dsa.safe_at (ballot s) (\<lambda>a. vote s a n) b (ballot t a) | Some b \<Rightarrow> dsa.safe_at (ballot t) (\<lambda>a. vote t a n) b (ballot t a)"
-        using a2 a1 by metis
-      then have f6: "\<And>b. case suggestion t i (ballot s a) of None \<Rightarrow> dsa.safe_at (ballot s) (\<lambda>a. vote s a i) b (ballot t a) | Some b \<Rightarrow> dsa.safe_at (ballot t) (\<lambda>a. vote t a i) b (ballot t a)"
-        by blast
-      have f7: "ballot s a = b \<or> suggestion s i b = Some x2"
-        using a4 a3 by (metis (full_types))
-      have "ballot s a = b \<longrightarrow> dsa.safe_at (ballot s) (\<lambda>a. vote s a i) x2 b"
-        using f6 a3 a2 a1 by force
-      then show "dsa.safe_at (ballot s) (\<lambda>a. vote s a i) x2 b"
-        using f7 a5 by blast
+      let ?b = "ballot s a"
+      from \<open>acquire_leadership a q s t\<close> have "joined s q ?b" and \<open>q\<in> quorums\<close> by (auto simp add:safe_def inv_defs split:option.splits)
+      from \<open>the_inv s\<close> have "safe s" by (simp add: the_inv_def) 
+      
+      text {* First we show that @{term max_vote} is the max over @{term dsa.acc_max} 
+        (i.e. @{term dsa.max_quorum_votes} *}
+      have 1:"max_vote s i ?b q = dsa.max_quorum_votes (flip (vote s) i) q ?b" for i 
+      proof -
+        have "(the (onebs s a ?b)) i = dsa.acc_max (flip (vote s) i) a ?b" if "a \<in> q" for a i
+          using \<open>inv5 s\<close> \<open>joined s q ?b\<close> that by (simp add: ampr1_ioa.joined_def inv5_def)
+        thus ?thesis by (auto simp add:max_vote_def dsa.max_quorum_votes_def)
+      qed
+      have 2:"ballot s a \<ge> ?b" if "a \<in> q" for a using \<open>joined s q ?b\<close> \<open>inv5 s\<close> that by (auto simp add:inv5_def joined_def)
+      
+      text {* Then we show that a suggestion is @{term dsa.proved_safe_at}, and that everything is 
+        safe if there is no suggestion *}
+      let ?proved="\<lambda> i . dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b"
+      have 3:"case sugg s i ?b q of Some v \<Rightarrow> ?proved i v | None \<Rightarrow> (\<forall> v . ?proved i v)" for i
+      proof (cases "sugg s i ?b q")
+        case None
+        hence "dsa.max_quorum_votes (flip (vote s) i) q ?b = {}" unfolding sugg_def
+            \<open>max_vote s i ?b q = dsa.max_quorum_votes (flip (vote s) i) q ?b\<close> by auto
+        thus ?thesis using 2 \<open>q \<in> quorums\<close> None unfolding dsa.proved_safe_at_def joined_def by auto 
+      next
+        case (Some v)
+          -- {* Here the difficulty lies in the use of @{term the_elem} in @{thm sugg_def} *}
+        obtain x where "dsa.max_quorum_votes (flip (vote s) i) q ?b = {x}"
+        proof -
+          from Some have "max_vote s i ?b q \<noteq> {}" unfolding sugg_def by auto
+          moreover
+          note \<open>max_vote s i ?b q = dsa.max_quorum_votes (flip (vote s) i) q ?b\<close>  and \<open>conservative s\<close> 
+          moreover note dsa_p.max_vote_e_or_singleton
+          ultimately show ?thesis using that unfolding conservative_def by (metis \<open>q \<in> quorums\<close>) 
+        qed
+        moreover 
+        have "v = (the_elem (fst ` (dsa.max_quorum_votes (flip (vote s) i) q ?b)))" using Some \<open>joined s q ?b\<close> 1
+          by (auto simp add:inv4_2_def sugg_def)
+        ultimately show ?thesis using \<open>q\<in>quorums\<close> \<open>joined s q ?b\<close> 1 2 Some
+          unfolding dsa.proved_safe_at_def inv4_2_def by auto
+      qed
+      
+      text {* Finally we conclude using lemma @{thm dsa_p.proved_safe_at_imp_safe_at} *}
+      
+      obtain f where 6:"f = (\<lambda> i . sugg s i ?b q)" and 7:"inst_status t (ballot s a) = Some f" using \<open>acquire_leadership a q s t\<close> 
+        using \<open>acquire_leadership a q s t\<close> by simp
+      have 8:"case f i of Some v \<Rightarrow> safe_at s i v ?b | None \<Rightarrow> safe_at s i v ?b" for i v
+      proof (cases "f i")
+        case None
+        with \<open>acquire_leadership a q s t\<close> 6 have "sugg s i ?b q = None" by auto
+        with 3 have "dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b v" by (metis (mono_tags) option.simps(4)) 
+        thus ?thesis using \<open>conservative s\<close> \<open>q\<in>quorums\<close> dsa_p.proved_safe_at_imp_safe_at None
+          apply (auto simp add:safe_def safe_at_def conservative_def split:option.splits)
+          apply (metis (full_types) ampr1_proof.safe_at_def ampr1_proof.safe_def ampr1_proof_axioms dsa.safe_def \<open>safe s\<close>)
+          done
+      next
+        case (Some w)
+        from Some 6 have 7:"sugg s i ?b q = Some w" by auto
+        hence "dsa.proved_safe_at (ballot s) (flip (vote s) i) q ?b w" using "3" by (metis option.simps(5)) 
+        with \<open>safe s\<close> and \<open>conservative s\<close> show ?thesis using Some \<open>q\<in>quorums\<close> dsa_p.proved_safe_at_imp_safe_at
+          by (auto simp add:safe_def safe_at_def conservative_def ballot_array.safe_def inv_defs split!:option.splits)
+      qed
+      from 7 8 show ?thesis using \<open>the_inv s\<close> \<open>acquire_leadership a q s t\<close> mono
+        apply (simp add: inv_defs split:option.splits)
+        by (smt option.case_eq_if option.distinct(1) option.sel)
     qed
   qed
   done
-
+  
 definition inv6 where
   inv6_def[inv_defs]:"inv6 s \<equiv> \<forall> i a b . ballot s a < b \<longrightarrow> flip (vote s) i a b = None"
 
 lemma  inv6:"invariant the_ioa inv6"
-by (try_inv)
+by (force_inv)
 
 definition inv7 where inv7_def[inv_defs]:
   "inv7 s \<equiv> \<forall> i a b v . flip (vote s) i a b = Some v \<longrightarrow> safe_at s i v b"
-
-lemma inv7:"invariant the_ioa inv7"
-  apply (inv_cases_2 invs:inv5)
-        apply (auto simp add:inv7_def ioa_defs inv5_def option.splits) (* automatic from here *)
-proof -
-  fix s :: "('b, 'a, ?'l) ampr1_state" and aa :: 'a and i :: nat and v :: 'b
-  assume a1: "\<And>ia va b. dsa.safe_at (ballot s) (\<lambda>y. vote s y ia) va b \<Longrightarrow> dsa.safe_at (ballot s) (\<lambda>y. (if y = aa then (vote s aa)(i := vote s aa i(ballot s aa \<mapsto> v)) else vote s y) ia) va b"
-  assume a2: "\<forall>i b. case suggestion s i b of None \<Rightarrow> is_leader s (leader b) \<and> ballot s (leader b) = b \<longrightarrow> (\<forall>v. dsa.safe_at (ballot s) (\<lambda>y. vote s y i) v b) | Some v \<Rightarrow> dsa.safe_at (ballot s) (\<lambda>y. vote s y i) v b"
-  assume "suggestion s i (ballot s aa) = Some v"
-  then have "case Some v of None \<Rightarrow> is_leader s (leader (ballot s aa)) \<and> ballot s (leader (ballot s aa)) = ballot s aa \<longrightarrow> (\<forall>b. dsa.safe_at (ballot s) (\<lambda>a. vote s a i) b (ballot s aa)) | Some b \<Rightarrow> dsa.safe_at (ballot s) (\<lambda>a. vote s a i) b (ballot s aa)"
-    using a2 by metis
-  then show "dsa.safe_at (ballot s) (\<lambda>a. (if a = aa then (vote s aa)(i := vote s aa i(ballot s aa \<mapsto> v)) else vote s a) i) v (ballot s aa)"
-    using a1 by simp
-qed
   
+lemma inv7:"invariant the_ioa inv7"
+proof -
+  have "inv7 s" if "the_inv s" and "inv3 s" and "inv4 s" for s using that
+    apply (simp add:inv_defs)
+    by (metis (no_types) option.simps(5) safe_def)
+  thus ?thesis
+    by (smt IOA.invariant_def inv4 inv3 the_inv) 
+qed
+
 end
 
 end
