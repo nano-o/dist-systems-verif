@@ -36,6 +36,6 @@ subsection {* Code generation *}
 
 export_code propose in Scala
 
-export_code local_start propose try_acquire_leadership process_msg in Scala
+export_code local_start propose try_acquire_leadership process_msg checking Scala
 
 end

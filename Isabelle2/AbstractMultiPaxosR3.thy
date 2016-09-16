@@ -233,8 +233,8 @@ lemma msgs_lemma:
 
 end
 
-global_interpretation r1:receive_1b onebs as decision b for onebs as decision b
-  defines new_status = "r1.new_status" and msgs = "r1.msgs"
+global_interpretation r1b:receive_1b onebs as decision b for onebs as decision b
+  defines new_status = receive_1b.new_status and msgs = receive_1b.msgs
   .
 
 context amp_r3 begin
