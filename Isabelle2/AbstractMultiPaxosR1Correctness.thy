@@ -7,7 +7,7 @@ begin
 
 locale ampr1_proof = IOA + quorums quorums + ampr1_ioa quorums for
      quorums :: "'a set set" +
-  fixes the_ioa :: "(('v, 'a, 'l) ampr1_state, 'v paxos_action) ioa"
+  fixes the_ioa :: "(('v, 'a) ampr1_state, ('a,'v) paxos_action) ioa"
   defines "the_ioa \<equiv> ioa"
 begin
 
@@ -23,7 +23,7 @@ lemmas ioa_defs =
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp] suggest_def[simp]
   learn_def[simp] Let_def[simp] if_splits[split] acquire_leadership_def[simp]
-  join_started_ballot_def[simp]
+  join_started_ballot_def[simp] recover_def[simp] crash_def[simp]
 
 named_theorems inv_defs
 
@@ -60,9 +60,29 @@ method simp_inv uses invs declares inv_defs =
 
 subsection {* Invariants *}
 
+definition inv10 where inv10_def[inv_defs]:
+  "inv10 s \<equiv> \<forall> i b v . (suggestion s i b = Some v \<longrightarrow> twoas s i b = Some v)"
+
+lemma inv10: "invariant the_ioa inv10"
+  apply (simp_inv invs:)
+   apply (case_tac s; case_tac t; simp add:inv_defs split:option.splits)
+  apply (metis fun_upd_apply)
+  apply (case_tac s; case_tac t; simp add:inv_defs split:option.splits)
+  by (metis option.distinct(1))
+
+definition inv11 where inv11_def[inv_defs]:
+    "inv11 s \<equiv> \<forall> i b v . (suggestion s i b = None \<and> twoas s i b = Some v)
+      \<longrightarrow> (crashed s (leader b) \<or> ballot s (leader b) > b)"
+lemma inv11: "invariant the_ioa inv11"
+  apply (simp_inv invs:inv10)
+      apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)
+  apply (meson dual_order.strict_trans1 less_imp_le_nat)
+     apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)
+  oops
+  
 definition inv3 where inv3_def[inv_defs]:
   -- {* acceptors only vote for the suggestion. *}
-  "inv3 s \<equiv> \<forall> i a b . let v = vote s a i b in v \<noteq> None \<longrightarrow> v = suggestion s i b"
+  "inv3 s \<equiv> \<forall> i a b . let v = vote s a i b in v \<noteq> None \<longrightarrow> v = twoas s i b"
   
 context begin
   -- {* Proof of @{term inv3} *}
@@ -74,18 +94,18 @@ private lemma inv1: "invariant the_ioa inv1" by (force_inv)
 
 private definition inv2 where inv2_def[inv_defs]:
   "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> inst_status s b = None))
-    \<longrightarrow> suggestion s i b = None"
+    \<longrightarrow> (twoas s i b = None \<and> suggestion s i b = None)"
 
 private lemma inv2: "invariant the_ioa inv2"
   apply (simp_inv invs:inv1)
-   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force split:option.splits)
-  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; simp) by (metis fun_upd_apply)
+   apply (simp add: inv_defs; case_tac s; case_tac t; force split:option.splits)
+  apply (simp add: inv_defs; case_tac s; case_tac t; simp) apply (metis fun_upd_apply)
+  apply (simp add: inv_defs; case_tac s; case_tac t; simp) apply (metis+)
+  done
 
 lemma inv3: "invariant the_ioa inv3" 
-  apply (simp_inv invs:inv2)
-   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force)
-  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; auto split:option.splits)
-  by (metis fun_upd_apply option.distinct(1))
+  apply (simp_inv invs:inv2) defer defer
+  apply (case_tac s; case_tac t; auto simp add: inv_defs split:option.splits) sorry
 
 end
 
@@ -122,24 +142,22 @@ method inv_cases_3 uses invs declares inv_defs =
 definition safe where "safe s \<equiv> \<forall> a i b . case vote s a i b of Some v \<Rightarrow> safe_at s i v b | _ \<Rightarrow> True"
 
 definition inv4 where inv4_def[inv_defs]:"inv4 s \<equiv> \<forall> i b . 
-  case suggestion s i b of Some v \<Rightarrow> 
+  case twoas s i b of Some v \<Rightarrow> 
     (case inst_status s b of Some f \<Rightarrow>
       (case f i of None \<Rightarrow> True | Some w \<Rightarrow> v = w)
     | None \<Rightarrow> False)
   | None \<Rightarrow> True"
   
 lemma inv4:"invariant the_ioa inv4"
-  apply (simp_inv; (simp add:ioa_defs inv_defs; case_tac s; case_tac t; clarify; simp split:option.splits))
+  apply (simp_inv invs:inv10; (simp add:ioa_defs inv_defs; case_tac s; case_tac t; clarify; simp split:option.splits))
       apply (metis option.collapse option.distinct(1))
      apply (metis option.collapse option.distinct(1)) 
-    apply (metis option.collapse option.distinct(1)) 
-   apply auto
-      apply fastforce
-     apply (metis option.collapse option.distinct(1))
-    apply (metis fun_upd_apply option.distinct(1) option.inject)
-    apply (metis fun_upd_apply option.distinct(1))
-   apply (metis fun_upd_apply)
-  by (metis option.collapse option.distinct(1))
+        apply (metis option.collapse option.distinct(1))
+       apply (metis option.collapse option.distinct(1))
+  using not_None_eq apply fastforce 
+     apply auto[1]
+       apply (metis option.distinct(1))
+      apply (metis option.distinct(1))
 
 definition inst_status_inv where inst_status_inv_def[inv_defs]:
   "inst_status_inv s \<equiv> (\<forall> b . case inst_status s b of Some f \<Rightarrow> 
@@ -185,7 +203,8 @@ lemma the_inv:"invariant the_ioa the_inv"
         apply (simp add:ioa_defs inv_defs safe_def ballot_array.safe_def safe_at_def dsa_p.safe_at_0)
        apply (simp add:ioa_defs inv_defs safe_def split:option.splits)
        apply (metis option.distinct(1))
-      apply (simp add:inv_defs split:option.splits)
+        apply (simp add:inv_defs safe_def split:option.splits) apply auto[1]
+  apply (metis option.distinct(1))
   subgoal premises prems for s t _ a b (* join_ballot *)
   proof (auto simp add:the_inv_def)
     from \<open>join_ballot a b s t\<close> have 1:"inst_status t = inst_status s" and 2:"vote t = vote s" by auto
@@ -283,9 +302,10 @@ lemma the_inv:"invariant the_ioa the_inv"
         by (smt option.case_eq_if option.distinct(1) option.sel)
     qed
   qed
+   apply (simp add:ioa_defs inv_defs safe_def split:option.splits; metis option.distinct(1))
   apply (simp add:ioa_defs inv_defs safe_def split:option.splits; metis option.distinct(1))
   done
-  
+
 end
 
 definition inv7 where inv7_def[inv_defs]:
@@ -296,9 +316,58 @@ proof -
   { fix s
     assume "the_inv s" and "inv3 s" and "inv4 s"
     hence "flip (vote s) i a b = Some v \<longrightarrow> safe_at s i v b" for a i b v  apply (simp add:inv_defs) by (metis (no_types) option.simps(5) safe_def)
-    hence "inv7 s"   by (simp add:ballot_array.safe_def safe_at_def inv7_def split:option.splits) }
+    hence "inv7 s" by (simp add:ballot_array.safe_def safe_at_def inv7_def split:option.splits) }
   thus ?thesis by (smt IOA.invariant_def inv4 inv3 the_inv) 
 qed
+
+method inv_cases_2 =
+  (rule invariantI; (
+      ((match premises in "?s \<in> ioa.start ?ioa" \<Rightarrow> \<open>-\<close>))
+    | ((induct_tac rule:trans_cases | my_fail "''case analysis failed''"), simp?)
+        ) )
+
+method succ_reachable = match premises in R:"reachable ?ioa ?s" and T:"?s \<midarrow>?a\<midarrow>?ioa\<longrightarrow> ?t" \<Rightarrow> 
+    \<open>insert reachable_n[OF R T]\<close>
+
+method bring_invs =
+  ((match premises in I:"invariant ?ioa inv" and R:"reachable ?ioa s" for inv s \<Rightarrow> \<open>
+    match premises in "inv s" \<Rightarrow> \<open>fail\<close> \<bar> "_" \<Rightarrow> \<open>insert reach_and_inv_imp_p[OF R I]\<close> \<close> )+)?
+
+method trans_case methods m uses invs =
+  (insert invs, bring_invs, m, rm_reachable+, (match premises in I[thin]:"?s \<midarrow>?a\<midarrow>?ioa\<longrightarrow> ?t" \<Rightarrow> \<open>-\<close>)?,
+    ((match premises in P[thin]:"invariant ?ioa ?inv" \<Rightarrow> \<open>-\<close>)+)?)
+
+definition inv8 where inv8_def[inv_defs]:
+  "inv8 s \<equiv> \<forall> i . ballot_array.well_formed (ballot s) (flip (vote s) i)"
+
+lemma inv8:"invariant the_ioa inv8"
+  by (simp_inv inv_defs:inv_defs ballot_array.well_formed_def)
+
+lemma chosen_mono:
+  -- {* @{term safe_at} is monotonic. A key lemma to simplify invariant proofs. *}
+  assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "reachable the_ioa s" and "chosen s i v"
+  shows "chosen t i v"
+proof -
+  have "inv8 s" using inv8 assms(2) by (meson IOA.reach_and_inv_imp_p)
+  have "is_prefix (ballot s) (ballot t) (flip (vote s) i) (flip (vote t) i)" using \<open>s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t\<close>
+    by (simp add:inv_defs ioa_defs; induct_tac rule:trans_cases, auto simp add:is_prefix_def inv_defs split:option.split_asm)
+  thus ?thesis
+    using assms(3) \<open>inv8 s\<close> ballot_array_prefix.chosen_mono unfolding ballot_array_prefix_def[of quorums] ballot_array_prefix_axioms_def
+      chosen_def dsa.chosen_def ballot_array_prefix_def[of quorums] ballot_array.chosen_def apply (auto simp add:inv8_def)
+    by (meson ballot_array_prefix.chosen_mono ballot_array_prefix_axioms_def ballot_array_prefix_def dsa.chosen_def quorums_axioms)
+qed
+
+method insert_chosen_mono =
+  match premises in P:"?s \<midarrow>?a\<midarrow>the_ioa\<longrightarrow> ?t" and Q:"reachable the_ioa ?s" \<Rightarrow> 
+    \<open>insert chosen_mono[OF P Q]\<close>
+
+definition inv9 where inv9_def[inv_defs]:
+  "inv9 s \<equiv> \<forall> a i v . log s a i = Some v \<longrightarrow> chosen s i v"
+  
+lemma inv9:"invariant the_ioa inv9"
+  apply ( (inv_cases_2, simp add:ioa_defs inv_defs); 
+      (trans_case \<open>insert_chosen_mono\<close> invs:; simp add:inv_defs  split:option.splits)? )
+  by (metis option.sel)
 
 context begin
 -- {* Is this stuff needed? *}
