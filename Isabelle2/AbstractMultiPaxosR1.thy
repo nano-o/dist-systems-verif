@@ -40,6 +40,10 @@ definition join_ballot where
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
         onebs := (onebs s)(a := (onebs s a)(b \<mapsto> onebs'))\<rparr>"
   
+definition join_started_ballot where "join_started_ballot a b s s' \<equiv>
+  inst_status s b \<noteq> None 
+  \<and> ballot s a < b
+  \<and> s' = s\<lparr>ballot := (ballot s)(a := b)\<rparr>"
   
 definition max_vote where max_vote_def:
   "max_vote s i b q \<equiv> max_by_key (\<Union> a \<in> q . the (onebs s a b) i) snd"
@@ -50,7 +54,7 @@ definition sugg where sugg_def: "sugg s i b q \<equiv>
 definition joined where "joined s q b \<equiv> \<forall> a \<in> q . onebs s a b \<noteq> None"
   
 definition acquire_leadership where
-  -- {* Upon acquiring leadership, the leader makes suggestions in an 
+  -- {* Upon acquiring leadership, the leader makes suggestions in an
   arbitrary set of instances which have a unique safe value. *}
   "acquire_leadership a q s s' \<equiv> let b = ballot s a in
     leader b = a
@@ -75,11 +79,14 @@ definition do_vote where
         \<and> suggestion s i b = Some v
         \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(i := (vote s a i)(b := Some v)))\<rparr>"
 
-abbreviation chosen where
+definition chosen where
   "chosen s i v \<equiv> ballot_array.chosen quorums (flip (vote s) i) v"
 
 definition learn where
   "learn i v s s' \<equiv> chosen s i v \<and> s' = s"
+  
+definition re_join where 
+  "re_join a s s' \<equiv> True"
 
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
@@ -87,7 +94,8 @@ fun trans_rel where
     (\<exists> a b . join_ballot a b r r')
     \<or> (\<exists> a i v . do_vote a i v r r')
     \<or> (\<exists> a i b v . suggest a i b v r r')
-    \<or> (\<exists> a q . acquire_leadership a q r r'))"
+    \<or> (\<exists> a q . acquire_leadership a q r r')
+    \<or> (\<exists> a b . join_started_ballot a b r r') )"
 | "trans_rel r (Learn i v) r' = learn i v r r'"
 
 lemma trans_cases:
@@ -99,6 +107,7 @@ lemma trans_cases:
 | (do_vote) a i v where "do_vote a i v r r'"
 | (suggest) a i b v where "suggest a i b v r r'"
 | (acquire) a q where "acquire_leadership a q r r'"
+| (join_started) a b where "join_started_ballot a b r r'"
   using assms apply induct apply simp
   by (metis ampr1_ioa.trans_rel.simps(1) ampr1_ioa.trans_rel.simps(3) paxos_action.exhaust trans_rel.simps(2)) 
 

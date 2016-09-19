@@ -23,6 +23,7 @@ lemmas ioa_defs =
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp] suggest_def[simp]
   learn_def[simp] Let_def[simp] if_splits[split] acquire_leadership_def[simp]
+  join_started_ballot_def[simp]
 
 named_theorems inv_defs
 
@@ -136,8 +137,9 @@ lemma inv4:"invariant the_ioa inv4"
       apply fastforce
      apply (metis option.collapse option.distinct(1))
     apply (metis fun_upd_apply option.distinct(1) option.inject)
-   apply (metis fun_upd_apply option.distinct(1))
-  by (metis (mono_tags, lifting) fun_upd_apply)
+    apply (metis fun_upd_apply option.distinct(1))
+   apply (metis fun_upd_apply)
+  by (metis option.collapse option.distinct(1))
 
 definition inst_status_inv where inst_status_inv_def[inv_defs]:
   "inst_status_inv s \<equiv> (\<forall> b . case inst_status s b of Some f \<Rightarrow> 
@@ -281,6 +283,7 @@ lemma the_inv:"invariant the_ioa the_inv"
         by (smt option.case_eq_if option.distinct(1) option.sel)
     qed
   qed
+  apply (simp add:ioa_defs inv_defs safe_def split:option.splits; metis option.distinct(1))
   done
   
 end
