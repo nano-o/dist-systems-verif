@@ -260,6 +260,13 @@ lemma safe_at_mono:
   shows "ba_2.safe_at v b"
   by (metis assms ba_1.safe_at_def ba_2.safe_at_def choosable_decreases)
 
+lemma chosen_mono:
+  assumes "ba_1.chosen v" and "ba_1.well_formed"
+  shows "ba_2.chosen v" using assms ballot_array_prefix_axioms
+  unfolding ba_1.chosen_def ba_2.chosen_def ballot_array_prefix_def quorums_def ballot_array_prefix_axioms_def
+    is_prefix_def ba_2.chosen_at_def ba_1.chosen_at_def ba_1.well_formed_def apply auto
+  by (metis not_less_iff_gr_or_eq option.distinct(1))
+  
 lemma safe_votes:
   assumes ba_1.safe and "\<And> b a v . \<lbrakk>vote1 a b \<noteq> vote2 a b; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b"
   and "\<And> b a . b > ballot1 a \<Longrightarrow> vote1 a b = vote2 a b"
