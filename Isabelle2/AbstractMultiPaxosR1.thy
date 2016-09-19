@@ -11,6 +11,10 @@ record ('v,'a,'l) ampr1_state =
   inst_status :: "bal \<rightharpoonup> inst \<rightharpoonup> 'v"
   -- {* if @{term "inst_status s b = Some m"}, them @{term "m i = None"} means that 
   all values are safe, and @{term "m i = Some v"} means that only @{term v} is known safe. *}
+  log :: "'a \<Rightarrow> inst \<Rightarrow> 'v option"
+  -- {* The log is there to transfer it to replicas who need to catch up. *}
+  lowest_inst :: "'a \<Rightarrow> inst"
+  -- {* The lowest for which an acceptor has a log (grows because of garbage collection.*}
 
 locale ampr1_ioa =
   fixes quorums::"'a set set" and leader :: "bal \<Rightarrow> 'a"
@@ -23,7 +27,8 @@ definition start_s where
   -- {* The initial state *}
   "start_s \<equiv> \<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> a i . Map.empty), 
     suggestion = \<lambda> i . Map.empty, onebs = \<lambda> a . Map.empty,
-    inst_status = \<lambda> b . if b = 0 then Some Map.empty else None\<rparr>"
+    inst_status = \<lambda> b . if b = 0 then Some Map.empty else None,
+    log = \<lambda> a . Map.empty, lowest_inst = \<lambda> a . 0\<rparr>"
 
 definition start where "start \<equiv> {start_s}"
   
@@ -77,16 +82,19 @@ definition do_vote where
   "do_vote a i v s s' \<equiv> let b = ballot s a in
           vote s a i b = None
         \<and> suggestion s i b = Some v
-        \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(i := (vote s a i)(b := Some v)))\<rparr>"
+        \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(i := (vote s a i)(b := Some v))),
+            log := (log s)(a := (log s a)(i := Some v))\<rparr>"
 
 definition chosen where
   "chosen s i v \<equiv> ballot_array.chosen quorums (flip (vote s) i) v"
 
 definition learn where
-  "learn i v s s' \<equiv> chosen s i v \<and> s' = s"
+  "learn i vs s s' \<equiv> s' = s \<and> (\<forall> j < length vs . chosen s (i+j) (vs!(j+1)))"
   
 definition re_join where 
-  "re_join a s s' \<equiv> True"
+  "re_join a\<^sub>1 a\<^sub>2 s s' \<equiv> 
+    s' = s\<lparr>ballot := (ballot s)(a\<^sub>1 := ballot s a\<^sub>2),
+      lowest_inst := (lowest_inst s)(a\<^sub>1 := lowest_inst s a\<^sub>2)\<rparr>"
 
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
@@ -96,7 +104,7 @@ fun trans_rel where
     \<or> (\<exists> a i b v . suggest a i b v r r')
     \<or> (\<exists> a q . acquire_leadership a q r r')
     \<or> (\<exists> a b . join_started_ballot a b r r') )"
-| "trans_rel r (Learn i v) r' = learn i v r r'"
+| "trans_rel r (Learn i vs) r' = learn i vs r r'"
 
 lemma trans_cases:
   assumes "trans_rel r a r'"
