@@ -50,7 +50,6 @@ record 'v state =
 
   leader :: "bool"
   acceptors :: "acc list"
-  propCmds :: "'v cmd list"
 
   ballot :: "bal"
   firstUncommitted :: "inst"
@@ -135,18 +134,13 @@ definition nextBallot :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 
   -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
   where "nextBallot a b N \<equiv> generateBallot a (b + N) N"
 
-fun take_request :: "'v cmd list \<Rightarrow> 'v cmd option \<Rightarrow> ('v cmd \<times> 'v cmd list)" where
-  "take_request [] None = (NoOp, [])"
-  |"take_request (x#xs) None = (x, xs)"
-  |"take_request vs (Some v) = (v, vs)"
+fun take_request :: "'v cmd option \<Rightarrow> 'v cmd" where
+  "take_request None = NoOp"
+  |"take_request (Some v) = v"
 
-fun construct_msg :: "'v cmd list \<Rightarrow> 'v cmd option list \<Rightarrow> ('v cmd list \<times> 'v cmd list)" where
-  "construct_msg vs [] = ([], vs)"|
-  "construct_msg [] (x#xs) = (let (newvs, newvcs) = (take_request [] x) in
-    (newvs # (fst (construct_msg [] xs)), []))"|
-  "construct_msg as (x#xs) = (let (newvs, newvcs) = (take_request as x); 
-    (newvs1, newvcs1) = (construct_msg newvcs xs)
-    in (newvs#newvs1, newvcs1))"
+fun construct_msg :: "'v cmd option list \<Rightarrow> 'v cmd list" where
+  "construct_msg [] = []"|
+  "construct_msg (x#xs) = ((take_request x) # (construct_msg xs))"
 
 definition emptyOBS :: "inst \<Rightarrow>f (acc \<times> bal \<times> ('v cmd option)) list" where "emptyOBS = (K$ [])"
 definition emptyInstances :: "inst \<Rightarrow>f 'v consensus" where "emptyInstances = (K$ \<lparr>ins = 0, view = 0, accepts = [], status = 0, val = None\<rparr>)"
@@ -188,7 +182,6 @@ definition init_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v state" where
     id = a,
     leader = False,
     acceptors = accs n,
-    propCmds = [],
 
     ballot = 0,
     firstUncommitted = 1,
@@ -200,11 +193,6 @@ definition init_state :: "nat \<Rightarrow> acc \<Rightarrow> 'v state" where
    \<rparr>"
 
 subsection {* Functions that handle internal and external messages. *} 
-
-definition def_onRequest where
-  "def_onRequest v s \<equiv> (let pCmds = propCmds s; 
-    newCmds = (if List.member pCmds v then pCmds else (pCmds @ [v])) in
-      s\<lparr>propCmds := newCmds\<rparr>)"
 
 definition def_send1a :: "'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
   -- {* a tries to become the leader *}
@@ -294,11 +282,10 @@ definition def_receive1b :: "('v consensus list) \<Rightarrow> bal \<Rightarrow>
               startI = (firstUncommitted s);
               insts = [startI..<max_i+1];
               highestVoted = highest_voted onebs_bal;
-              pCmds = (propCmds s2);
               cmdOptions = map (\<lambda> i . highestVoted i) insts;
-              (newCmds, newPCmds) = construct_msg pCmds cmdOptions;
+              newCmds = construct_msg cmdOptions;
               msgs = map (\<lambda>i. Phase2a i bal (newCmds!(i-startI))) insts;
-              s3 = fold (\<lambda> i s . s\<lparr>propCmds := newPCmds, instances := (instances s)(i $:= (instances s $ i)\<lparr>ins := i, view := bal, 
+              s3 = fold (\<lambda> i s . s\<lparr>instances := (instances s)(i $:= (instances s $ i)\<lparr>ins := i, view := bal, 
                 accepts := [a], status := 1, val := Some (newCmds!(i-startI))\<rparr>)\<rparr>) insts s2;
               pckts = map (\<lambda> m . send_all a m s3) msgs
             in (s3, fold (op @) pckts []))
@@ -419,7 +406,7 @@ definition processExternalEvent where
       | (Phase2b i b cm) \<Rightarrow> def_receive2b i b sender cm s
       | (Fwd v) \<Rightarrow> def_receiveFwd v s)"
 
-export_code def_learn def_onRequest def_send1a def_propose init_state def_getBallot def_isLeader def_getLeader def_getNextInstance 
+export_code def_learn def_send1a def_propose init_state def_getBallot def_isLeader def_getLeader def_getNextInstance 
   def_getFirstUncommitted def_getRequest def_leaderOfBal def_isDecided def_getStatus processExternalEvent
     finfun_deserialize def_getView def_getAccepts def_getStatus def_getValue def_getInstances def_getInsts
       def_setView def_setAccepts def_setStatus def_setValue emptyOBS emptyInstances addInstance 
