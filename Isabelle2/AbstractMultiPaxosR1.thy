@@ -7,11 +7,12 @@ record ('v,'a) ampr1_state =
   ballot :: "'a \<Rightarrow> bal"
   vote :: "'a \<Rightarrow> inst \<Rightarrow> bal \<rightharpoonup> 'v"
   suggestion :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
+    -- {* @{term suggestion} is part of the local state of leaders. *}
   twoas :: "inst \<Rightarrow> bal \<rightharpoonup> 'v"
   -- {* suggestion is forgotten upon a crash, but the twoa messages stay in the network. *}
   onebs :: "'a \<Rightarrow> bal \<rightharpoonup> (inst \<Rightarrow> ('v\<times>bal) set)"
   inst_status :: "bal \<rightharpoonup> inst \<rightharpoonup> 'v"
-  -- {* if @{term "inst_status s b = Some m"}, them @{term "m i = None"} means that 
+  -- {* @{term inst_status} is set upon acquiring leadership; if @{term "inst_status s b = Some m"}, them @{term "m i = None"} means that 
   all values are safe, and @{term "m i = Some v"} means that only @{term v} is known safe. *}
   log :: "'a \<Rightarrow> inst \<Rightarrow> 'v option"
   -- {* The log is there to transfer it to replicas who need to catch up. *}
@@ -109,8 +110,8 @@ definition crash where
   
 definition recover where
   -- {* Download the log from a2. Models recovery after a crash; ballot is persistent.
-    We increment the ballot to make sure not to produce inconsistent suggestions if
-    the crashed acceptor was the leader. *}
+    We increment the ballot if we see we're the leader, to make sure not to produce inconsistent suggestions. 
+    TODO: maybe split in two: first set the ballot, then transfer. *}
   "recover a1 a2 i vs s s' \<equiv> 
     crashed s a1 = True
     \<and> (\<forall> j . i \<le> j \<and> j < i+(length vs) \<longrightarrow> log s a2 j = Some (vs!(j-i+1)))
@@ -118,7 +119,7 @@ definition recover where
         if leader b = a1 then Suc b else b)),
       log := (log s)(a1 := (log s a2)),
       crashed := (crashed s)(a1 := False)\<rparr>"
-
+  
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
 | "trans_rel r Internal r' = (
@@ -130,7 +131,7 @@ fun trans_rel where
     \<or> (\<exists> a . crash a r r') )"
   | "trans_rel r (Learn a i vs) r' = (
     (\<exists> v . learn a i v r r' \<and> vs = [v])
-    \<or> (\<exists> a\<^sub>1 a\<^sub>2 . recover a\<^sub>1 a\<^sub>2 i vs r r') )"
+    (* \<or> (\<exists> a\<^sub>1 a\<^sub>2 . recover a\<^sub>1 a\<^sub>2 i vs r r') *) )"
 
 lemma trans_cases:
   assumes "trans_rel r a r'"
@@ -142,7 +143,7 @@ lemma trans_cases:
 | (suggest) a i b v where "suggest a i b v r r'"
 | (acquire) a q where "acquire_leadership a q r r'"
 | (join_started) a b where "join_started_ballot a b r r'"
-| (recover) a\<^sub>1 a\<^sub>2 i vs where "recover a\<^sub>1 a\<^sub>2 i vs r r'"
+(* | (recover) a\<^sub>1 a\<^sub>2 i vs where "recover a\<^sub>1 a\<^sub>2 i vs r r'" *)
 | (crash) a where "crash a r r'"
   using assms apply induct apply simp
   by (metis ampr1_ioa.trans_rel.simps(1) ampr1_ioa.trans_rel.simps(3) paxos_action.exhaust trans_rel.simps(2)) 

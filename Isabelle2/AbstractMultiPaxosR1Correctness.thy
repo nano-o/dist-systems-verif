@@ -149,15 +149,12 @@ definition inv4 where inv4_def[inv_defs]:"inv4 s \<equiv> \<forall> i b .
   | None \<Rightarrow> True"
   
 lemma inv4:"invariant the_ioa inv4"
-  apply (simp_inv invs:inv10; (simp add:ioa_defs inv_defs; case_tac s; case_tac t; clarify; simp split:option.splits))
-      apply (metis option.collapse option.distinct(1))
-     apply (metis option.collapse option.distinct(1)) 
-        apply (metis option.collapse option.distinct(1))
-       apply (metis option.collapse option.distinct(1))
-  using not_None_eq apply fastforce 
-     apply auto[1]
-       apply (metis option.distinct(1))
-      apply (metis option.distinct(1))
+  apply (simp_inv invs:inv10; 
+      (case_tac s; case_tac t; auto simp add:ioa_defs inv_defs split!:option.splits))
+            apply ((metis option.distinct(1))+)[6]
+      apply (metis fun_upd_triv map_upd_eqD1 option.distinct(1))
+     apply fastforce+
+  done
 
 definition inst_status_inv where inst_status_inv_def[inv_defs]:
   "inst_status_inv s \<equiv> (\<forall> b . case inst_status s b of Some f \<Rightarrow> 
@@ -217,7 +214,7 @@ lemma the_inv:"invariant the_ioa the_inv"
   subgoal premises prems for s t _ a i v (* do_vote *)
   proof (auto simp add:the_inv_def)
     note mono = \<open>(\<And>i v b. safe_at s i v b \<Longrightarrow> safe_at t i v b)\<close>
-    have 1:"\<And> i b v . suggestion s i b = Some v \<Longrightarrow> safe_at s i v b" using \<open>the_inv s\<close> \<open>inv4 s\<close>
+    have 1:"\<And> i b v . twoas s i b = Some v \<Longrightarrow> safe_at s i v b" using \<open>the_inv s\<close> \<open>inv4 s\<close>
       by (fastforce simp add:safe_def inv_defs split:option.splits)
     show "safe t" using \<open>the_inv s\<close> mono \<open>do_vote a i v s t \<close> 1
       by (auto simp add:safe_def inv_defs split:option.splits)
@@ -341,8 +338,8 @@ definition inv8 where inv8_def[inv_defs]:
   "inv8 s \<equiv> \<forall> i . ballot_array.well_formed (ballot s) (flip (vote s) i)"
 
 lemma inv8:"invariant the_ioa inv8"
-  by (simp_inv inv_defs:inv_defs ballot_array.well_formed_def)
-
+  by (force_inv inv_defs:inv_defs ballot_array.well_formed_def)
+                               
 lemma chosen_mono:
   -- {* @{term safe_at} is monotonic. A key lemma to simplify invariant proofs. *}
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "reachable the_ioa s" and "chosen s i v"
@@ -365,9 +362,8 @@ definition inv9 where inv9_def[inv_defs]:
   "inv9 s \<equiv> \<forall> a i v . log s a i = Some v \<longrightarrow> chosen s i v"
   
 lemma inv9:"invariant the_ioa inv9"
-  apply ( (inv_cases_2, simp add:ioa_defs inv_defs); 
-      (trans_case \<open>insert_chosen_mono\<close> invs:; simp add:inv_defs  split:option.splits)? )
-  by (metis option.sel)
+  by ( (inv_cases_2, simp add:ioa_defs inv_defs); 
+      (trans_case \<open>insert_chosen_mono\<close> invs:; auto simp add:inv_defs  split:option.splits)? )
 
 context begin
 -- {* Is this stuff needed? *}
