@@ -365,19 +365,6 @@ lemma inv9:"invariant the_ioa inv9"
   by ( (inv_cases_2, simp add:ioa_defs inv_defs); 
       (trans_case \<open>insert_chosen_mono\<close> invs:; auto simp add:inv_defs  split:option.splits)? )
 
-context begin
--- {* Is this stuff needed? *}
-
-private
-definition inv6 where
-  inv6_def[inv_defs]:"inv6 s \<equiv> \<forall> i a b . ballot s a < b \<longrightarrow> flip (vote s) i a b = None"
-  
-private
-lemma  inv6:"invariant the_ioa inv6"
-by (force_inv)
-
-end
-
 end
 
 end

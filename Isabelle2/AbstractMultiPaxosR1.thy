@@ -2,6 +2,15 @@ theory AbstractMultiPaxosR1
 imports  IOA BallotArrays DistributedSafeAt Paxos_Sig
 begin
 
+text {* About recovery.
+  Assume that pipelinening is limited to a window of n: a leader waits for a quorum 
+  to know the decision of instance m-n before starting instance m.
+  For an acceptor to recover, contact a quorum a select the highest ballot bmax among its members.
+  Then ask the leader of bmax what is the highest completed instance j it knows about.
+  Mark all instances after j+n as safe to participate in.
+  Also, when a leader acquires leadership, it can broadcast its highest completed instance.
+  *}
+
 record ('v,'a) ampr1_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
@@ -15,7 +24,7 @@ record ('v,'a) ampr1_state =
   -- {* @{term inst_status} is set upon acquiring leadership; if @{term "inst_status s b = Some m"}, them @{term "m i = None"} means that 
   all values are safe, and @{term "m i = Some v"} means that only @{term v} is known safe. *}
   log :: "'a \<Rightarrow> inst \<Rightarrow> 'v option"
-  -- {* The log is there to transfer it to replicas who need to catch up. *}
+  -- {* The log is there to transfer it to replicas which need to catch up. *}
   crashed :: "'a \<Rightarrow> bool"
 
 locale ampr1_ioa =
@@ -100,8 +109,8 @@ definition chosen where
 definition learn where
   "learn a i v s s' \<equiv>
     crashed s a = False
-    \<and> s' = s\<lparr>log := (log s)(a := (log s a)(i := Some v))\<rparr>
-    \<and> chosen s i v"
+    \<and> chosen s i v
+    \<and> s' = s\<lparr>log := (log s)(a := (log s a)(i := Some v))\<rparr>"
   
 definition crash where
   "crash a s s' \<equiv> \<exists> su . 
