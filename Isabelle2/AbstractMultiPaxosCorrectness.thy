@@ -4,25 +4,6 @@ theory AbstractMultiPaxosCorrectness
 imports AbstractMultiPaxos IOA_Automation BallotArrayProperties 
 begin
 
-consts xx :: "'a"
-consts P :: "'a \<Rightarrow> bool"
-consts Q :: "'a \<Rightarrow> bool"
-
-experiment begin 
-
-declare [[show_types]] and [[show_consts]]
-
-lemma -- {* The example in the Eisbach manual. *}
-  assumes asms: "\<And>x :: 'a . A x"
-  shows "A y"
-  by (match asms in H:"\<And>z :: 'b . P z" for P \<Rightarrow> 
-      \<open>match (y) in "y::'b" for y \<Rightarrow> \<open>rule H[where z=y]\<close> \<close>)
-  
-lemma "\<lbrakk>P xx; Q xx\<rbrakk> \<Longrightarrow> True"
-  apply (match premises in A:"P ?xx" and B:"Q ?xx" \<Rightarrow> \<open>-\<close> ) oops
-  
-end
-
 locale amp_proof = quorums quorums + amp_ioa quorums for quorums +
   fixes the_ioa
   defines "the_ioa \<equiv> amp_ioa"

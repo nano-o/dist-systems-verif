@@ -37,7 +37,6 @@ datatype ('aa,'vv) msg =
   | Phase2a inst bal 'vv
   | Phase2b 'aa inst bal 'vv
   | Fwd 'vv
-  (* | Decision inst 'v *)
   
 datatype ('aa,'vv) packet =
   Packet 'aa  "('aa,'vv) msg"
@@ -212,13 +211,6 @@ definition new_status where "new_status \<equiv>
   
 definition to_propose where "to_propose \<equiv>
   (\<lambda> (d,s) . case d of Some _ \<Rightarrow> {} | None \<Rightarrow> fst ` s) o$ ($ decision, max_per_inst $)"
-
-  (*
-definition msgs_2 where "msgs_2 \<equiv> let
-    is = ((\<lambda> s . case s of Decided _ \<Rightarrow> False | _ \<Rightarrow> True) o$ decision);
-    to_propose = my_comp (\<lambda> i (b,m) . if m = {} \<or> \<not> b then {} else ((case_prod (flip (Phase2a i))) ` m))
-      ($is, max_per_inst$)
-    in \<Union> {the (to_propose $ i) | i . i \<in> set (finfun_to_list to_propose)}" *)
   
 definition msgs where "msgs \<equiv>
   let 

@@ -34,8 +34,6 @@ global_interpretation my_amp_r3:amp_r3 leader next_bal accs qs
 
 subsection {* Code generation *}
 
-export_code propose in Scala
-
 export_code local_start propose try_acquire_leadership process_msg checking Scala
 
 end
