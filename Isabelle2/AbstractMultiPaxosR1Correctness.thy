@@ -62,12 +62,10 @@ subsection {* Invariants *}
 
 definition inv10 where inv10_def[inv_defs]:
   "inv10 s \<equiv> \<forall> i b v . (suggestion s i b = Some v \<longrightarrow> twoas s i b = Some v)"
-
+  
 lemma inv10: "invariant the_ioa inv10"
-  apply (simp_inv invs:)
-   apply (case_tac s; case_tac t; simp add:inv_defs split:option.splits)
-  apply (metis fun_upd_apply)
-  apply (case_tac s; case_tac t; simp add:inv_defs split:option.splits)
+  apply (simp_inv invs:; (case_tac s; case_tac t; auto simp add:inv_defs split!:option.splits))
+   apply (metis fun_upd_apply)
   by (metis option.distinct(1))
 
 definition inv11 where inv11_def[inv_defs]:
@@ -75,10 +73,15 @@ definition inv11 where inv11_def[inv_defs]:
       \<longrightarrow> (crashed s (leader b) \<or> ballot s (leader b) > b)"
 lemma inv11: "invariant the_ioa inv11"
   apply (simp_inv invs:inv10)
-      apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)
-  apply (meson dual_order.strict_trans1 less_imp_le_nat)
-     apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)
-  oops
+      apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)[1]
+  using dual_order.strict_trans1 less_imp_le_nat apply blast
+  defer
+     apply (case_tac s; case_tac t; auto simp add:inv_defs next_avail_def split:option.splits)[1]
+  using dual_order.strict_trans1 less_imp_le_nat apply blast
+  defer
+    apply (case_tac s; case_tac t; auto simp add:inv_defs next_avail_def split:option.splits)[1]
+  apply metis
+  sorry
   
 definition inv3 where inv3_def[inv_defs]:
   -- {* acceptors only vote for the suggestion. *}
@@ -90,13 +93,18 @@ context begin
 private definition inv1 where inv1_def[inv_defs]:
   "inv1 s \<equiv> \<forall> b . inst_status s b \<noteq> None \<longrightarrow> ballot s (leader b) \<ge> b"
   
-private lemma inv1: "invariant the_ioa inv1" by (force_inv)
+private lemma inv1: "invariant the_ioa inv1" apply (simp_inv)
+      apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)[1]
+      apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)[1] defer
+   apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)[1] 
+   apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)[1]
+    
 
 private definition inv2 where inv2_def[inv_defs]:
   "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> inst_status s b = None))
     \<longrightarrow> (twoas s i b = None \<and> suggestion s i b = None)"
 
-private lemma inv2: "invariant the_ioa inv2"
+private lemma inv2: "invariant the_ioa inv2" oops
   apply (simp_inv invs:inv1)
    apply (simp add: inv_defs; case_tac s; case_tac t; force split:option.splits)
   apply (simp add: inv_defs; case_tac s; case_tac t; simp) apply (metis fun_upd_apply)

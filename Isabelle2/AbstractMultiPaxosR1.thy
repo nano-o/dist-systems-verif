@@ -110,7 +110,7 @@ definition suggest where "suggest a i b v s s' \<equiv>
   \<and> v \<in> propCmd s
   \<and> ballot s a = b
   \<and> i \<ge> next_avail s a
-  \<and> i < next_avail s a + window
+  \<and> (\<forall> j \<le> i-window . \<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None)
   \<and> suggestion s i b = None
   \<and> (case inst_status s b of Some f \<Rightarrow> f i = None | _ \<Rightarrow> False)
   \<and> s' = s\<lparr>suggestion := (suggestion s)(i := (suggestion s i)(b \<mapsto> v)),
@@ -144,10 +144,10 @@ definition recover where
   "recover a s s' \<equiv> 
     crashed s a = True
     \<and> (\<exists> q \<in> quorums . let m = Max {ballot s a | a . a \<in> q} in
-      True
-      \<and> s' = s\<lparr>ballot := (ballot s)(a := m),
-          crashed := (crashed s)(a := False),
-          lowest := (lowest s)(a := next_avail s (leader m) + window)\<rparr> )"
+          leader m \<noteq> a (* TODO: select another ballot if needed. *) 
+          \<and> s' = s\<lparr>ballot := (ballot s)(a := m),
+            crashed := (crashed s)(a := False),
+            lowest := (lowest s)(a := next_avail s (leader m) + window)\<rparr> )"
   
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
