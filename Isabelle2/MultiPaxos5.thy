@@ -31,7 +31,7 @@ end
 
 subsection {* Actions, messages, and state. *}
 
-datatype 'v cmd = Cmd (the_val: 'v) | NoOp
+datatype 'v cmd = Comd (the_val: 'v) | NoOp
 
 type_synonym bal = nat
 type_synonym inst = nat
@@ -134,13 +134,10 @@ definition nextBallot :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 
   -- {* The smallest ballot belonging to replica a and greater than ballot b, when there are N replicas *}
   where "nextBallot a b N \<equiv> generateBallot a (b + N) N"
 
-fun take_request :: "'v cmd option \<Rightarrow> 'v cmd" where
-  "take_request None = NoOp"
-  |"take_request (Some v) = v"
-
 fun construct_msg :: "'v cmd option list \<Rightarrow> 'v cmd list" where
   "construct_msg [] = []"|
-  "construct_msg (x#xs) = ((take_request x) # (construct_msg xs))"
+  "construct_msg (None # xs) = (NoOp # (construct_msg xs))"|
+  "construct_msg ((Some x) # xs) = (x # (construct_msg xs))"
 
 definition emptyOBS :: "inst \<Rightarrow>f (acc \<times> bal \<times> ('v cmd option)) list" where "emptyOBS = (K$ [])"
 definition emptyInstances :: "inst \<Rightarrow>f 'v consensus" where "emptyInstances = (K$ \<lparr>ins = 0, view = 0, accepts = [], status = 0, val = None\<rparr>)"
@@ -206,7 +203,7 @@ definition def_send1a :: "'v state \<Rightarrow> ('v state \<times> 'v packet li
 definition def_receive1a :: "acc \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
   "def_receive1a l b i s \<equiv>
     (let bal = ballot s in
-      (if (bal < b)
+      (if (bal \<le> b)
        then
           (let a = id s;
             insts = finfun_serialize (finfun_filt_l (instances s) i);
@@ -242,13 +239,14 @@ definition update_instance:: "'v state \<Rightarrow> acc \<Rightarrow> ('v conse
       newInsts = (\<lambda> (newc, c). (update_consensus newc c (def_replicaCount s)));
       pair_insts = ($ lastvs, (instances s) $);
       new_instances = newInsts o$ pair_insts;
-      newUndecided = (filter (\<lambda>i. status (new_instances $ i) < 2) (finfun_to_list new_instances)) ! 0;
+      instance_list = finfun_to_list new_instances;
+      undecided = (if (instance_list = []) then 0 else (filter (\<lambda>i. status (new_instances $ i) < 2) instance_list) ! 0);
       fUncommitted = (firstUncommitted s);
       combiner = \<lambda> (xs, c) . (let vs = (view c, val c) in if (List.member xs (a, vs)) then xs else ((a, vs) # xs));
       pair_map = ($ (onebs s), lastvs $);
       new_onebs = combiner o$ pair_map
     in s\<lparr>instances := new_instances, onebs := new_onebs, 
-      firstUncommitted := (if (newUndecided < fUncommitted) then fUncommitted else newUndecided)\<rparr>"
+      firstUncommitted := (if (undecided < fUncommitted) then fUncommitted else undecided)\<rparr>"
 
 definition highest_voted where
   -- {* Makes sense only if no list in the map is empty. *}
@@ -308,13 +306,13 @@ definition def_send2a where
 definition def_propose :: "'v \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
   -- {* If leader, then go ahead with 2a, otherwise forward to the leader. *}
   "def_propose v s \<equiv> (let a = id s in 
-    if (leader s) then (def_send2a (next_inst s) (Cmd v) s)
+    if (leader s) then (def_send2a (next_inst s) (Comd v) s)
     else (s, [Packet a (def_leaderOfBal (ballot s) (def_replicaCount s)) (Fwd v)]))"
  
 (* What if the target process is not the leader anymore? TODO: Then let's forward it again. *)
 definition def_receiveFwd :: "'v \<Rightarrow> 'v state \<Rightarrow> ('v state \<times> 'v packet list)" where
   "def_receiveFwd v s \<equiv> (let a = id s in
-    (if (def_leaderOfBal (ballot s) (def_replicaCount s) = a \<and> leader s) then def_send2a (next_inst s) (Cmd v) s
+    (if (def_leaderOfBal (ballot s) (def_replicaCount s) = a \<and> leader s) then def_send2a (next_inst s) (Comd v) s
     else (s, [])))"
 
 definition def_receive2_first  :: "inst \<Rightarrow> bal \<Rightarrow> 'v cmd \<Rightarrow> acc \<Rightarrow> 'v state \<Rightarrow> 'v state" where
@@ -366,7 +364,7 @@ definition def_learn :: "inst \<Rightarrow> 'v  \<Rightarrow> 'v state \<Rightar
   "def_learn i v s \<equiv> 
     case (def_getRequest i s) of None \<Rightarrow> None |
       Some cm \<Rightarrow> (case cm of NoOp \<Rightarrow> None 
-        | Cmd c \<Rightarrow> (if v = c then Some (s, []) else None))"
+        | Comd c \<Rightarrow> (if v = c then Some (s, []) else None))"
 
 subsection {* Code generation *}
 
