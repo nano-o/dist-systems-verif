@@ -133,7 +133,7 @@ definition safe_at where "safe_at s i \<equiv> dsa.safe_at (ballot s) (flip (vot
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic. A key lemma to simplify invariant proofs. *}
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "safe_at s i v b"
-  shows "safe_at t i v b"
+  shows "safe_at t i v b" oops
 proof -
   have "is_prefix (ballot s) (ballot t) (flip (vote s) i) (flip (vote t) i)" using \<open>s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t\<close>
     by (simp add:inv_defs ioa_defs; induct_tac rule:trans_cases, auto simp add:is_prefix_def inv_defs split:option.split_asm)
@@ -156,7 +156,7 @@ definition inv4 where inv4_def[inv_defs]:"inv4 s \<equiv> \<forall> i b .
     | None \<Rightarrow> False)
   | None \<Rightarrow> True"
   
-lemma inv4:"invariant the_ioa inv4"
+lemma inv4:"invariant the_ioa inv4" oops
   apply (simp_inv invs:inv10; 
       (case_tac s; case_tac t; auto simp add:ioa_defs inv_defs split!:option.splits))
             apply ((metis option.distinct(1))+)[6]

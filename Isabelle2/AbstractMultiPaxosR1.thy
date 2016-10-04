@@ -70,6 +70,8 @@ definition join_ballot where
       \<and> s' = s\<lparr>ballot := (ballot s)(a := b),
         onebs := (onebs s)(a := (onebs s a)(b \<mapsto> (lowest s a, i_info)))\<rparr>"
   
+text {* TODO: why that? It's subsumed by @{term join_ballot}. *}
+
 definition join_started_ballot where "join_started_ballot a b s s' \<equiv>
   crashed s a = False
   \<and> inst_status s b \<noteq> None (* this means the ballot is started *)
