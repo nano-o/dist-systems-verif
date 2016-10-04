@@ -226,11 +226,11 @@ end
 
 subsection {* Monotonicity *}
 
-text {* We define a prefix relation on ballot arrays and show that a value safe b remains 
-  safe at be when the ballot array grows *}
+text {* We define a prefix relation on ballot arrays and show that a value safe at b remains 
+  safe at b when the ballot array grows *}
 
 definition is_prefix where
-  "is_prefix b1 b2 v1 v2 \<equiv> \<forall> a . b1 a \<le> b2 a 
+  "is_prefix b1 b2 v1 v2 \<equiv> \<forall> a . b1 a \<le> b2 a
     \<and> (\<forall> b . (b < b1 a \<or> (b = b1 a \<and> v1 a b \<noteq> None)) \<longrightarrow> v1 a b = v2 a b)"
 
 locale ballot_array_prefix = quorums quorums for  quorums :: "'a set set" +
@@ -296,5 +296,79 @@ nitpick[verbose, card 'v = 2, card 'a = 2, verbose,  card nat = 2, card "'v opti
 oops
 
 end
+
+text {* A new prefix definition that accounts for acceptors crashing and loosing their state. *}
+
+definition is_prefix_2 where
+  "is_prefix_2 qs b1 b2 v1 v2 \<equiv> \<forall> a . 
+    ((b1 a \<le> b2 a) \<and> (\<forall> b . (b < b1 a \<or> (b = b1 a \<and> v1 a b \<noteq> None)) \<longrightarrow> v1 a b = v2 a b))
+    \<or> ((\<exists> q \<in> qs . \<forall> a2 \<in> q . b1 a2 \<le> b2 a) \<and> (\<forall> b . v2 a b = None))"
+  
+locale ballot_array_prefix_2 = quorums quorums for  quorums :: "'a set set" +
+  -- {* @{typ 'a} is the type of acceptors *}
+  fixes ballot1 :: "'a \<Rightarrow> nat"
+    and vote1 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+    and ballot2 :: "'a \<Rightarrow> nat"
+    and vote2 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  assumes "is_prefix_2 quorums ballot1 ballot2 vote1 vote2"
+begin
+
+interpretation ba_1:ballot_array quorums ballot1 vote1 
+using quorums_axioms by (unfold_locales)
+interpretation ba_2:ballot_array quorums ballot2 vote2
+using quorums_axioms by (unfold_locales)
+
+lemma choosable_decreases:
+  assumes "ba_2.choosable v b" and "\<exists> q \<in> quorums . ba_1.joined b q"
+  shows "ba_1.choosable v b"
+  using assms ballot_array_prefix_2_axioms
+  nitpick[card 'v = 2, card 'a = 3, verbose, card nat = 2, card "'v option" = 3, card "nat option" = 3, expect=none]
+  apply (auto simp add:ballot_array_prefix_2_axioms_def ballot_array_prefix_2_def is_prefix_2_def
+      ba_2.choosable_def ba_1.choosable_def ba_1.joined_def quorums_def)
+proof -
+  fix q :: "'a set" and qa :: "'a set" and x :: "'a set"
+  assume a1: "qa \<in> quorums"
+  assume a2: "\<forall>q. q \<in> quorums \<longrightarrow> (\<exists>a\<in>q. b < ballot1 a \<and> vote1 a b \<noteq> Some v)"
+  assume a3: "\<forall>a. ballot1 a \<le> ballot2 a \<and> (\<forall>b. (b < ballot1 a \<longrightarrow> vote1 a b = vote2 a b) \<and> (b = ballot1 a \<and> (\<exists>y. vote1 a b = Some y) \<longrightarrow> vote1 a (ballot1 a) = vote2 a (ballot1 a))) \<or> (\<exists>q\<in>quorums. \<forall>a2\<in>q. ballot1 a2 \<le> ballot2 a) \<and> (\<forall>b. vote2 a b = None)"
+  assume a4: "\<forall>a\<in>qa. b < ballot2 a \<longrightarrow> vote2 a b = Some v"
+  obtain aa :: "'a set \<Rightarrow> 'a" where
+    f5: "\<forall>A. A \<notin> quorums \<or> aa A \<in> A \<and> b < ballot1 (aa A) \<and> vote1 (aa A) b \<noteq> Some v"
+    using a2 by moura
+  then have f6: "aa qa \<in> qa \<and> b < ballot1 (aa qa) \<and> vote1 (aa qa) b \<noteq> Some v"
+    using a1 by metis
+  have "\<forall>a. ballot1 a \<le> ballot2 a \<and> (\<forall>n. (\<not> n < ballot1 a \<or> vote1 a n = vote2 a n) \<and> ((n \<noteq> ballot1 a \<or> (\<forall>v. vote1 a n \<noteq> Some v)) \<or> vote1 a (ballot1 a) = vote2 a (ballot1 a))) \<or> (\<exists>A. A \<in> quorums \<and> (\<forall>aa. aa \<notin> A \<or> ballot1 aa \<le> ballot2 a)) \<and> (\<forall>n. vote2 a n = None)"
+    using a3 by metis
+  then obtain AA :: "'a \<Rightarrow> 'a set" where
+    "\<forall>a. ballot1 a \<le> ballot2 a \<and> (\<forall>n. (\<not> n < ballot1 a \<or> vote1 a n = vote2 a n) \<and> (n \<noteq> ballot1 a \<or> (\<forall>v. vote1 a n \<noteq> Some v) \<or> vote1 a (ballot1 a) = vote2 a (ballot1 a))) \<or> AA a \<in> quorums \<and> (\<forall>aa. aa \<notin> AA a \<or> ballot1 aa \<le> ballot2 a) \<and> (\<forall>n. vote2 a n = None)"
+    by moura
+  then show False
+    using f6 f5 a4 by (metis dual_order.strict_trans1 option.simps(3))
+qed     
+
+lemma safe_at_mono:
+  assumes "ba_1.safe_at v b" and "\<exists> q \<in> quorums . ba_1.joined b q"
+  shows "ba_2.safe_at v b" 
+  using assms choosable_decreases 
+  unfolding ba_1.safe_at_def ba_2.safe_at_def ba_1.joined_def
+proof -
+  assume a1: "\<exists>q\<in>quorums. \<forall>a\<in>q. b \<le> ballot1 a"
+  assume a2: "\<forall>b2 v2. b2 < b \<and> ba_1.choosable v2 b2 \<longrightarrow> v = v2"
+  assume a3: "\<And>v b. \<lbrakk>ba_2.choosable v b; \<exists>q\<in>quorums. \<forall>a\<in>q. b \<le> ballot1 a\<rbrakk> \<Longrightarrow> ba_1.choosable v b"
+  { fix nn :: nat and vv :: 'v
+    have "\<forall>A n. \<exists>a. \<forall>v va. (A \<notin> quorums \<or> \<not> ba_2.choosable v n \<or> a \<in> A \<or> ba_1.choosable v n) \<and> (A \<notin> quorums \<or> \<not> n \<le> ballot1 a \<or> \<not> ba_2.choosable va n \<or> ba_1.choosable va n)"
+      using a3 by metis
+    then have "\<not> nn < b \<or> vv = v \<or> \<not> ba_2.choosable vv nn"
+      using a2 a1 by (metis dual_order.trans nat_less_le) }
+  then show "\<forall>n va. n < b \<and> ba_2.choosable va n \<longrightarrow> v = va"
+    by metis
+qed
+
+lemma safe_votes:
+  assumes ba_1.safe and "\<And> b a v . \<lbrakk>vote1 a b \<noteq> vote2 a b; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b"
+  shows ba_2.safe
+nitpick[card 'v = 2, card 'a = 3, verbose, card nat = 2, card "'v option" = 3, card "nat option" = 3, expect=none]
+oops
+    
+end 
 
 end
