@@ -1,5 +1,9 @@
 ----------------------- MODULE MultiPaxosWithRecovery -----------------------
 
+(***************************************************************************)
+(* Problem: this is already beyond what TLC can check...                   *)
+(***************************************************************************)
+
 EXTENDS Integers, FiniteSets
 
 CONSTANT Value, Acceptor, Quorum, Window
@@ -44,6 +48,8 @@ None == CHOOSE v : v \notin Value
             /\ \A b \in Ballot : 
                 \/ onebs[a][b] = <<>> 
                 \/ \A i \in Instance : onebs[a][b][i] \in (Ballot \times Value) \cup {None}
+    
+    Choosable(b, i, v) == \E q \in Quorum : \A a \in q : ballot[a] > b => vote[a][b][i] = v
   
     ChosenIn(b, i, v) == \E q \in Quorum : \A a \in q : twobs[a][b][i] = v
     
@@ -80,6 +86,7 @@ None == CHOOSE v : v \notin Value
         (* We can be sure that instance MaxI(q)+Window+1 is the highest        *)
         (* possibly started instance.                                          *)
         (***********************************************************************)
+    
     
    }
        
@@ -168,8 +175,8 @@ None == CHOOSE v : v \notin Value
 **********)
 
 \* BEGIN TRANSLATION
-\* Label acc of process acc at line 143 col 9 changed to acc_
-\* Label vote of process acc at line 147 col 22 changed to vote_
+\* Label acc of process acc at line 150 col 9 changed to acc_
+\* Label vote of process acc at line 154 col 22 changed to vote_
 VARIABLES ballot, vote, onebs, twobs, suggestion, twoas, instStatus, log, 
           lowestAcc, lowestLeader, pc
 
@@ -181,6 +188,8 @@ TypeInvariant ==
         /\ \A b \in Ballot :
             \/ onebs[a][b] = <<>>
             \/ \A i \in Instance : onebs[a][b][i] \in (Ballot \times Value) \cup {None}
+
+Choosable(b, i, v) == \E q \in Quorum : \A a \in q : ballot[a] > b => vote[a][b][i] = v
 
 ChosenIn(b, i, v) == \E q \in Quorum : \A a \in q : twobs[a][b][i] = v
 
@@ -342,7 +351,12 @@ Spec == Init /\ [][Next]_vars
 
 \* END TRANSLATION
 
+Prop1 == [][\A b \in Ballot, i \in Instance, v \in Value : Choosable(b, i, v)' => Choosable(b, i, v)]_vars
+    (***********************************************************************)
+    (* This probably does not hold.                                        *)
+    (***********************************************************************)
+
 =============================================================================
 \* Modification History
-\* Last modified Tue Oct 04 15:14:08 EDT 2016 by nano
+\* Last modified Tue Oct 04 16:53:46 EDT 2016 by nano
 \* Created Mon Oct 03 11:25:27 EDT 2016 by nano
