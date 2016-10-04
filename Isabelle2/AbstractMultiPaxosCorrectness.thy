@@ -4,25 +4,6 @@ theory AbstractMultiPaxosCorrectness
 imports AbstractMultiPaxos IOA_Automation BallotArrayProperties 
 begin
 
-consts xx :: "'a"
-consts P :: "'a \<Rightarrow> bool"
-consts Q :: "'a \<Rightarrow> bool"
-
-experiment begin 
-
-declare [[show_types]] and [[show_consts]]
-
-lemma -- {* The example in the Eisbach manual. *}
-  assumes asms: "\<And>x :: 'a . A x"
-  shows "A y"
-  by (match asms in H:"\<And>z :: 'b . P z" for P \<Rightarrow> 
-      \<open>match (y) in "y::'b" for y \<Rightarrow> \<open>rule H[where z=y]\<close> \<close>)
-  
-lemma "\<lbrakk>P xx; Q xx\<rbrakk> \<Longrightarrow> True"
-  apply (match premises in A:"P ?xx" and B:"Q ?xx" \<Rightarrow> \<open>-\<close> ) oops
-  
-end
-
 locale amp_proof = quorums quorums + amp_ioa quorums for quorums +
   fixes the_ioa
   defines "the_ioa \<equiv> amp_ioa"
@@ -55,7 +36,7 @@ lemma conservative_inductive:
   "invariant the_ioa conservative_array"
   apply (try_solve_inv2 case_thm:trans_cases inv_proofs_defs:inv_proofs_defs ballot_array.conservative_def invs:invs)
   apply (case_tac a)
-  apply (auto simp add:inv_proofs_defs split:option.split_asm)
+    apply (auto simp add:inv_proofs_defs split:option.split_asm)
 done
 declare conservative_inductive[invs]
 
@@ -81,7 +62,7 @@ lemma safe_mono:
 by (metis ballot_array_prefix_axioms.intro ballot_array_prefix_def quorums_axioms trans_imp_prefix_order)
 
 abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
-  
+
 lemma safe_votes:
   assumes "s \<midarrow>aa\<midarrow>the_ioa\<longrightarrow> t" and "vote s i a b  \<noteq> vote t i a b" and "vote t i a b = Some v"
     and "conservative_array s" and "safe s"

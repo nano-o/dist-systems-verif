@@ -50,23 +50,23 @@ abbreviation chosen where
   "chosen s i v \<equiv> ballot_array.chosen quorums (vote s i) v"
 
 definition learn where
-  "learn i v s s' \<equiv> chosen s i v \<and> s = s'"
+  "learn i vs s s' \<equiv> (\<forall> v \<in> set vs . chosen s i v) \<and> s = s'"
 
 fun amp_trans_rel where
   "amp_trans_rel r (Propose c) r' = propose c r r'"
 | "amp_trans_rel r Internal r' = (
     (\<exists> a b . join_ballot a b r r')
     \<or> (\<exists> a q i v . do_vote a i q v r r'))"
-| "amp_trans_rel r (Learn i v) r' = learn i v r r'"
+| "amp_trans_rel r (Learn a i vs) r' = learn i vs r r'"
 
 lemma trans_cases: assumes "amp_trans_rel r a r'"
   obtains 
   (propose) c where "propose c r r'"
-| (learn) i v where "learn i v r r'"
+| (learn) i vs where "learn i vs r r'"
 | (join_ballot) a b where "join_ballot a b r r'"
 | (do_vote) a i q v where "do_vote a i q v r r'"
   using assms apply induct apply auto
-  by (meson amp_trans_rel.elims(2)) 
+  by (metis amp_trans_rel.elims(2))
 
 definition amp_trans where
   "amp_trans \<equiv> { (r,a,r') . amp_trans_rel r a r'}"
