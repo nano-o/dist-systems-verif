@@ -269,7 +269,6 @@ lemma chosen_mono:
   
 lemma safe_votes:
   assumes ba_1.safe and "\<And> b a v . \<lbrakk>vote1 a b \<noteq> vote2 a b; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b"
-  and "\<And> b a . b > ballot1 a \<Longrightarrow> vote1 a b = vote2 a b"
   shows ba_2.safe
 proof (auto simp add:ballot_array.safe_def split:option.splits)
   fix a b v
@@ -280,10 +279,7 @@ proof (auto simp add:ballot_array.safe_def split:option.splits)
     with assms(1) and safe_at_mono show ?thesis by (metis ba_1.safe_def option.simps(5))
   next
     case False
-    with ballot_array_prefix_axioms assms(3) have "vote1 a b = None"
-      apply (auto simp add:ballot_array_prefix_def ballot_array_prefix_axioms_def is_prefix_def)
-      by (metis \<open>vote2 a b = Some v\<close> antisym_conv3 assms(1) ba_1.safe_def case_optionE)
-    with assms(2) have "ba_1.safe_at v b" using \<open>vote2 a b = Some v\<close> by (metis option.distinct(1))
+    from assms(2) have "ba_1.safe_at v b" using False \<open>vote2 a b = Some v\<close> by auto
     thus ?thesis using safe_at_mono by blast
   qed
 qed
@@ -364,11 +360,33 @@ proof -
 qed
 
 lemma safe_votes:
-  assumes ba_1.safe and "\<And> b a v . \<lbrakk>vote1 a b \<noteq> vote2 a b; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b"
-  shows ba_2.safe
-nitpick[card 'v = 2, card 'a = 3, verbose, card nat = 2, card "'v option" = 3, card "nat option" = 3, expect=none]
-oops
+  assumes ba_1.safe and ba_1.leader_driven_array and ba_2.leader_driven_array
+    and "\<And> b a v . \<lbrakk>vote1 a b \<noteq> vote2 a b; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b \<and> ballot1 a = b"
+    and "\<And> a . ballot1 a = ballot2 a"
+  shows ba_2.safe 
+  nitpick[card 'v = 2, card 'a = 3, verbose, card nat = 2, card "'v option" = 3, card "nat option" = 3, expect=none]
+proof (auto simp add:ballot_array.safe_def split:option.splits)
+  fix a b v
+  assume 1:"vote2 a b = Some v"
+  show "ba_2.safe_at v b"
+  proof (cases "vote1 a b = Some v")
+    case True
+    with assms(1,2) and safe_at_mono show ?thesis 
+      apply (auto simp add:ba_1.safe_def ba_1.leader_driven_array_def
+          ba_2.leader_driven_array_def ba_1.safe_at_def ba_2.safe_at_def split:option.splits)
+      by (metis (full_types))
+  next
+    case False
+    have "ba_1.safe_at v b" using assms(4) 1 False by force
+    moreover obtain q where "q \<in> quorums" and "ba_1.joined b q" 
+    proof -
+      obtain q where "q \<in> quorums" and "ba_2.joined b q" using 1 assms(3) by (force simp add:ba_2.leader_driven_array_def)
+      thus ?thesis using that assms(5)  by (simp add:ba_2.joined_def ba_1.joined_def)
+    qed
+    ultimately show ?thesis using safe_at_mono by force
+  qed
+qed
     
-end 
+end
 
 end
