@@ -75,14 +75,14 @@ definition learn where
         \<and> s' = s\<lparr>log := (log s)(a := new_log)\<rparr>)"
 
 definition crash where
-  "crash a s s' \<equiv> \<exists> q \<in> quorums .
+  "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
     let b = Max {ballot s a | a . a \<in> q};
       low = Max {i . \<exists> a \<in> q . log s a i \<noteq> None} + window + 1
     in
       s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
         lowest := (lowest s)(a := low), 
         ghost_ballot := (ghost_ballot s)(a := 
-          (\<lambda> i . if i < low then ghost_ballot s a i else b))\<rparr>"
+          (\<lambda> i . if i < low then ghost_ballot s a i else b))\<rparr> )"
 
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
