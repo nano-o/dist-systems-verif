@@ -14,7 +14,7 @@ record ('v,'a) ampr_state =
   log :: "'a \<Rightarrow> inst \<Rightarrow> 'v option"
 
 locale ampr_ioa =
-  fixes quorums::"'a set set"
+  fixes quorums::"'a set set" and window :: "nat"
 begin
 
 definition start where
@@ -35,20 +35,28 @@ interpretation ba:ballot_array quorums ballot vote for ballot vote .
 
 abbreviation proved_safe_at where 
   -- {* v is proved safe in instance i at ballot b by quorum q *}
-  "proved_safe_at s i q b v \<equiv> 
-    ba.proved_safe_at_abs (ballot s) (flip (vote s) i) q b v"
+  "proved_safe_at s b i q v \<equiv> 
+    ba.proved_safe_at_abs (ballot s) (flip (vote s) i) q b v
+    \<and> (\<forall> a \<in> q . lowest s a \<ge> i)"
 
 abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (flip (vote s) i)"
+  
+definition windowed where "windowed s \<equiv>
+  \<forall> a b i j . vote s a b i \<noteq> None \<and> j < i - window
+    \<longrightarrow> (\<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None)"
+  -- {* New votes cannot be cast in instance i before instances lower than @{term "i-window"} 
+  have all been completed by a quorum of acceptors. *}
 
 definition do_vote where
   "do_vote a i q v s s' \<equiv> let b = ballot s a in
           v \<in> propCmd s
         \<and> i \<ge> lowest s a
         \<and> vote s a b i = None
-        \<and> proved_safe_at s i q b v
+        \<and> proved_safe_at s i b q v
         \<and> q \<in> quorums
         \<and> conservative_at s' i
+        \<and> windowed s'
         \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(b := (vote s a b)(i := Some v)))\<rparr>"
 
 abbreviation chosen where
@@ -60,11 +68,20 @@ definition learn where
         \<and> (\<forall> j \<in> {0..<i} \<union> {i+length vs..} . new_log j = log s a j)
         \<and> s' = s\<lparr>log := (log s)(a := new_log)\<rparr>)"
 
+definition crash where
+  "crash a s s' \<equiv> \<exists> q \<in> quorums .
+    let b = Max {ballot s a | a . a \<in> q};
+      low = Max {i . \<exists> a \<in> q . log s a i \<noteq> None}
+    in
+      s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
+        lowest := (lowest s)(a := low+window+1)\<rparr>"
+
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
 | "trans_rel r Internal r' = (
     (\<exists> a b . join_ballot a b r r')
-    \<or> (\<exists> a q i v . do_vote a i q v r r'))"
+    \<or> (\<exists> a q i v . do_vote a i q v r r') 
+    \<or> (\<exists> a . crash a r r') )"
 | "trans_rel r (Learn a i vs) r' = learn a i vs r r'"
 
 lemma trans_cases: assumes "trans_rel r a r'"
@@ -72,6 +89,7 @@ lemma trans_cases: assumes "trans_rel r a r'"
   (propose) c where "propose c r r'"
 | (learn) a i vs where "learn a i vs r r'"
 | (join_ballot) a b where "join_ballot a b r r'"
+| (crash) a where "crash a r r'"
 | (do_vote) a i q v where "do_vote a i q v r r'"
   using assms apply induct apply auto
   by (metis trans_rel.elims(2))
