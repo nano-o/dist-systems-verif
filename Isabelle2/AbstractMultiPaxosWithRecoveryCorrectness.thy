@@ -91,9 +91,16 @@ lemma conservative_inductive:
   "invariant the_ioa conservative_array"
   by (force_inv invs: inv_defs:ballot_array.conservative_array_def ballot_array.conservative_def)
 
+abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (ba_vote s i)"
+
 subsection {* @{term safe} is invariant } *}
 
 abbreviation safe_at where "safe_at s i \<equiv> ba.safe_at (ballot s) (ba_vote s i)"
+    
+lemma quorum_ballots_finite_ne:
+  assumes "q \<in> quorums"
+  shows "finite {ballot s a | a . a \<in> q}" and "{ballot s a | a . a \<in> q} \<noteq> {}"
+    using quorums_axioms assms by (auto simp add:quorums_def)
   
 lemma trans_imp_prefix_order:
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t"
@@ -115,11 +122,7 @@ lemma trans_imp_prefix_order:
         from prems \<open>a = acc\<close> obtain q b where "q \<in> quorums" and "b = Max {ballot s a | a . a \<in> q}"
             and "ballot t a = b" by (cases s, cases t, auto)
         moreover have "ballot s a \<le> Max {ballot s a | a . a \<in> q}" (is "ballot s a \<le> Max ?S") if "a \<in> q" for a
-        proof -
-          have "?S \<noteq> {}" and "finite ?S" using \<open>q \<in> quorums\<close> quorums_axioms
-            by (auto simp add:quorums_def)
-          thus ?thesis using that by (metis (mono_tags, lifting) Max.coboundedI mem_Collect_eq) 
-        qed
+          using quorum_ballots_finite_ne[of q s, OF \<open>q \<in> quorums\<close>] that by (metis (mono_tags, lifting) Max.coboundedI mem_Collect_eq)
         ultimately show ?thesis by auto
       qed
       note 1 2 }
@@ -135,12 +138,18 @@ lemma safe_mono:
 proof -
   have "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)" 
     using assms(1) trans_imp_prefix_order by auto
-  with ballot_array_prefix_2.safe_at_mono 
-    quorums_axioms assms(2-4) show ?thesis 
+  with ballot_array_prefix_2.safe_at_mono
+    quorums_axioms assms(2-4) show ?thesis
     by (auto simp add:ballot_array_prefix_2_def ballot_array_prefix_2_axioms_def, fast)
 qed
 
-abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (ba_vote s i)"
+definition inv1 where inv1_def[inv_defs]:
+  "inv1 s \<equiv> \<forall> a i . i \<ge> lowest s a \<longrightarrow> ghost_ballot s a i = ballot s a"
+
+lemma inv1: "invariant the_ioa inv1" by (force_inv)
+(* nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 2, card "'v option" = 3, card "nat option" = 3, expect=none] *)
+
+
 
 lemma safe_votes:
   assumes "s \<midarrow>aa\<midarrow>the_ioa\<longrightarrow> t" and "vote s i a b  \<noteq> vote t i a b" and "vote t i a b = Some v"
