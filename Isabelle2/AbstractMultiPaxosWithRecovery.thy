@@ -12,6 +12,7 @@ record ('v,'a) ampr_state =
   vote :: "'a \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v option"
   lowest :: "'a \<Rightarrow> inst"
   log :: "'a \<Rightarrow> inst \<Rightarrow> 'v option"
+  ghost_ballot :: "'a \<Rightarrow> inst \<Rightarrow> bal"
 
 locale ampr_ioa =
   fixes quorums::"'a set set" and window :: "nat"
@@ -20,7 +21,8 @@ begin
 definition start where
   -- {* The initial state *}
   "start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> a b i . None),
-  lowest = \<lambda> a . 0, log = \<lambda> a i . None\<rparr>}"
+    lowest = \<lambda> a . 0, log = \<lambda> a i . None, 
+    ghost_ballot = (\<lambda> a i . 0)\<rparr>}"
 
 subsection {* The transitions *}
 
@@ -29,7 +31,9 @@ definition propose where
 
 definition join_ballot where
   "join_ballot a b s s' \<equiv>
-    b > (ballot s a) \<and> s' = s\<lparr>ballot := (ballot s)(a := b)\<rparr>"
+    b > (ballot s a) \<and> s' = s\<lparr>ballot := (ballot s)(a := b), 
+      ghost_ballot := (ghost_ballot s)(a := 
+        (\<lambda> i . if i < lowest s a then ghost_ballot s a i else b))\<rparr>"
 
 interpretation ba:ballot_array quorums ballot vote for ballot vote .
 
@@ -73,10 +77,12 @@ definition learn where
 definition crash where
   "crash a s s' \<equiv> \<exists> q \<in> quorums .
     let b = Max {ballot s a | a . a \<in> q};
-      low = Max {i . \<exists> a \<in> q . log s a i \<noteq> None}
+      low = Max {i . \<exists> a \<in> q . log s a i \<noteq> None} + window + 1
     in
       s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
-        lowest := (lowest s)(a := low+window+1)\<rparr>"
+        lowest := (lowest s)(a := low), 
+        ghost_ballot := (ghost_ballot s)(a := 
+          (\<lambda> i . if i < low then ghost_ballot s a i else b))\<rparr>"
 
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
