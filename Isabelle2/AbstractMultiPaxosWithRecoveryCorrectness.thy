@@ -121,7 +121,7 @@ lemma trans_imp_prefix_order:
           thus ?thesis using that by (metis (mono_tags, lifting) Max.coboundedI mem_Collect_eq) 
         qed
         ultimately show ?thesis by auto
-      qed 
+      qed
       note 1 2 }
     ultimately show "ballot s a \<le> ballot t a \<and> (\<forall>b. (b < ballot s a \<longrightarrow> vote s a b i = vote t a b i) \<and> (b = ballot s a \<and> (\<exists>y. vote s a b i = Some y) \<longrightarrow> vote s a (ballot s a) i = vote t a (ballot s a) i)) \<or> (\<exists>q\<in>quorums. \<forall>a2\<in>q. ballot s a2 \<le> ballot t a) \<and> (\<forall>b. vote t a b i = None)"
       by force 
@@ -130,11 +130,17 @@ lemma trans_imp_prefix_order:
 
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic. *}
-  assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "safe_at s i v b"
-  shows "safe_at t i v b" using assms ballot_array_prefix.safe_at_mono oops
-by (metis ballot_array_prefix_axioms.intro ballot_array_prefix_def quorums_axioms trans_imp_prefix_order)
+  assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "safe_at s i v b" and "ba.joined (ballot s) b q" and "q \<in> quorums"
+  shows "safe_at t i v b" 
+proof -
+  have "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)" 
+    using assms(1) trans_imp_prefix_order by auto
+  with ballot_array_prefix_2.safe_at_mono 
+    quorums_axioms assms(2-4) show ?thesis 
+    by (auto simp add:ballot_array_prefix_2_def ballot_array_prefix_2_axioms_def, fast)
+qed
 
-abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (vote s i)"
+abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (ba_vote s i)"
 
 lemma safe_votes:
   assumes "s \<midarrow>aa\<midarrow>the_ioa\<longrightarrow> t" and "vote s i a b  \<noteq> vote t i a b" and "vote t i a b = Some v"
