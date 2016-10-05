@@ -33,14 +33,16 @@ definition join_ballot where
 
 interpretation ba:ballot_array quorums ballot vote for ballot vote .
 
+abbreviation ba_vote where "ba_vote s i \<equiv> \<lambda> a b . vote s a b i"
+
 abbreviation proved_safe_at where 
   -- {* v is proved safe in instance i at ballot b by quorum q *}
   "proved_safe_at s b i q v \<equiv> 
-    ba.proved_safe_at_abs (ballot s) (flip (vote s) i) q b v
+    ba.proved_safe_at_abs (ballot s) (ba_vote s i) q b v
     \<and> (\<forall> a \<in> q . lowest s a \<ge> i)"
 
 abbreviation conservative_at where
-  "conservative_at s i \<equiv> ballot_array.conservative_array (flip (vote s) i)"
+  "conservative_at s i \<equiv> ballot_array.conservative_array (ba_vote s i)"
   
 definition windowed where "windowed s \<equiv>
   \<forall> a b i j . vote s a b i \<noteq> None \<and> j < i - window
@@ -60,7 +62,7 @@ definition do_vote where
         \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(b := (vote s a b)(i := Some v)))\<rparr>"
 
 abbreviation chosen where
-  "chosen s i v \<equiv> ba.chosen (flip (vote s) i) v"
+  "chosen s i v \<equiv> ba.chosen (ba_vote s i) v"
 
 definition learn where
   "learn a i vs s s' \<equiv> (\<forall> j \<in> {0..<length vs} . chosen s (i+j) (vs!(j+1)))
@@ -84,7 +86,8 @@ fun trans_rel where
     \<or> (\<exists> a . crash a r r') )"
 | "trans_rel r (Learn a i vs) r' = learn a i vs r r'"
 
-lemma trans_cases: assumes "trans_rel r a r'"
+lemma trans_cases: 
+  assumes "trans_rel r a r'"
   obtains 
   (propose) c where "propose c r r'"
 | (learn) a i vs where "learn a i vs r r'"

@@ -293,7 +293,8 @@ oops
 
 end
 
-text {* A new prefix definition that accounts for acceptors crashing and loosing their state. *}
+text {* A new prefix definition that accounts for acceptors crashing and loosing their state. 
+  However, this is not going to work (see below). *}
 
 definition is_prefix_2 where
   "is_prefix_2 qs b1 b2 v1 v2 \<equiv> \<forall> a . 
@@ -358,6 +359,10 @@ proof -
   then show "\<forall>n va. n < b \<and> ba_2.choosable va n \<longrightarrow> v = va"
     by metis
 qed
+
+text {* To use this lemma, we will have to prove that @{term ballot_array.leader_driven_array}
+  is invariant. However this is not the case in the recovery Paxos, since an acceptor can 
+  jump back ballots. *}
 
 lemma safe_votes:
   assumes ba_1.safe and ba_1.leader_driven_array and ba_2.leader_driven_array
