@@ -46,6 +46,12 @@ abbreviation proved_safe_at where
   "proved_safe_at s b i q v \<equiv> 
     ba.proved_safe_at_abs (ballot s) (ba_vote s i) q b v
     \<and> (\<forall> a \<in> q . i \<ge> lowest s a)"
+  
+abbreviation ghost_proved_safe_at where 
+  -- {* v is proved safe in instance i at ballot b by quorum q *}
+  "ghost_proved_safe_at s b i q v \<equiv> 
+    ba.proved_safe_at_abs ((flip (ghost_ballot s)) i) (ghost_ba_vote s i) q b v
+    \<and> (\<forall> a \<in> q . i \<ge> lowest s a)"
 
 abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (ba_vote s i)"
@@ -82,7 +88,7 @@ definition learn where
 
 definition safe_instance where 
   "safe_instance s q \<equiv> let learned = {i . \<exists> a \<in> q . log s a i \<noteq> None} in 
-    if learned \<noteq> {} then Max learned + window + 1 else window"
+    if learned \<noteq> {} then Max learned + window + 1 else window+1"
   
 definition crash where
   "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
