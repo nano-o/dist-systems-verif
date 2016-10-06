@@ -453,25 +453,47 @@ proof -
   from 5 2 safe_mono[of s "Internal" t i v ?b, OF 6 4] show ?thesis by auto
 qed
 
-lemma safe_inv:
-  "invariant the_ioa safe"
-apply (try_solve_inv2 case_thm:trans_cases inv_proofs_defs:inv_proofs_defs ballot_array.safe_def invs:invs)
-subgoal premises prems for s t act
-proof (auto simp add:ballot_array.safe_def split:option.splits)
-  fix i b a v
-  assume "vote t i a b = Some v"
-  show "safe_at t i v b"
-  proof (cases "vote s i a b = vote t i a b")
-    case True
-    hence "safe_at s i v b" using prems(1) by (metis \<open>vote t i a b = Some v\<close> ballot_array.safe_def option.simps(5))
-    thus ?thesis using prems(2) safe_mono
-      by fastforce 
-  next
-    case False thus ?thesis using safe_votes
-      using \<open>vote t i a b = Some v\<close> prems(1-3) by blast  
-  qed
+abbreviation ghost_proved_safe_at where 
+  -- {* v is proved safe in instance i at ballot b by quorum q *}
+  "ghost_proved_safe_at s b i q v \<equiv> 
+    ba.proved_safe_at_abs ((flip (ghost_ballot s)) i) (ghost_ba_vote s i) q b v
+    \<and> (\<forall> a \<in> q . i \<ge> lowest s a)"
+  
+lemma safe_votes_ghost: 
+  fixes s :: "('v, 'a) ampr_state" and t a i v q
+  assumes "do_vote a i q v s t" and "conservative_array s" and "ghost_safe s" and "reachable the_ioa s"
+  shows "ghost_safe_at t i v (flip (ghost_ballot s) i a)"
+proof -
+  let ?b = "ghost_ballot s a i"
+  from \<open>do_vote a i q v s t\<close> have 2:"q \<in> quorums" by simp
+  from \<open>do_vote a i q v s t\<close> have 1:"ghost_proved_safe_at s ?b i q v"
+    using \<open>reachable the_ioa s\<close> apply -
+    apply ( insert all_invs, instantiate_invs )
+    subgoal premises prems using prems(1) prems(3-) amp_proof_axioms apply -
+      nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+          card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+      sorry
+    done
+  from 1 \<open>conservative_array s\<close> \<open>ghost_safe s\<close> 
+    bap.proved_safe_at_abs_imp_safe_at[of ?b "ghost_ba_vote s i" "flip (ghost_ballot s) i"]
+  have 4:"ghost_safe_at s i v ?b"  by (auto simp add:ballot_array.safe_def conservative_array_def split:option.splits)
+  have 5:"ba.joined (flip (ghost_ballot s) i) ?b q" using \<open>do_vote a i q v s t\<close> 
+    using \<open>reachable the_ioa s\<close> apply -
+    apply ( insert all_invs, instantiate_invs )
+    subgoal premises prems using prems(1) prems(3-) amp_proof_axioms apply -
+      nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+          card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+      sorry (*
+    by (auto simp add:ballot_array.proved_safe_at_abs_def ballot_array.joined_def) *)
+    done
+  have 6:"s \<midarrow>Internal\<midarrow>the_ioa\<longrightarrow> t" using \<open>do_vote a i q v s t\<close> by (metis (full_types) is_trans_simp trans_rel.simps(2))
+  from 5 2 safe_mono_ghost[of s "Internal" t i v ?b, OF 6 4] \<open>reachable the_ioa s\<close> show ?thesis by auto
 qed
-done
+
+lemma safe_inv:
+  "invariant the_ioa ghost_safe"
+  apply (simp_inv inv_defs:inv_defs ballot_array.safe_def invs:all_invs)
+  sorry
 declare safe_inv[invs]
 
 subsection {* Finally, the proof that agreement holds (trivial, follows immediately from safe).*}
