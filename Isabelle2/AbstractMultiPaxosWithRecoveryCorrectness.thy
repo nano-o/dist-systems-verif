@@ -254,10 +254,11 @@ lemma inv11: "invariant the_ioa inv11"
   nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
   sorry
-done
-  
+  done
+
 definition inv12 where inv12_def[inv_defs]:
-  "inv12 s \<equiv> \<forall> a i . ghost_ballot s a i \<le> ballot s a"
+  "inv12 s \<equiv> \<forall> a i b . ghost_vote s a b i \<noteq> None 
+    \<longrightarrow> (\<exists> q \<in> quorums . ballot_array.joined (ballot s) b q)"
 
 lemma inv12: "invariant the_ioa inv12"
   apply (simp_inv invs: inv1 inv2 inv3 inv4 inv5 inv6 inv7 inv8 inv9 inv10 inv11) 
@@ -273,12 +274,32 @@ lemma inv12: "invariant the_ioa inv12"
   nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
   sorry
-oops
+  subgoal premises prems using prems amp_proof_axioms apply -
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+done
 
+definition inv13 where inv13_def[inv_defs]:
+  "inv13 s \<equiv> \<forall> a . let l = lowest s a; j = l-window-1 in l > window+1 \<longrightarrow>
+    (\<exists> q \<in> quorums . \<exists> a \<in> q . log s a j \<noteq> None)"
+
+lemma inv13: "invariant the_ioa inv13"
+  apply (simp_inv invs: inv1 inv2 inv3 inv4 inv5 inv6 inv7 inv8 inv9 inv10 inv11 inv12)
+  subgoal premises prems using prems amp_proof_axioms apply -
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+  subgoal premises prems using prems amp_proof_axioms apply -
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+done
+  
 definition ghost_rel_normal_inv where "ghost_rel_normal_inv s \<equiv> inv1 s \<and> inv4 s \<and> inv5 s \<and> inv8 s \<and> inv11 s"
 
 definition all_invs where "all_invs s \<equiv> inv1 s \<and> inv2 s \<and> inv3 s \<and> inv4 s \<and> inv5 s \<and> inv6 s 
-  \<and> inv7 s \<and> inv8 s \<and> inv9 s \<and> inv10 s \<and> inv11 s"
+  \<and> inv7 s \<and> inv8 s \<and> inv9 s \<and> inv10 s \<and> inv11 s \<and> inv12 s \<and> inv13 s"
   
 subsection {* the ghost ballot-array is conservative *}
 
@@ -297,10 +318,11 @@ lemma conservative_inductive:
   "invariant the_ioa conservative_array"
   apply (simp_inv invs:ghost_rel_normal inv_defs:conservative_array_def ballot_array.conservative_array_def ballot_array.conservative_def)
    apply (auto simp add: conservative_array_def ballot_array.conservative_array_def ballot_array.conservative_def split:option.splits)[1]
-  apply (simp only: inv_defs ballot_array.conservative_array_def ballot_array.conservative_def Let_def do_vote_def split:option.splits)[1]
-  sorry
-  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+  subgoal premises prems using prems amp_proof_axioms apply -
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+done
 
 subsection {* the ghost ballot-array is safe } *}
 
@@ -353,26 +375,35 @@ lemma trans_imp_prefix_order:
   qed
   done
 
-thm ghost_rel_normal
-
-lemma
+lemma test:
   assumes "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)"
     and "all_invs s" and "all_invs t"
   shows "is_prefix_2 quorums (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)"
   using assms amp_proof_axioms apply -
-  nitpick[no_assms, verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2] oops
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  oops
 
-lemma trans_imp_prefix_order:
+lemma trans_imp_prefix_order_ghost:
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)"
     and "all_invs s" and "all_invs t"
   shows "is_prefix_2 quorums (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)" 
   using assms[simplified]
   apply (cases rule:trans_cases)
-      apply (auto simp add:is_prefix_2_def split:option.split_asm)[2] defer
+      apply (auto simp add:is_prefix_2_def split:option.split_asm)[2] 
   subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2] oops
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+  subgoal premises prems using prems amp_proof_axioms apply -
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+  subgoal premises prems using prems amp_proof_axioms apply -
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+done
 
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic. *}
@@ -384,6 +415,27 @@ proof -
   with ballot_array_prefix_2.safe_at_mono quorums_axioms assms(2-4) 
   show ?thesis
     by (auto simp add:ballot_array_prefix_2_def ballot_array_prefix_2_axioms_def, fast)
+qed
+
+lemmas all_invs = inv1 inv2 inv3 inv4 inv5 inv6 inv7 inv8 inv9 inv10 inv11 inv12 inv13
+
+lemma safe_mono_ghost:
+  -- {* @{term safe_at} is monotonic. *}
+  assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "ghost_safe_at s i v b" 
+    and "ba.joined (flip (ghost_ballot s) i) b q" and "q \<in> quorums"
+    and "reachable the_ioa s"
+  shows "ghost_safe_at t i v b" 
+proof -
+  have "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)" 
+    using assms(1) trans_imp_prefix_order by auto
+  hence "is_prefix_2 quorums (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)"
+    using \<open>reachable the_ioa s\<close> trans_imp_prefix_order_ghost \<open>s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t\<close>
+    apply - apply (instantiate_invs_2 invs:all_invs) by (auto simp add:all_invs_def)
+  with ballot_array_prefix_2.safe_at_mono[of quorums "flip (ghost_ballot s) i"
+      "ghost_ba_vote s i" "flip (ghost_ballot t) i" "ghost_ba_vote t i"]
+    quorums_axioms assms(2-4) 
+  show ?thesis
+    by (auto simp add:ballot_array_prefix_2_def ballot_array_prefix_2_axioms_def)
 qed
 
 lemma safe_votes: 
