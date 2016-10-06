@@ -4,8 +4,8 @@ theory AbstractMultiPaxosWithRecoveryCorrectness
 imports AbstractMultiPaxosWithRecovery "~~/src/HOL/Eisbach/Eisbach_Tools" BallotArrayProperties 
 begin
 
-locale amp_proof = quorums quorums + ampr_ioa quorums for quorums +
-  fixes the_ioa
+locale amp_proof = quorums quorums + ampr_ioa quorums for quorums :: "'a set set" +
+  fixes the_ioa :: "(('v, 'a) ampr_state, ('a, 'v) paxos_action) ioa"
   defines "the_ioa \<equiv> ioa"
   -- {* Here we have to fix the constant @{term the_ioa} in order to fix all type variables.
   Otherwise, there are problems in Eisbach when matching the same polymorphic constant appearing in several terms. *}
@@ -40,7 +40,7 @@ method my_fail for msg::"char list" = (print_term msg; fail)
 
 method rm_reachable = (match premises in R[thin]:"reachable ?ioa ?s" \<Rightarrow> \<open>-\<close>)
 
-lemma reach_and_inv_imp_p:"\<lbrakk>reachable ioa s; invariant ioa i\<rbrakk> \<Longrightarrow> i s"
+lemma reach_and_inv_imp_p:"\<lbrakk>reachable the_ioa s; invariant the_ioa i\<rbrakk> \<Longrightarrow> i s"
   by (auto simp add:invariant_def)
 
 method instantiate_invs declares invs =
@@ -83,6 +83,8 @@ method auto_inv uses invs declares inv_defs =
 subsection {* @{term conservative_array}  is an inductive invariant *}
 
 interpretation ba:ballot_array quorums ballot vote for ballot vote .
+interpretation bap:ballot_array_props ballot vote quorums for ballot vote 
+  by (unfold_locales)
 
 definition conservative_array where conservative_array_def[inv_defs]:
   "conservative_array s \<equiv>  \<forall> i . conservative_at s i"
@@ -91,7 +93,7 @@ lemma conservative_inductive:
   "invariant the_ioa conservative_array"
   by (force_inv invs: inv_defs:ballot_array.conservative_array_def ballot_array.conservative_def)
 
-abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe  quorums (ballot s) (ba_vote s i)"
+abbreviation safe where "safe s \<equiv> \<forall> i . ballot_array.safe quorums (ballot s) (ba_vote s i)"
 
 subsection {* @{term safe} is invariant } *}
 
@@ -138,8 +140,8 @@ lemma safe_mono:
 proof -
   have "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)" 
     using assms(1) trans_imp_prefix_order by auto
-  with ballot_array_prefix_2.safe_at_mono
-    quorums_axioms assms(2-4) show ?thesis
+  with ballot_array_prefix_2.safe_at_mono quorums_axioms assms(2-4) 
+  show ?thesis
     by (auto simp add:ballot_array_prefix_2_def ballot_array_prefix_2_axioms_def, fast)
 qed
 
@@ -149,21 +151,62 @@ definition inv1 where inv1_def[inv_defs]:
 lemma inv1: "invariant the_ioa inv1" by (force_inv)
 (* nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 2, card "'v option" = 3, card "nat option" = 3, expect=none] *)
 
+definition inv2 where inv2_def[inv_defs]:
+  "inv2 s \<equiv> \<forall> a b i j . vote s a b i \<noteq> None \<and> j < i-window 
+    \<longrightarrow> (\<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None)"
+  
+lemma inv2: "invariant the_ioa inv2"
+  apply (simp_inv invs:inv1 inv_defs:inv_defs) prefer 3 
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
 
+definition inv3 where inv3_def[inv_defs]:
+  "inv3 s \<equiv> \<forall> i . (\<forall> q \<in> quorums . \<exists> a \<in> q . log s a i = None) 
+    \<longrightarrow> (\<forall> j . j \<ge> i + window \<longrightarrow> (\<forall> a b . vote s a b j = None))"
+  
+lemma inv3: "invariant the_ioa inv3"
+  apply (simp_inv invs:inv1 inv2 inv_defs:inv_defs) prefer 3
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+  
+definition inv4 where inv4_def[inv_defs]:
+  "inv4 s \<equiv> \<forall> a b i . vote s a b i \<noteq> None 
+    \<longrightarrow> (\<exists> q \<in> quorums . \<forall> a \<in> q . ghost_ballot s a i \<ge> b)"
+  
+lemma inv4: "invariant the_ioa inv4"
+  apply (simp_inv invs:inv1 inv2 inv3 inv_defs:inv_defs) prefer 3
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  oops
+  
+definition inv5 where inv5_def[inv_defs]:
+  "inv5 s \<equiv> \<forall> a b i . vote s a b i \<noteq> None \<and> i \<ge> lowest s a
+    \<longrightarrow> (\<exists> q \<in> quorums . ba.joined (flip (ghost_ballot s) i) b q)"
 
-lemma safe_votes:
-  assumes "s \<midarrow>aa\<midarrow>the_ioa\<longrightarrow> t" and "vote s i a b  \<noteq> vote t i a b" and "vote t i a b = Some v"
-    and "conservative_array s" and "safe s"
-  shows "safe_at t i v b" 
-  using assms
-  apply (cases aa)
-    apply (auto simp add:inv_proofs_defs)
-  subgoal premises prems
-  proof -
-    have "safe_at s i v (ballot s a)" by (smt assms(4) ballot_array.safe_def ballot_array_props.intro ballot_array_props.proved_safe_at_abs_imp_safe_at option.case_eq_if option.distinct(1) option.sel prems(2) prems(6) quorums_axioms) 
-    thus ?thesis by (metis state.select_convs(2) state.select_convs(3) state.surjective state.update_convs(3) assms(1) fun_upd_apply prems(9) safe_mono) 
-  qed
-  done
+lemma inv5: "invariant the_ioa inv5"
+  apply (simp_inv invs:inv1 inv_defs:inv_defs ballot_array.joined_def)
+     apply (auto simp add:inv5_def ballot_array.joined_def split:option.splits, blast)[1]
+  prefer 2
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  oops
+  
+lemma safe_votes: 
+  fixes s :: "('v, 'a) ampr_state" and t a i v q
+  assumes "do_vote a i q v s t" and "conservative_array s" and "safe s"
+  shows "safe_at t i v (ballot s a)"
+proof -
+  let ?b = "ballot s a"
+  from \<open>do_vote a i q v s t\<close> have 1:"proved_safe_at s ?b i q v" and 2:"q \<in> quorums" and 3:"\<And> a . a \<in> q \<Longrightarrow> lowest s a \<ge> i" by simp_all
+  from 1 \<open>conservative_array s\<close> \<open>safe s\<close> bap.proved_safe_at_abs_imp_safe_at[of ?b "ba_vote s i" "ballot s"]
+  have 4:"safe_at s i v ?b"  by (auto simp add:ballot_array.safe_def conservative_array_def split:option.splits)
+  have 5:"ba.joined (ballot s) ?b q" using \<open>do_vote a i q v s t\<close> 
+    by (auto simp add:ballot_array.proved_safe_at_abs_def ballot_array.joined_def)
+  have 6:"s \<midarrow>Internal\<midarrow>the_ioa\<longrightarrow> t" using \<open>do_vote a i q v s t\<close> by (metis (full_types) is_trans_simp trans_rel.simps(2))
+  from 5 2 safe_mono[of s "Internal" t i v ?b, OF 6 4] show ?thesis by auto
+qed
 
 lemma safe_inv:
   "invariant the_ioa safe"
