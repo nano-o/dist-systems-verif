@@ -59,7 +59,7 @@ definition do_vote where
           v \<in> propCmd s
         \<and> i \<ge> lowest s a
         \<and> vote s a b i = None
-        \<and> proved_safe_at s i b q v
+        \<and> proved_safe_at s b i q v
         \<and> q \<in> quorums
         \<and> conservative_at s' i
         \<and> windowed s'
