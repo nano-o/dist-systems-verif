@@ -13,6 +13,7 @@ record ('v,'a) ampr_state =
   lowest :: "'a \<Rightarrow> inst"
   log :: "'a \<Rightarrow> inst \<Rightarrow> 'v option"
   ghost_ballot :: "'a \<Rightarrow> inst \<Rightarrow> bal"
+  ghost_vote :: "'a \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v option"
 
 locale ampr_ioa =
   fixes quorums::"'a set set" and window :: "nat"
@@ -22,7 +23,7 @@ definition start where
   -- {* The initial state *}
   "start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> a b i . None),
     lowest = \<lambda> a . 0, log = \<lambda> a i . None, 
-    ghost_ballot = (\<lambda> a i . 0)\<rparr>}"
+    ghost_ballot = (\<lambda> a i . 0), ghost_vote = (\<lambda> a b i . None)\<rparr>}"
 
 subsection {* The transitions *}
 
@@ -49,7 +50,7 @@ abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (ba_vote s i)"
   
 definition windowed where "windowed s \<equiv>
-  \<forall> a b i j . vote s a b i \<noteq> None \<and> j < i - window
+  \<forall> a b i j . vote s a b i \<noteq> None \<and> j \<le> i - window
     \<longrightarrow> (\<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None)"
   -- {* New votes cannot be cast in instance i before instances lower than @{term "i-window"} 
   have all been completed by a quorum of acceptors. *}
@@ -63,7 +64,8 @@ definition do_vote where
         \<and> q \<in> quorums
         \<and> conservative_at s' i
         \<and> windowed s'
-        \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(b := (vote s a b)(i := Some v)))\<rparr>"
+        \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(b := (vote s a b)(i := Some v))),
+            ghost_vote := (ghost_vote s)(a := (ghost_vote s a)(b := (ghost_vote s a b)(i := Some v)))\<rparr>"
 
 abbreviation chosen where
   "chosen s i v \<equiv> ba.chosen (ba_vote s i) v"
