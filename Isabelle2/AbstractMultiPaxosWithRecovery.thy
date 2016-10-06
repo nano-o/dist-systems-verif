@@ -39,6 +39,7 @@ definition join_ballot where
 interpretation ba:ballot_array quorums ballot vote for ballot vote .
 
 abbreviation ba_vote where "ba_vote s i \<equiv> \<lambda> a b . vote s a b i"
+abbreviation ghost_ba_vote where "ghost_ba_vote s i \<equiv> \<lambda> a b . ghost_vote s a b i"
 
 abbreviation proved_safe_at where 
   -- {* v is proved safe in instance i at ballot b by quorum q *}
@@ -50,8 +51,8 @@ abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (ba_vote s i)"
   
 definition windowed where "windowed s \<equiv>
-  \<forall> a b i j . vote s a b i \<noteq> None \<and> j \<le> i - window
-    \<longrightarrow> (\<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None)"
+  \<forall> a b i . vote s a b i \<noteq> None 
+    \<longrightarrow> (\<forall> j \<le> i - window . (\<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None))"
   -- {* New votes cannot be cast in instance i before instances lower than @{term "i-window"} 
   have all been completed by a quorum of acceptors. *}
 
@@ -69,6 +70,9 @@ definition do_vote where
 
 abbreviation chosen where
   "chosen s i v \<equiv> ba.chosen (ba_vote s i) v"
+  
+abbreviation ghost_chosen where
+  "ghost_chosen s i v \<equiv> ba.chosen (ghost_ba_vote s i) v"
 
 definition learn where
   "learn a i vs s s' \<equiv> (\<forall> j \<in> {0..<length vs} . chosen s (i+j) (vs!(j+1)))
@@ -76,10 +80,14 @@ definition learn where
         \<and> (\<forall> j \<in> {0..<i} \<union> {i+length vs..} . new_log j = log s a j)
         \<and> s' = s\<lparr>log := (log s)(a := new_log)\<rparr>)"
 
+definition safe_instance where 
+  "safe_instance s q \<equiv> let learned = {i . \<exists> a \<in> q . log s a i \<noteq> None} in 
+    if learned \<noteq> {} then Max learned + window + 1 else window"
+  
 definition crash where
   "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
-    let b = Max {ballot s a | a . a \<in> q};
-      low = Max {i . \<exists> a \<in> q . log s a i \<noteq> None} + window + 1
+    let b = Max {ballot s a | a . a \<in> q}; (* could we join any ballot? *)
+      low = safe_instance s q
     in
       s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
         lowest := (lowest s)(a := low), 
