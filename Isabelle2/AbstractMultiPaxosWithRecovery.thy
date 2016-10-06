@@ -43,7 +43,7 @@ abbreviation proved_safe_at where
   -- {* v is proved safe in instance i at ballot b by quorum q *}
   "proved_safe_at s b i q v \<equiv> 
     ba.proved_safe_at_abs (ballot s) (ba_vote s i) q b v
-    \<and> (\<forall> a \<in> q . lowest s a \<ge> i)"
+    \<and> (\<forall> a \<in> q . i \<ge> lowest s a)"
 
 abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (ba_vote s i)"
