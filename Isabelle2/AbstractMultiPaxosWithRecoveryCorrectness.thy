@@ -146,20 +146,37 @@ proof -
 qed
 
 definition inv1 where inv1_def[inv_defs]:
-  "inv1 s \<equiv> \<forall> a i . i \<ge> lowest s a \<longrightarrow> ghost_ballot s a i = ballot s a"
+  "inv1 s \<equiv> \<forall> a i . i \<ge> lowest s a  \<longrightarrow> ghost_ballot s a i = ballot s a"
 
 lemma inv1: "invariant the_ioa inv1" by (force_inv)
 (* nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 2, card "'v option" = 3, card "nat option" = 3, expect=none] *)
 
-definition inv2 where inv2_def[inv_defs]:
-  "inv2 s \<equiv> \<forall> a b i j . vote s a b i \<noteq> None \<and> j < i-window 
-    \<longrightarrow> (\<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None)"
+definition inv6 where inv6_def[inv_defs]:
+  "inv6 s \<equiv> \<forall> a i v . log s a i = Some v \<longrightarrow> ghost_chosen s i v"
   
-lemma inv2: "invariant the_ioa inv2"
-  apply (simp_inv invs:inv1 inv_defs:inv_defs) prefer 3 
+lemma inv6: "invariant the_ioa inv6"
+  apply (simp_inv invs: inv1 inv_defs:inv_defs ballot_array.chosen_def) 
   nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
+oops
+
+definition instance_bound where "instance_bound s \<equiv> 
+  let decided = {i . \<forall> j \<le> i . \<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None} 
+  in if decided \<noteq> {} then Max decided + window else window"
+  -- {* No instance greater than that can have any vote. *} 
+  
+definition inv2 where inv2_def[inv_defs]:
+  "inv2 s \<equiv> \<forall> a b i . vote s a b i \<noteq> None \<longrightarrow> instance_bound s \<ge> i"
+  
+lemma inv2: "invariant the_ioa inv2"
+  apply (simp_inv invs: inv_defs:inv_defs instance_bound_def) prefer 3 sorry
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+    apply (case_tac s, case_tac t, auto simp add:inv_defs windowed_def split:option.split_asm)[1]
+  subgoal premises prems for s t _ a i vs
+  proof -
+    thm prems
+    from \<open>learn a i vs s t\<close> have "\<And> a i . log s a i \<noteq> None \<Longrightarrow> log s a i = log t a i" oops
 
 definition inv3 where inv3_def[inv_defs]:
   "inv3 s \<equiv> \<forall> i . (\<forall> q \<in> quorums . \<exists> a \<in> q . log s a i = None) 
@@ -170,6 +187,64 @@ lemma inv3: "invariant the_ioa inv3"
   nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
   sorry
+
+definition inv13 where inv13_def[inv_defs]:
+  "inv13 s \<equiv> \<forall> j . j \<ge> instance_bound s \<longrightarrow> (\<forall> a b . vote s a b j = None)"
+  -- {* Contrapositive of inv2... *}
+
+lemma inv13: "invariant the_ioa inv13"
+  apply (simp_inv invs: inv_defs:safe_instance_def inv_defs instance_bound_def) prefer 3
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2] sorry
+  
+definition inv8 where inv8_def[inv_defs]:
+  "inv8 s \<equiv> \<forall> q \<in> quorums . safe_instance s q > instance_bound s"
+
+lemma inv8: "invariant the_ioa inv8"
+  apply (simp_inv invs:inv1 inv3 inv13 inv_defs:safe_instance_def inv_defs instance_bound_def)
+  apply blast defer
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+   
+
+definition inv10 where inv10_def[inv_defs]:
+  "inv10 s \<equiv> \<forall> a . let l = lowest s a in (l = 0 \<or> l > window) \<and>
+    (l > window \<longrightarrow> ((\<exists> q \<in> quorums . \<exists> a \<in> q . log s a (l - window - 1) \<noteq> None)))"
+  
+lemma inv10: "invariant the_ioa inv10"
+  apply (simp_inv invs: inv_defs:safe_instance_def inv_defs) defer
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 10, card "('v, 'a) ampr_state" = 2] oops
+   
+definition inv11 where inv11_def[inv_defs]:
+  "inv11 s \<equiv> \<forall> a b i . ghost_vote s a b i \<noteq> None \<longrightarrow> instance_bound s \<ge> i"
+  
+lemma inv11: "invariant the_ioa inv11"
+  apply (simp_inv invs: inv8 inv3 inv1 inv_defs:safe_instance_def inv_defs instance_bound_def) prefer 1
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 11, card "('v, 'a) ampr_state" = 2] sorry
+
+definition inv12 where inv12_def[inv_defs]:
+  "inv12 s \<equiv> \<forall> a i . log s a i \<noteq> None \<longrightarrow> instance_bound s \<ge> i"
+  
+lemma inv12: "invariant the_ioa inv12"
+  apply (simp_inv invs: inv2 inv_defs:inv_defs instance_bound_def) prefer 1
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2] sorry
+
+definition inv9 where inv9_def[inv_defs]:
+  "inv9 s \<equiv> \<forall> a i b . (i \<ge> lowest s a \<and> vote s a b i = None) \<longrightarrow> ghost_vote s a b i = None"
+  
+lemma inv9: "invariant the_ioa inv9" 
+  apply (simp_inv invs: inv13 inv12 inv11 inv1 inv2 inv3 inv8 inv_defs:safe_instance_def inv_defs) sorry
+  nitpick[verbose, card 'v = 2, card 'a = 3, verbose,  card nat = 3, card "'v option" = 3, card "nat option" = 4, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2] 
+
+definition inv7 where inv7_def[inv_defs]:
+  "inv7 s \<equiv> \<forall> a i . i \<ge> lowest s a  \<longrightarrow> (\<forall> b . ghost_vote s a b i = vote s a b i)" 
+lemma inv7: "invariant the_ioa inv7" 
+  by (auto_inv invs:inv13 inv12 inv11 inv1 inv2 inv3 inv8 inv9)
   
 definition inv4 where inv4_def[inv_defs]:
   "inv4 s \<equiv> \<forall> a b i . vote s a b i \<noteq> None 
