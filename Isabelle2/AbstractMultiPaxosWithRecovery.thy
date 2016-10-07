@@ -46,19 +46,13 @@ abbreviation proved_safe_at where
   "proved_safe_at s b i q v \<equiv> 
     ba.proved_safe_at_abs (ballot s) (ba_vote s i) q b v
     \<and> (\<forall> a \<in> q . i \<ge> lowest s a)"
-  
-abbreviation ghost_proved_safe_at where 
-  -- {* v is proved safe in instance i at ballot b by quorum q *}
-  "ghost_proved_safe_at s b i q v \<equiv> 
-    ba.proved_safe_at_abs ((flip (ghost_ballot s)) i) (ghost_ba_vote s i) q b v
-    \<and> (\<forall> a \<in> q . i \<ge> lowest s a)"
 
 abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (ba_vote s i)"
   
 definition windowed where "windowed s \<equiv>
-  \<forall> a b i . vote s a b i \<noteq> None 
-    \<longrightarrow> (\<forall> j \<le> i - window . (\<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None))"
+  \<forall> a b i . vote s a b i \<noteq> None \<and> i > window
+    \<longrightarrow> (\<forall> j < i - window . (\<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None))"
   -- {* New votes cannot be cast in instance i before instances lower than @{term "i-window"} 
   have all been completed by a quorum of acceptors. *}
 
@@ -81,8 +75,8 @@ abbreviation ghost_chosen where
   "ghost_chosen s i v \<equiv> ba.chosen (ghost_ba_vote s i) v"
 
 definition learn where
-  "learn a i vs s s' \<equiv> (\<forall> j \<in> {0..<length vs} . chosen s (i+j) (vs!(j+1)))
-    \<and> (\<exists> new_log . (\<forall> j \<in> {0..<length vs} . new_log (i+j) = Some (vs!(j+1)))
+  "learn a i vs s s' \<equiv> (\<forall> j \<in> {0..<length vs} . chosen s (i+j) (vs!j))
+    \<and> (\<exists> new_log . (\<forall> j \<in> {0..<length vs} . new_log (i+j) = Some (vs!j))
         \<and> (\<forall> j \<in> {0..<i} \<union> {i+length vs..} . new_log j = log s a j)
         \<and> s' = s\<lparr>log := (log s)(a := new_log)\<rparr>)"
 
