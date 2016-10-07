@@ -226,19 +226,11 @@ end
 
 subsection {* Monotonicity *}
 
-<<<<<<< HEAD
-text {* We define a prefix relation on ballot arrays and show that a value safe b remains 
-  safe at be when the ballot array grows *}
-
-definition is_prefix where
-  "is_prefix b1 b2 v1 v2 \<equiv> \<forall> a . b1 a \<le> b2 a 
-=======
 text {* We define a prefix relation on ballot arrays and show that a value safe at b remains 
   safe at b when the ballot array grows *}
 
 definition is_prefix where
   "is_prefix b1 b2 v1 v2 \<equiv> \<forall> a . b1 a \<le> b2 a
->>>>>>> giuliano_2
     \<and> (\<forall> b . (b < b1 a \<or> (b = b1 a \<and> v1 a b \<noteq> None)) \<longrightarrow> v1 a b = v2 a b)"
 
 locale ballot_array_prefix = quorums quorums for  quorums :: "'a set set" +
@@ -277,10 +269,6 @@ lemma chosen_mono:
   
 lemma safe_votes:
   assumes ba_1.safe and "\<And> b a v . \<lbrakk>vote1 a b \<noteq> vote2 a b; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b"
-<<<<<<< HEAD
-  and "\<And> b a . b > ballot1 a \<Longrightarrow> vote1 a b = vote2 a b"
-=======
->>>>>>> giuliano_2
   shows ba_2.safe
 proof (auto simp add:ballot_array.safe_def split:option.splits)
   fix a b v
@@ -291,14 +279,7 @@ proof (auto simp add:ballot_array.safe_def split:option.splits)
     with assms(1) and safe_at_mono show ?thesis by (metis ba_1.safe_def option.simps(5))
   next
     case False
-<<<<<<< HEAD
-    with ballot_array_prefix_axioms assms(3) have "vote1 a b = None"
-      apply (auto simp add:ballot_array_prefix_def ballot_array_prefix_axioms_def is_prefix_def)
-      by (metis \<open>vote2 a b = Some v\<close> antisym_conv3 assms(1) ba_1.safe_def case_optionE)
-    with assms(2) have "ba_1.safe_at v b" using \<open>vote2 a b = Some v\<close> by (metis option.distinct(1))
-=======
     from assms(2) have "ba_1.safe_at v b" using False \<open>vote2 a b = Some v\<close> by auto
->>>>>>> giuliano_2
     thus ?thesis using safe_at_mono by blast
   qed
 qed
@@ -312,8 +293,6 @@ oops
 
 end
 
-<<<<<<< HEAD
-=======
 text {* A new prefix definition that accounts for acceptors crashing and loosing their state. 
   However, this is not going to work (see below). *}
 
@@ -415,5 +394,4 @@ qed
     
 end
 
->>>>>>> giuliano_2
 end
