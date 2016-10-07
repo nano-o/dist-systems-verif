@@ -58,6 +58,16 @@ definition safe where
 definition well_formed where
   "well_formed \<equiv> \<forall> a b . ballot a < b \<longrightarrow> vote a b = None"
 
+<<<<<<< HEAD
+=======
+definition joined where 
+  "joined b q \<equiv> \<forall> a \<in> q . ballot a \<ge> b"
+  
+definition leader_driven_array where
+  "leader_driven_array \<equiv> conservative_array 
+    \<and> (\<forall> a b . vote a b \<noteq> None \<longrightarrow> (\<exists> q \<in> quorums . joined b q))"
+  
+>>>>>>> giuliano_2
 end
 
 end

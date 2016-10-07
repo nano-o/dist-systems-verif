@@ -226,11 +226,19 @@ end
 
 subsection {* Monotonicity *}
 
+<<<<<<< HEAD
 text {* We define a prefix relation on ballot arrays and show that a value safe b remains 
   safe at be when the ballot array grows *}
 
 definition is_prefix where
   "is_prefix b1 b2 v1 v2 \<equiv> \<forall> a . b1 a \<le> b2 a 
+=======
+text {* We define a prefix relation on ballot arrays and show that a value safe at b remains 
+  safe at b when the ballot array grows *}
+
+definition is_prefix where
+  "is_prefix b1 b2 v1 v2 \<equiv> \<forall> a . b1 a \<le> b2 a
+>>>>>>> giuliano_2
     \<and> (\<forall> b . (b < b1 a \<or> (b = b1 a \<and> v1 a b \<noteq> None)) \<longrightarrow> v1 a b = v2 a b)"
 
 locale ballot_array_prefix = quorums quorums for  quorums :: "'a set set" +
@@ -269,7 +277,10 @@ lemma chosen_mono:
   
 lemma safe_votes:
   assumes ba_1.safe and "\<And> b a v . \<lbrakk>vote1 a b \<noteq> vote2 a b; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b"
+<<<<<<< HEAD
   and "\<And> b a . b > ballot1 a \<Longrightarrow> vote1 a b = vote2 a b"
+=======
+>>>>>>> giuliano_2
   shows ba_2.safe
 proof (auto simp add:ballot_array.safe_def split:option.splits)
   fix a b v
@@ -280,10 +291,14 @@ proof (auto simp add:ballot_array.safe_def split:option.splits)
     with assms(1) and safe_at_mono show ?thesis by (metis ba_1.safe_def option.simps(5))
   next
     case False
+<<<<<<< HEAD
     with ballot_array_prefix_axioms assms(3) have "vote1 a b = None"
       apply (auto simp add:ballot_array_prefix_def ballot_array_prefix_axioms_def is_prefix_def)
       by (metis \<open>vote2 a b = Some v\<close> antisym_conv3 assms(1) ba_1.safe_def case_optionE)
     with assms(2) have "ba_1.safe_at v b" using \<open>vote2 a b = Some v\<close> by (metis option.distinct(1))
+=======
+    from assms(2) have "ba_1.safe_at v b" using False \<open>vote2 a b = Some v\<close> by auto
+>>>>>>> giuliano_2
     thus ?thesis using safe_at_mono by blast
   qed
 qed
@@ -297,4 +312,108 @@ oops
 
 end
 
+<<<<<<< HEAD
+=======
+text {* A new prefix definition that accounts for acceptors crashing and loosing their state. 
+  However, this is not going to work (see below). *}
+
+definition is_prefix_2 where
+  "is_prefix_2 qs b1 b2 v1 v2 \<equiv> \<forall> a . 
+    ((b1 a \<le> b2 a) \<and> (\<forall> b . (b < b1 a \<or> (b = b1 a \<and> v1 a b \<noteq> None)) \<longrightarrow> v1 a b = v2 a b))
+    \<or> ((\<exists> q \<in> qs . \<forall> a2 \<in> q . b1 a2 \<le> b2 a) \<and> (\<forall> b . v2 a b = None))"
+  
+locale ballot_array_prefix_2 = quorums quorums for  quorums :: "'a set set" +
+  -- {* @{typ 'a} is the type of acceptors *}
+  fixes ballot1 :: "'a \<Rightarrow> nat"
+    and vote1 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+    and ballot2 :: "'a \<Rightarrow> nat"
+    and vote2 :: "'a \<Rightarrow> nat \<Rightarrow> 'v option"
+  assumes "is_prefix_2 quorums ballot1 ballot2 vote1 vote2"
+begin
+
+interpretation ba_1:ballot_array quorums ballot1 vote1 
+using quorums_axioms by (unfold_locales)
+interpretation ba_2:ballot_array quorums ballot2 vote2
+using quorums_axioms by (unfold_locales)
+
+lemma choosable_decreases:
+  assumes "ba_2.choosable v b" and "\<exists> q \<in> quorums . ba_1.joined b q"
+  shows "ba_1.choosable v b"
+  using assms ballot_array_prefix_2_axioms
+  nitpick[card 'v = 2, card 'a = 3, verbose, card nat = 2, card "'v option" = 3, card "nat option" = 3, expect=none]
+  apply (auto simp add:ballot_array_prefix_2_axioms_def ballot_array_prefix_2_def is_prefix_2_def
+      ba_2.choosable_def ba_1.choosable_def ba_1.joined_def quorums_def)
+proof -
+  fix q :: "'a set" and qa :: "'a set" and x :: "'a set"
+  assume a1: "qa \<in> quorums"
+  assume a2: "\<forall>q. q \<in> quorums \<longrightarrow> (\<exists>a\<in>q. b < ballot1 a \<and> vote1 a b \<noteq> Some v)"
+  assume a3: "\<forall>a. ballot1 a \<le> ballot2 a \<and> (\<forall>b. (b < ballot1 a \<longrightarrow> vote1 a b = vote2 a b) \<and> (b = ballot1 a \<and> (\<exists>y. vote1 a b = Some y) \<longrightarrow> vote1 a (ballot1 a) = vote2 a (ballot1 a))) \<or> (\<exists>q\<in>quorums. \<forall>a2\<in>q. ballot1 a2 \<le> ballot2 a) \<and> (\<forall>b. vote2 a b = None)"
+  assume a4: "\<forall>a\<in>qa. b < ballot2 a \<longrightarrow> vote2 a b = Some v"
+  obtain aa :: "'a set \<Rightarrow> 'a" where
+    f5: "\<forall>A. A \<notin> quorums \<or> aa A \<in> A \<and> b < ballot1 (aa A) \<and> vote1 (aa A) b \<noteq> Some v"
+    using a2 by moura
+  then have f6: "aa qa \<in> qa \<and> b < ballot1 (aa qa) \<and> vote1 (aa qa) b \<noteq> Some v"
+    using a1 by metis
+  have "\<forall>a. ballot1 a \<le> ballot2 a \<and> (\<forall>n. (\<not> n < ballot1 a \<or> vote1 a n = vote2 a n) \<and> ((n \<noteq> ballot1 a \<or> (\<forall>v. vote1 a n \<noteq> Some v)) \<or> vote1 a (ballot1 a) = vote2 a (ballot1 a))) \<or> (\<exists>A. A \<in> quorums \<and> (\<forall>aa. aa \<notin> A \<or> ballot1 aa \<le> ballot2 a)) \<and> (\<forall>n. vote2 a n = None)"
+    using a3 by metis
+  then obtain AA :: "'a \<Rightarrow> 'a set" where
+    "\<forall>a. ballot1 a \<le> ballot2 a \<and> (\<forall>n. (\<not> n < ballot1 a \<or> vote1 a n = vote2 a n) \<and> (n \<noteq> ballot1 a \<or> (\<forall>v. vote1 a n \<noteq> Some v) \<or> vote1 a (ballot1 a) = vote2 a (ballot1 a))) \<or> AA a \<in> quorums \<and> (\<forall>aa. aa \<notin> AA a \<or> ballot1 aa \<le> ballot2 a) \<and> (\<forall>n. vote2 a n = None)"
+    by moura
+  then show False
+    using f6 f5 a4 by (metis dual_order.strict_trans1 option.simps(3))
+qed     
+
+lemma safe_at_mono:
+  assumes "ba_1.safe_at v b" and "\<exists> q \<in> quorums . ba_1.joined b q"
+  shows "ba_2.safe_at v b" 
+  using assms choosable_decreases 
+  unfolding ba_1.safe_at_def ba_2.safe_at_def ba_1.joined_def
+proof -
+  assume a1: "\<exists>q\<in>quorums. \<forall>a\<in>q. b \<le> ballot1 a"
+  assume a2: "\<forall>b2 v2. b2 < b \<and> ba_1.choosable v2 b2 \<longrightarrow> v = v2"
+  assume a3: "\<And>v b. \<lbrakk>ba_2.choosable v b; \<exists>q\<in>quorums. \<forall>a\<in>q. b \<le> ballot1 a\<rbrakk> \<Longrightarrow> ba_1.choosable v b"
+  { fix nn :: nat and vv :: 'v
+    have "\<forall>A n. \<exists>a. \<forall>v va. (A \<notin> quorums \<or> \<not> ba_2.choosable v n \<or> a \<in> A \<or> ba_1.choosable v n) \<and> (A \<notin> quorums \<or> \<not> n \<le> ballot1 a \<or> \<not> ba_2.choosable va n \<or> ba_1.choosable va n)"
+      using a3 by metis
+    then have "\<not> nn < b \<or> vv = v \<or> \<not> ba_2.choosable vv nn"
+      using a2 a1 by (metis dual_order.trans nat_less_le) }
+  then show "\<forall>n va. n < b \<and> ba_2.choosable va n \<longrightarrow> v = va"
+    by metis
+qed
+
+text {* To use this lemma, we will have to prove that @{term ballot_array.leader_driven_array}
+  is invariant. However this is not the case in the recovery Paxos, since an acceptor can 
+  jump back ballots. *}
+
+lemma safe_votes:
+  assumes ba_1.safe and ba_1.leader_driven_array and ba_2.leader_driven_array
+    and "\<And> b a v . \<lbrakk>vote1 a b \<noteq> vote2 a b; vote2 a b = Some v\<rbrakk> \<Longrightarrow> ba_1.safe_at v b \<and> ballot1 a = b"
+    and "\<And> a . ballot1 a = ballot2 a"
+  shows ba_2.safe 
+  nitpick[card 'v = 2, card 'a = 3, verbose, card nat = 2, card "'v option" = 3, card "nat option" = 3, expect=none]
+proof (auto simp add:ballot_array.safe_def split:option.splits)
+  fix a b v
+  assume 1:"vote2 a b = Some v"
+  show "ba_2.safe_at v b"
+  proof (cases "vote1 a b = Some v")
+    case True
+    with assms(1,2) and safe_at_mono show ?thesis 
+      apply (auto simp add:ba_1.safe_def ba_1.leader_driven_array_def
+          ba_2.leader_driven_array_def ba_1.safe_at_def ba_2.safe_at_def split:option.splits)
+      by (metis (full_types))
+  next
+    case False
+    have "ba_1.safe_at v b" using assms(4) 1 False by force
+    moreover obtain q where "q \<in> quorums" and "ba_1.joined b q" 
+    proof -
+      obtain q where "q \<in> quorums" and "ba_2.joined b q" using 1 assms(3) by (force simp add:ba_2.leader_driven_array_def)
+      thus ?thesis using that assms(5)  by (simp add:ba_2.joined_def ba_1.joined_def)
+    qed
+    ultimately show ?thesis using safe_at_mono by force
+  qed
+qed
+    
+end
+
+>>>>>>> giuliano_2
 end
