@@ -83,7 +83,7 @@ definition max_vote where max_vote_def:
 
 definition sugg where sugg_def: "sugg s i b q \<equiv>
   let m = max_vote s i b q in if m = {} then None else Some (the_elem (fst ` m))"
-
+  
 definition joined where 
   -- {* q joined ballot b and all its members have info starting at least from instance i. *}
   "joined s q b i \<equiv> \<forall> a \<in> q .  case onebs s a b of Some (j,f) \<Rightarrow> j \<le> i  | None \<Rightarrow> False"

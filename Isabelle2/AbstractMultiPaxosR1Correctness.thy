@@ -7,11 +7,7 @@ begin
 
 locale ampr1_proof = IOA + quorums quorums + ampr1_ioa quorums for
      quorums :: "'a set set" +
-<<<<<<< HEAD
-  fixes the_ioa :: "(('v, 'a, 'l) ampr1_state, 'v paxos_action) ioa"
-=======
   fixes the_ioa :: "(('v, 'a) ampr1_state, ('a,'v) paxos_action) ioa"
->>>>>>> giuliano_2
   defines "the_ioa \<equiv> ioa"
 begin
 
@@ -27,11 +23,7 @@ lemmas ioa_defs =
 
 declare propose_def[simp] join_ballot_def[simp] do_vote_def[simp] suggest_def[simp]
   learn_def[simp] Let_def[simp] if_splits[split] acquire_leadership_def[simp]
-<<<<<<< HEAD
-  join_started_ballot_def[simp]
-=======
   join_started_ballot_def[simp] recover_def[simp] crash_def[simp]
->>>>>>> giuliano_2
 
 named_theorems inv_defs
 
@@ -68,11 +60,6 @@ method simp_inv uses invs declares inv_defs =
 
 subsection {* Invariants *}
 
-<<<<<<< HEAD
-definition inv3 where inv3_def[inv_defs]:
-  -- {* acceptors only vote for the suggestion. *}
-  "inv3 s \<equiv> \<forall> i a b . let v = vote s a i b in v \<noteq> None \<longrightarrow> v = suggestion s i b"
-=======
 definition inv10 where inv10_def[inv_defs]:
   "inv10 s \<equiv> \<forall> i b v . (suggestion s i b = Some v \<longrightarrow> twoas s i b = Some v)"
   
@@ -99,7 +86,6 @@ lemma inv11: "invariant the_ioa inv11"
 definition inv3 where inv3_def[inv_defs]:
   -- {* acceptors only vote for the suggestion. *}
   "inv3 s \<equiv> \<forall> i a b . let v = vote s a i b in v \<noteq> None \<longrightarrow> v = twoas s i b"
->>>>>>> giuliano_2
   
 context begin
   -- {* Proof of @{term inv3} *}
@@ -107,24 +93,6 @@ context begin
 private definition inv1 where inv1_def[inv_defs]:
   "inv1 s \<equiv> \<forall> b . inst_status s b \<noteq> None \<longrightarrow> ballot s (leader b) \<ge> b"
   
-<<<<<<< HEAD
-private lemma inv1: "invariant the_ioa inv1" by (force_inv)
-
-private definition inv2 where inv2_def[inv_defs]:
-  "inv2 s \<equiv> \<forall> a b i . leader b = a \<and> (ballot s a < b \<or> (ballot s a = b \<and> inst_status s b = None))
-    \<longrightarrow> suggestion s i b = None"
-
-private lemma inv2: "invariant the_ioa inv2"
-  apply (simp_inv invs:inv1)
-   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force split:option.splits)
-  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; simp) by (metis fun_upd_apply)
-
-lemma inv3: "invariant the_ioa inv3" 
-  apply (simp_inv invs:inv2)
-   apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; force)
-  apply (simp add:ioa_defs inv_defs; case_tac s; case_tac t; auto split:option.splits)
-  by (metis fun_upd_apply option.distinct(1))
-=======
 private lemma inv1: "invariant the_ioa inv1" apply (simp_inv)
       apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)[1]
       apply (case_tac s; case_tac t; auto simp add:inv_defs split:option.splits)[1] defer
@@ -146,7 +114,6 @@ private lemma inv2: "invariant the_ioa inv2" oops
 lemma inv3: "invariant the_ioa inv3" 
   apply (simp_inv invs:inv2) defer defer
   apply (case_tac s; case_tac t; auto simp add: inv_defs split:option.splits) sorry
->>>>>>> giuliano_2
 
 end
 
@@ -166,11 +133,7 @@ definition safe_at where "safe_at s i \<equiv> dsa.safe_at (ballot s) (flip (vot
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic. A key lemma to simplify invariant proofs. *}
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "safe_at s i v b"
-<<<<<<< HEAD
-  shows "safe_at t i v b"
-=======
   shows "safe_at t i v b" oops
->>>>>>> giuliano_2
 proof -
   have "is_prefix (ballot s) (ballot t) (flip (vote s) i) (flip (vote t) i)" using \<open>s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t\<close>
     by (simp add:inv_defs ioa_defs; induct_tac rule:trans_cases, auto simp add:is_prefix_def inv_defs split:option.split_asm)
@@ -187,30 +150,12 @@ method inv_cases_3 uses invs declares inv_defs =
 definition safe where "safe s \<equiv> \<forall> a i b . case vote s a i b of Some v \<Rightarrow> safe_at s i v b | _ \<Rightarrow> True"
 
 definition inv4 where inv4_def[inv_defs]:"inv4 s \<equiv> \<forall> i b . 
-<<<<<<< HEAD
-  case suggestion s i b of Some v \<Rightarrow> 
-=======
   case twoas s i b of Some v \<Rightarrow> 
->>>>>>> giuliano_2
     (case inst_status s b of Some f \<Rightarrow>
       (case f i of None \<Rightarrow> True | Some w \<Rightarrow> v = w)
     | None \<Rightarrow> False)
   | None \<Rightarrow> True"
   
-<<<<<<< HEAD
-lemma inv4:"invariant the_ioa inv4"
-  apply (simp_inv; (simp add:ioa_defs inv_defs; case_tac s; case_tac t; clarify; simp split:option.splits))
-      apply (metis option.collapse option.distinct(1))
-     apply (metis option.collapse option.distinct(1)) 
-    apply (metis option.collapse option.distinct(1)) 
-   apply auto
-      apply fastforce
-     apply (metis option.collapse option.distinct(1))
-    apply (metis fun_upd_apply option.distinct(1) option.inject)
-    apply (metis fun_upd_apply option.distinct(1))
-   apply (metis fun_upd_apply)
-  by (metis option.collapse option.distinct(1))
-=======
 lemma inv4:"invariant the_ioa inv4" oops
   apply (simp_inv invs:inv10; 
       (case_tac s; case_tac t; auto simp add:ioa_defs inv_defs split!:option.splits))
@@ -218,7 +163,6 @@ lemma inv4:"invariant the_ioa inv4" oops
       apply (metis fun_upd_triv map_upd_eqD1 option.distinct(1))
      apply fastforce+
   done
->>>>>>> giuliano_2
 
 definition inst_status_inv where inst_status_inv_def[inv_defs]:
   "inst_status_inv s \<equiv> (\<forall> b . case inst_status s b of Some f \<Rightarrow> 
@@ -264,12 +208,8 @@ lemma the_inv:"invariant the_ioa the_inv"
         apply (simp add:ioa_defs inv_defs safe_def ballot_array.safe_def safe_at_def dsa_p.safe_at_0)
        apply (simp add:ioa_defs inv_defs safe_def split:option.splits)
        apply (metis option.distinct(1))
-<<<<<<< HEAD
-      apply (simp add:inv_defs split:option.splits)
-=======
         apply (simp add:inv_defs safe_def split:option.splits) apply auto[1]
   apply (metis option.distinct(1))
->>>>>>> giuliano_2
   subgoal premises prems for s t _ a b (* join_ballot *)
   proof (auto simp add:the_inv_def)
     from \<open>join_ballot a b s t\<close> have 1:"inst_status t = inst_status s" and 2:"vote t = vote s" by auto
@@ -282,11 +222,7 @@ lemma the_inv:"invariant the_ioa the_inv"
   subgoal premises prems for s t _ a i v (* do_vote *)
   proof (auto simp add:the_inv_def)
     note mono = \<open>(\<And>i v b. safe_at s i v b \<Longrightarrow> safe_at t i v b)\<close>
-<<<<<<< HEAD
-    have 1:"\<And> i b v . suggestion s i b = Some v \<Longrightarrow> safe_at s i v b" using \<open>the_inv s\<close> \<open>inv4 s\<close>
-=======
     have 1:"\<And> i b v . twoas s i b = Some v \<Longrightarrow> safe_at s i v b" using \<open>the_inv s\<close> \<open>inv4 s\<close>
->>>>>>> giuliano_2
       by (fastforce simp add:safe_def inv_defs split:option.splits)
     show "safe t" using \<open>the_inv s\<close> mono \<open>do_vote a i v s t \<close> 1
       by (auto simp add:safe_def inv_defs split:option.splits)
@@ -371,16 +307,10 @@ lemma the_inv:"invariant the_ioa the_inv"
         by (smt option.case_eq_if option.distinct(1) option.sel)
     qed
   qed
-<<<<<<< HEAD
-  apply (simp add:ioa_defs inv_defs safe_def split:option.splits; metis option.distinct(1))
-  done
-  
-=======
    apply (simp add:ioa_defs inv_defs safe_def split:option.splits; metis option.distinct(1))
   apply (simp add:ioa_defs inv_defs safe_def split:option.splits; metis option.distinct(1))
   done
 
->>>>>>> giuliano_2
 end
 
 definition inv7 where inv7_def[inv_defs]:
@@ -391,24 +321,6 @@ proof -
   { fix s
     assume "the_inv s" and "inv3 s" and "inv4 s"
     hence "flip (vote s) i a b = Some v \<longrightarrow> safe_at s i v b" for a i b v  apply (simp add:inv_defs) by (metis (no_types) option.simps(5) safe_def)
-<<<<<<< HEAD
-    hence "inv7 s"   by (simp add:ballot_array.safe_def safe_at_def inv7_def split:option.splits) }
-  thus ?thesis by (smt IOA.invariant_def inv4 inv3 the_inv) 
-qed
-
-context begin
--- {* Is this stuff needed? *}
-
-private
-definition inv6 where
-  inv6_def[inv_defs]:"inv6 s \<equiv> \<forall> i a b . ballot s a < b \<longrightarrow> flip (vote s) i a b = None"
-  
-private
-lemma  inv6:"invariant the_ioa inv6"
-by (force_inv)
-
-end
-=======
     hence "inv7 s" by (simp add:ballot_array.safe_def safe_at_def inv7_def split:option.splits) }
   thus ?thesis by (smt IOA.invariant_def inv4 inv3 the_inv) 
 qed
@@ -460,7 +372,6 @@ definition inv9 where inv9_def[inv_defs]:
 lemma inv9:"invariant the_ioa inv9"
   by ( (inv_cases_2, simp add:ioa_defs inv_defs); 
       (trans_case \<open>insert_chosen_mono\<close> invs:; auto simp add:inv_defs  split:option.splits)? )
->>>>>>> giuliano_2
 
 end
 
