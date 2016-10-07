@@ -1,5 +1,5 @@
 theory MultiPaxos5
-imports Main LinorderOption "~~/src/HOL/Library/FinFun" "../../IO-Automata/IOA" 
+imports Main LinorderOption FinFun_Supplemental IOA
 begin
 
 text {* A version of MultiPaxos using FinFuns *}

@@ -1,3 +1,5 @@
+section {* Quorums *}
+
 theory Quorums
 imports Main
 begin
@@ -22,6 +24,8 @@ lemma quorums_value_same:
 by (metis quorum_inter_witness)
 
 end
+
+subsection {* Quorums defined in terms of cardinality. *}
 
 locale card_quorums = 
   fixes acceptors

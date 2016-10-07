@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR3Correctness
-imports AbstractMultiPaxosR1 AbstractMultiPaxosR3 "../../IO-Automata/Simulations"
+imports AbstractMultiPaxosR1 AbstractMultiPaxosR3 Simulations
 begin
 
 locale ampr2_proof = IOA + quorums quorums + ampr2_ioa quorums for

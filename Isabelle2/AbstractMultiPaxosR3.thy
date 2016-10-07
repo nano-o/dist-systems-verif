@@ -1,162 +1,366 @@
+chapter {* Distributed and executable algorithm *}
+
 theory AbstractMultiPaxosR3
-imports  AbstractMultiPaxosR1 "~~/src/HOL/Library/FinFun_Syntax"
+  imports Utils FinFun_Supplemental MaxByKey IOA Quorums Paxos_Sig
 begin
 
-text {*
-1) Acceptors vote for a suggestion, and leaders use the distributed implementation of the safe-at computation.
-2) Explicit 1b messages.
-3) Explicit learning.
-4) Catch-up.
-5) Localizing suggestions (the leader function).
-6) Explicit leadership acquisition.
-7) Per-acceptor state.
-8) finfuns.
-*}
+unbundle finfun_syntax
 
-record ('v,'a,'l) ampr2_state =
-  propCmd :: "'v set"
-  ballot :: "'a \<Rightarrow>f bal"
-  vote :: "'a \<Rightarrow>f inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
-  suggestion :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
-  onebs :: "'a \<Rightarrow>f bal \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option"
-  learned :: "'l \<Rightarrow>f inst \<Rightarrow>f 'v option"
-  leader :: "'a \<Rightarrow>f bool"
+type_synonym bal = nat
+type_synonym inst = nat
 
-locale ampr2_ioa = IOA + ampr1:amp_ioa quorums leading for quorums :: "'a set set" and leading
+section {* Local state and transitions *}
+
+subsection {* Data structures *}
+
+record ('a, 'v) acc =
+  -- {* The local state of an acceptor. *}
+  id :: 'a
+  acceptors :: "'a set"
+  ballot :: bal
+  decision :: "inst \<Rightarrow>f 'v option"
+    -- {* Last ballot in which the acceptor voted. *}
+  inst_status :: "bal \<Rightarrow>f (inst \<Rightarrow>f 'v option) option"
+    -- {* Mirrors the member of the same name in R1 *}
+  proposal :: "inst \<Rightarrow>f bal \<Rightarrow>f 'v option"
+  votes :: "inst \<Rightarrow>f ('v \<times> bal) option"
+  onebs :: "bal \<Rightarrow>f ('a \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option)"
+    -- {* The oneb messages received when the acceptor tries to acquire leadership. 
+    Note that we need the outermost option to signify that we did not receive a oneb message
+    from the acceptor, as opposed to receiving a oneb message from an acceptor that never voted.  *}
+  twobs :: "inst \<Rightarrow>f bal \<Rightarrow>f 'a set"
+    -- {* the twob messages received (they are broadcast). *}
+
+datatype ('aa,'vv) msg =
+  Phase1a bal
+  | Phase1b 'aa bal "inst \<Rightarrow>f ('vv \<times> bal) option"
+  | Phase2a inst bal 'vv
+  | Phase2b 'aa inst bal 'vv
+  | Fwd 'vv
+  
+datatype ('aa,'vv) packet =
+  Packet 'aa  "('aa,'vv) msg"
+
+locale amp_r3 =
+  fixes leader :: "bal \<Rightarrow> 'a::linorder"
+  and next_bal :: "bal \<Rightarrow> 'a \<Rightarrow> bal"
+  and as :: "'a set"
+  and quorums :: "'a set set"
 begin
 
-definition asig where
-  "asig \<equiv>
-    \<lparr> inputs = { ampr1.Propose c | c . True},
-      outputs = { ampr1.Learn i v l | i v l . True},
-      internals = {ampr1.Internal}\<rparr>"
+definition local_start where "local_start a \<equiv>
+  \<lparr>id = a, acceptors = as, ballot = 0, decision = K$ None, inst_status = K$ None,
+  proposal = K$ K$ None, votes = K$ None, onebs = K$ K$ None, twobs = K$ K$ {}\<rparr>"
+  
+end
 
-definition start where
-  -- {* The initial states *}
-  "start \<equiv> {\<lparr>propCmd = {}, ballot = K$ 0, vote = K$ K$ K$ None, 
-    suggestion = K$ K$ None, onebs = K$ K$ None, learned = K$ K$ None,
-    leader = (K$ False)(leading 0 $:= True)\<rparr>}"
+subsection {* The propose action *}
 
-subsection {* The transitions *}
+definition send_all where send_all_def[code del]:
+  "send_all s m \<equiv> { Packet a m | a . a \<in> acceptors s \<and> a \<noteq> id s}"
+  -- {* TODO: This definition does not always work for code generation. Why? 
+  That's why there is a code equation below. *}
+  
+lemma send_all_code[code]:
+  "send_all s m = (flip Packet m) ` (acceptors s - {id s})"
+  by (auto simp add:send_all_def)
 
-definition max_by_key where
-  "max_by_key vs f \<equiv>
-    let keys = image f vs;
-    max_key = Max keys;
-    max_pair = Set.filter (\<lambda>x. f x = max_key) vs
-    in the_elem (Set.bind max_pair (\<lambda>x. {x}))"
+fun first_hole :: "nat list \<Rightarrow> nat" where 
+  "first_hole [] = 0"
+| "first_hole [x] = Suc x"
+| "first_hole (x#y#xs) = (if y = Suc x then first_hole (y#xs) else Suc x)"
 
-definition acc_max where
-  -- {* @{term acc_max} can be computed locally by an acceptor. *}
-  "acc_max vote_impl a bound \<equiv> (let bals = [1..<bound];
-    nbals = filter (\<lambda>b. vote_impl a b \<noteq> None) bals in
-    if (length nbals \<noteq> 0)
-    then (let vbals = map (\<lambda>b. (the (vote_impl a b), b)) nbals in Some (max_by_key (set vbals) snd))
-    else None)"
+lemma first_hole_lemma:
+  assumes "sorted l" and "distinct l"
+    shows "first_hole l \<notin> set l" and "l \<noteq> [] \<Longrightarrow> first_hole l > hd l"
+proof -
+  have "first_hole l \<notin> set l \<and> (l \<noteq> [] \<longrightarrow> first_hole l > hd l)"
+    using assms
+  proof (induct l rule:first_hole.induct)
+    case 1
+    then show ?case
+      by simp 
+  next
+    case (2 x)
+    then show ?case
+      by simp
+  next
+    case (3 x y xs)
+    from "3.prems" have 4:"sorted (y#xs)" and 5:"distinct (y#xs)" using sorted_Cons by auto
+    show ?case proof (cases "y = Suc x")
+      case True
+      hence 6:"first_hole (x#y#xs) = first_hole (y#xs)" by auto
+      have 7:"y < first_hole (y#xs)" using 4 5 3 True by auto
+      show ?thesis using 3 4 5 6 7 True by auto
+    next
+      case False
+      with \<open>sorted (x#y#xs)\<close> and \<open>distinct (x#y#xs)\<close> have "\<And> z . z \<in> set (y#xs) \<Longrightarrow> z > Suc x"
+        apply auto by (metis Suc_lessI le_imp_less_or_eq le_less_Suc_eq le_trans sorted_Cons)
+      then show ?thesis apply simp using not_less by blast
+    qed
+  qed
+  thus "first_hole l \<notin> set l" and "l \<noteq> [] \<Longrightarrow> first_hole l > hd l"
+    by auto
+qed
+  
+context amp_r3
+begin
 
-definition max_pair where
-  "max_pair q a_max \<equiv> 
-    let acc_maxs = Union ((\<lambda> a . case a_max a of None \<Rightarrow> {} | Some (v,b) \<Rightarrow> {(v,b)}) ` q)
-    in
-      if acc_maxs = {} then None
-      else Some (max_by_key acc_maxs snd)"
+definition next_inst where "next_inst s \<equiv> let b = ballot s in 
+  first_hole (finfun_to_list (the (inst_status s $ b)))"
+  
+lemma next_inst_lemma:
+  fixes s 
+  assumes "inst_status s $ (ballot s) = Some f" and "finfun_default f = None"
+  shows "f $ (next_inst s) = None"
+proof -
+  let ?b="ballot s"
+  let ?l="finfun_to_list (the (inst_status s $ ?b))" 
+  have 2:"distinct ?l" and 3:"sorted ?l" by (simp_all add: distinct_finfun_to_list sorted_finfun_to_list)
+  moreover have "next_inst s = first_hole (finfun_to_list f)" using assms(1) unfolding next_inst_def  by auto
+  ultimately show "f $ (next_inst s) = None" using assms first_hole_lemma[OF 3 2] by (auto simp add:next_inst_def finfun_dom_conv)
+qed
+  
+definition do_2a where "do_2a s v \<equiv>
+  let
+    i = next_inst s;
+    b = ballot s;
+    s' = s\<lparr>proposal := (proposal s)(i $:= (proposal s $ i)(b $:= Some v)),
+      twobs := (twobs s)(i $:= (twobs s $ i)(b $:= {id s}))\<rparr>;
+    msgs = send_all s (Phase2a i b v)
+  in (s', msgs)"
+ 
+definition propose where "propose s v \<equiv> 
+  let l = leader (ballot s) in
+    if l = id s
+    then (do_2a s v)
+    else (s, {Packet l (Fwd v)})"
+  -- {* TODO: Here we loose the proposal if it happens during an unsuccessful leadership acquisition attempt. *} 
 
-definition propose where
-  "propose c r r' \<equiv> (r' = r\<lparr>propCmd := (propCmd r) \<union> {c}\<rparr>)"
+subsection {* The @{text receive_fwd} action *}
 
-definition join_ballot where
-  "join_ballot a b s s' \<equiv> 
-    let insts = finfun_to_list (vote s $ a);
-    obs = (onebs s $ a $ b);
-    onebs' = if (obs = None) then (fold (\<lambda> i ob. ob(i $:= ((acc_max (\<lambda> a b. vote s $ a $ i $ b)) a b))) insts (K$ None))
-      else (fold (\<lambda> i ob. ob(i $:= (acc_max (\<lambda> a b. vote s $ a $ i $ b) a b))) insts (the obs))
-    in
-      b > (ballot s $ a) 
-      \<and> s' = s\<lparr>ballot := (ballot s)(a $:= b),
-        onebs := (onebs s)(a $:= (onebs s $ a)(b $:= Some onebs')),
-        leader := (ampr2_state.leader s)(a $:= False)\<rparr>"
+definition receive_fwd where "receive_fwd s v \<equiv>
+  let l = leader (ballot s) in
+    if l = id s
+    then do_2a s v
+    else (s, {Packet l (Fwd v)})"
+  -- {* TODO: Here we loose the proposal if it happens during an unsuccessful leadership acquisition attempt. *}
+  
+end
 
-definition acquire_leadership where
-  "acquire_leadership a q s s' \<equiv> let b = ballot s $ a in 
-    leading b = a
-    \<and> q \<in> quorums
-    \<and> \<not> ampr2_state.leader s $ a 
-    \<and> (\<forall> a \<in> q . onebs s $ a $ b \<noteq> None)
-    \<and> s' = s\<lparr>leader := (ampr2_state.leader s)(a $:= True), 
-        suggestion := (let insts = finfun_to_list (the (onebs s $ a $ b)) in
-          (fold (\<lambda> i ss. ss(i $:= (ss $ i)(b $:=
-            map_option fst (max_pair q (\<lambda> a . (the (onebs s $ a $ b)) $ i))))) insts (suggestion s)))\<rparr>"
+subsection {* The @{text try_acquire_leadership} action *}
 
-definition suggest where "suggest a i b v s s' \<equiv>
-          v \<in> propCmd s
-        \<and> ballot s $ a = b
-        \<and> ampr2_state.leader s $ a
-        \<and> (suggestion s $ i) $ b = None
-        \<and> s' = s\<lparr>suggestion := (suggestion s)(i $:= (suggestion s $ i)(b $:= Some v))\<rparr>"
+context amp_r3 begin
 
-definition do_vote where
-  "do_vote a i v s s' \<equiv> let b = ballot s $ a in
-          vote s $ a $ i $ b = None
-        \<and> (suggestion s $ i) $ b = Some v
-        \<and> s' = s\<lparr>vote := (vote s)(a $:= (vote s $ a)(i $:= (vote s $ a $ i)(b $:= Some v)))\<rparr>"
+definition try_acquire_leadership where "try_acquire_leadership s \<equiv>
+  let
+    a = id s;
+    b = next_bal (ballot s) a;
+    s' = s\<lparr>onebs := (onebs s)(b $:= ((onebs s) $ b)(a $:= Some (votes s))), 
+      ballot := b\<rparr>;
+    msgs = send_all s (Phase1a b)
+  in (s', msgs)"
 
-abbreviation chosen where
-  "chosen vote_impl s i v \<equiv> (let bals = finfun_to_list (suggestion s $ i);
-    qs = filter (\<lambda>b. (Set.filter (\<lambda>q. ((Set.filter (\<lambda>a. vote_impl a b = (Some v)) q) = q)) quorums) \<noteq> {}) bals
-    in qs \<noteq> [])"
+subsection {* The @{text receive_1a} action *}
 
-definition learn where
-  "learn l i v s s' \<equiv> 
-    chosen (\<lambda> a b. vote s $ a $ i $ b) s i v \<and> s' = s\<lparr>learned := (learned s)(l $:= (learned s $ l)(i $:= Some v))\<rparr>"
+definition receive_1a where "receive_1a s b \<equiv> 
+  if b > ballot s then let
+      msgs = {Packet (leader b) (Phase1b (id s) b (votes s))};
+      s' = s\<lparr>ballot := b\<rparr>
+    in (s', msgs)
+  else (s, {})"
+  
+end 
 
-definition catch_up where
-  "catch_up l1 l2 i v s s' \<equiv> learned s $ l2 $ i = Some v
-    \<and> s' = s\<lparr>learned := (learned s)(l1 $:= (learned s $ l1)(i $:= Some v))\<rparr>"
+subsection {* The @{text receive_1b} action *}
 
-fun trans_rel where
-  "trans_rel r (ampr1.Propose c) r' = propose c r r'"
-| "trans_rel r ampr1.Internal r' = (
-    (\<exists> a b . join_ballot a b r r')
-    \<or> (\<exists> a i v . do_vote a i v r r')
-    \<or> (\<exists> a i b v . suggest a i b v r r')
-    \<or> (\<exists> l1 l2 i v . catch_up l1 l2 i v r r')
-    \<or> (\<exists> a q . acquire_leadership a q r r'))"
-| "trans_rel r (ampr1.Learn i v l) r' = learn l i v r r'"
+locale receive_1b =
+  fixes onebs :: "'a \<Rightarrow>f (inst \<Rightarrow>f ('v\<times>bal) option) option"
+  fixes q :: "'a set"
+  fixes decision :: "inst \<Rightarrow>f 'v option"
+  fixes b :: bal
+begin
 
-lemma trans_cases[consumes 1]:
-  assumes "trans_rel r a r'"
-  obtains 
-  (propose) c where "propose c r r'"
-| (learn) l i v where "learn l i v r r'"
-| (join_ballot) a b where "join_ballot a b r r'"
-| (do_vote) a i v where "do_vote a i v r r'"
-| (suggest) a i b v where "suggest a i b v r r'"
-| (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'"
-| (acquire) a q where "acquire_leadership a q r r'"
-using assms by induct auto
+text {* Why not do things with @{term finfun_rec}? *}
 
-lemma trans_cases_2[consumes 1]:
-  assumes "trans_rel r aa r'"
-  obtains 
-  (propose) c where "propose c r r'" and "aa = ampr1.amp_action.Propose c"
-| (learn) l i v where "learn l i v r r'" and "aa = ampr1.amp_action.Learn i v l"
-| (join_ballot) a b where "join_ballot a b r r'" and "aa = ampr1.amp_action.Internal"
-| (do_vote) a i v where "do_vote a i v r r'" and "aa = ampr1.amp_action.Internal"
-| (suggest) a i b v where "suggest a i b v r r'" and "aa = ampr1.amp_action.Internal"
-| (catch_up) l1 l2 i v where "catch_up l1 l2 i v r r'" and "aa = ampr1.amp_action.Internal"
-| (acquire) a q where "acquire_leadership a q r r'" and "aa = ampr1.amp_action.Internal"
-using assms by induct auto
+text {* Intended to be used when a oneb message has been received from each member of q. *}
 
-definition trans where
-  "trans \<equiv> { (r,a,r') . trans_rel r a r'}"
+definition c where 
+  "c a vs \<equiv> (\<lambda> (vo, vs) . option_as_set vo \<union> vs) o$ ($ the (onebs $ a), vs $)"
+  
+definition pre_votes_per_inst where
+  "pre_votes_per_inst S \<equiv> Finite_Set.fold c (K$ {}) S"
 
-subsection {* The I/O-automaton *}
+definition votes_per_inst where
+  "votes_per_inst \<equiv> pre_votes_per_inst q"
+  
+sublocale folding_idem c "K$ {}"
+  apply (unfold_locales)
+   apply (auto simp add:c_def option_as_set_def fun_eq_iff expand_finfun_eq split!:option.splits)
+  done
+
+lemma votes_per_inst_code[code]:
+  "pre_votes_per_inst (set (x#xs)) = c x (pre_votes_per_inst (set xs))" 
+  using insert_idem[of "set xs" x]
+  by (simp add: eq_fold pre_votes_per_inst_def) 
+
+definition max_per_inst where "max_per_inst \<equiv> (flip max_by_key snd) o$ votes_per_inst"
+  
+definition new_status where "new_status \<equiv>
+  (map_option fst) o$ (\<lambda> m . if m = {} then None else Some (the_elem m)) o$ max_per_inst"
+  
+definition to_propose where "to_propose \<equiv>
+  (\<lambda> (d,s) . case d of Some _ \<Rightarrow> {} | None \<Rightarrow> fst ` s) o$ ($ decision, max_per_inst $)"
+  
+definition msgs where "msgs \<equiv>
+  let 
+    is = finfun_to_list to_propose;
+    to_propose = map (\<lambda> i . (i, to_propose $ i)) is;
+    msg_list = map (\<lambda> (i,vs) . (Phase2a i b) ` vs) to_propose
+  in \<Union> (set msg_list)"
+
+lemma msgs_lemma:
+  "\<And> m . m \<in> msgs \<Longrightarrow> case m of (Phase2a _ _ _) \<Rightarrow> True | _ \<Rightarrow> False"
+  by (auto simp add:local.msgs_def) 
+
+end
+
+global_interpretation r1b:receive_1b onebs as decision b for onebs as decision b
+  defines new_status = receive_1b.new_status and msgs = receive_1b.msgs
+  .
+
+context amp_r3 begin
+
+definition receive_1b where "receive_1b s a b vs \<equiv>
+  let s' = s\<lparr>onebs := (onebs s)(b $:= ((onebs s) $ b)(a $:= Some vs))\<rparr>
+  in (if (set (finfun_to_list (onebs s' $ b)) = acceptors s)
+      \<and> inst_status s $ b = None
+    then let
+        s'' = s'\<lparr>inst_status := (inst_status s)(b $:= Some (new_status (onebs s $ b) (acceptors s)))\<rparr>;
+        msgs = msgs (onebs s $ b) (acceptors s) (decision s) (ballot s)
+      in (s'', \<Union> {send_all s m | m . m \<in> msgs})
+    else (s', {}))"
+
+subsection {* The @{text receive_2a} action *}
+
+abbreviation(input) decided where "decided s i \<equiv> 
+  case (decision s $ i) of Some _ \<Rightarrow> True | _ \<Rightarrow> False"
+  
+definition receive_2a where "receive_2a s i b v \<equiv>
+  if b \<ge> ballot s then
+    let s' = s\<lparr>votes := (votes s)(i $:= Some (v, b)),
+      twobs := (twobs s)(i $:= (twobs s $ i)(b $:= insert (id s) (twobs s $ i $ b))),
+      ballot := b\<rparr>;
+      msgs = send_all s (Phase2b (id s) i b v)
+    in (s', msgs)
+  else (s, {})"
+  
+subsection {* The @{text receive_2b} action *}
+
+definition receive_2b where "receive_2b s i b a v \<equiv>
+  if (~ decided s i)
+  then let
+      s' = s\<lparr>twobs := (twobs s)(i $:= (twobs s $ i)(b $:= insert a (twobs s $ i $ b)))\<rparr>
+    in (
+      if (twobs s' $ i $ b = (acceptors s))
+      then let s'' = s'\<lparr>decision := (decision s)(i $:= Some v)\<rparr>
+        in (s'', {})
+      else (s', {}) )
+  else (s, {})"
+
+subsection {* The @{text process_msg} action *}
+
+fun process_msg where
+  "process_msg s (Phase1a b) = receive_1a s b"
+  | "process_msg s (Phase2a i b v) = receive_2a s i b v"
+  | "process_msg s (Phase2b a i b v) = receive_2b s i b a v"
+  | "process_msg s (Phase1b a b vs) = receive_1b s a b vs"
+  | "process_msg s (Fwd v) = receive_fwd s v"
+
+end
+
+subsection {* Global system IOA. *} 
+
+record ('a,'v) global_state =
+  lstate :: "'a \<Rightarrow> ('a, 'v)acc"
+  network :: "('a, 'v) packet set"
+
+context amp_r3 begin
+
+definition global_start where "global_start \<equiv>
+  \<lparr>lstate = (\<lambda> a . local_start a), network = {}\<rparr>"
+
+inductive trans_rel :: "(('a,'v) global_state \<times> 'v paxos_action \<times> ('a,'v) global_state) \<Rightarrow> bool" where
+  "\<lbrakk>(Packet a m) \<in> network s; process_msg ((lstate s) a) m = (sa', ms); m = Phase2b a i b v;
+    decision ((lstate s) a) \<noteq> decision sa'\<rbrakk>
+    \<Longrightarrow> trans_rel (s, Learn i v, 
+      s\<lparr>lstate := (lstate s)(a := sa'), network := network s \<union> ms\<rparr>)"
+| "\<lbrakk>(Packet a m) \<in> network s; process_msg ((lstate s) a) m = (sa', ms)\<rbrakk>
+    \<Longrightarrow> trans_rel (s, Internal, 
+      s\<lparr>lstate := (lstate s)(a := sa'), network := network s \<union> ms\<rparr>)"
+| "\<lbrakk>propose ((lstate s) a) v = (sa', ms)\<rbrakk>
+    \<Longrightarrow> trans_rel (s, Propose v, 
+      s\<lparr>lstate := (lstate s)(a := sa'), network := network s \<union> ms\<rparr>)"
+| "\<lbrakk>try_acquire_leadership ((lstate s) a) = (sa', ms)\<rbrakk>
+    \<Longrightarrow> trans_rel (s, Internal, 
+      s\<lparr>lstate := (lstate s)(a := sa'), network := network s \<union> ms\<rparr>)"
+  
+inductive_cases trans_rel_cases:"trans_rel (s,a,s')"
+
+abbreviation(input) local_step where "local_step a p r r' \<equiv> 
+  r' = r\<lparr>lstate := (lstate r)(a := fst p), network := network r \<union> snd p\<rparr>"
+  
+lemma trans_cases:
+  assumes "trans_rel (r, act, r')"
+  obtains
+    (propose) a v where "act = Propose v" and "local_step a (propose (lstate r a) v) r r'"
+  | (learn) a i b v m p where "act = Learn i v" and "m = Phase2b a i b v"
+    and "p = receive_2b (lstate r a) i b a v"
+    and "local_step a p r r'"
+    and "Packet a m \<in> network r" 
+    and "decision (lstate r a) \<noteq> decision (fst p)"
+  | (acquire_leadership) a where "act = Internal" and "local_step a (try_acquire_leadership (lstate r a)) r r'"
+  | (receive_1a) a b m p where "act = Internal" and "m = Phase1a b"
+    and "p = receive_1a (lstate r a) b"
+    and "local_step a p r r'"
+    and "Packet a m \<in> network r"
+  | (receive_2a) a i b v m p where "act = Internal" and "m = Phase2a i b v"
+    and "p = receive_2a (lstate r a) i b v"
+    and "local_step a p r r'"
+    and "Packet a m \<in> network r"
+  | (receive_2b) a a2 i b v m p where "act = Internal" and "m = Phase2b a2 i b v"
+    and "p = receive_2b (lstate r a) i b a2 v"
+    and "local_step a p r r'"
+    and "Packet a m \<in> network r"
+  | (receive_1b) a b vs m p a2 where "act = Internal" and "m = Phase1b a2 b vs"
+    and "p = receive_1b (lstate r a) a2 b vs"
+    and "local_step a p r r'"
+    and "Packet a m \<in> network r"
+  | (fwd) a v m p where "act = Internal" and "m = Fwd v"
+    and "p = receive_fwd (lstate r a) v"
+    and "local_step a p r r'"
+    and "Packet a m \<in> network r"
+proof -
+  show ?thesis using assms
+    apply (rule trans_rel_cases)
+       apply (metis fst_conv learn snd_conv)
+      defer
+      apply (metis fst_conv propose snd_conv)
+     apply (metis acquire_leadership fst_conv snd_conv)
+    subgoal premises prems for a m (* TODO: how to apply induct here without subgoal? *)
+      using prems
+      apply (induct rule:process_msg.induct)
+          apply (metis fst_conv process_msg.simps(1) receive_1a snd_conv)
+         apply (metis fst_conv process_msg.simps(2) receive_2a snd_conv)
+        defer
+        apply (metis fst_conv process_msg.simps(4) receive_1b snd_conv)
+       apply (metis amp_r3.process_msg.simps(5) fst_conv fwd snd_conv)
+      by (metis fst_conv process_msg.simps(3) receive_2b snd_conv)
+    done
+qed
 
 definition ioa where
-  "ioa \<equiv> \<lparr>ioa.asig = asig, start = start, trans = trans\<rparr>"
-
-lemmas simps = ioa_def asig_def start_def trans_def propose_def join_ballot_def 
-  do_vote_def learn_def suggest_def catch_up_def acquire_leadership_def
+  "ioa \<equiv> \<lparr>ioa.asig = paxos_asig, ioa.start = {global_start}, ioa.trans = Collect trans_rel\<rparr>"
 
 end
 
