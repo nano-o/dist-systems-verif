@@ -1,7 +1,5 @@
 theory MultiPaxos5
-imports Main  "~~/src/HOL/Library/Monad_Syntax" "~~/src/HOL/Library/Code_Target_Numeral"
-  LinorderOption "~~/src/HOL/Library/FinFun_Syntax" "~~/src/HOL/Library/FSet"
-  "../../IO-Automata/IOA" 
+imports Main LinorderOption "~~/src/HOL/Library/FinFun" "../../IO-Automata/IOA" 
 begin
 
 text {* A version of MultiPaxos using FinFuns *}
@@ -54,7 +52,7 @@ record 'v state =
   ballot :: "bal"
   firstUncommitted :: "inst"
 
-  onebs :: "inst \<Rightarrow>f (acc \<times> bal \<times> ('v cmd option)) list"
+  onebs :: "inst \<Rightarrow>f ((acc \<times> bal \<times> ('v cmd option)) list)"
     -- {* For an acceptor a and a ballot b, lists of 1b-message descriptions, indexed by ballot then instance. *}
 
   next_inst :: "inst"

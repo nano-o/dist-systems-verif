@@ -1,5 +1,5 @@
 theory AbstractMultiPaxosR2
-imports  AbstractMultiPaxosR1Correctness "~~/src/HOL/Library/FinFun_Syntax"
+imports  AbstractMultiPaxosR1Correctness "~~/src/HOL/Library/FinFun"
 begin
 
 text {*
