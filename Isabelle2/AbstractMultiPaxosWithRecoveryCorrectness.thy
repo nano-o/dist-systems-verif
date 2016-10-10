@@ -6,6 +6,7 @@ begin
 
 text {* Guidlines:
   If a state function depends on only part of the state, make this clear by passing it only that part.
+  To maintain reactivity, set a number of threads greater than the number of background tools that can be started.
   *}
 
 nitpick_params [verbose, timeout = 60, finitize nat, dont_box]
@@ -83,8 +84,6 @@ method simp_inv uses invs declares inv_defs =
 method auto_inv uses invs declares inv_defs =
   inv_cases \<open>auto simp add:inv_defs ioa_defs\<close> \<open>-\<close> \<open>(auto simp add:inv_defs split:option.splits; fail)?\<close>
   invs:invs inv_defs:inv_defs
-
-subsection {* Relation between the ghost state and the normal state. *}
 
 subsection {* The instance bound. *}
 
@@ -180,6 +179,9 @@ proof -
     by (metis all_not_in_conv learned_by_one_finite_def infinite_super learned_by_quorum_consec_finite_def quorums_axioms quorums_def) 
   show ?thesis using learned_by_one_finite by (simp add: \<open>\<And>s. learned_by_one_finite s \<Longrightarrow> learned_by_quorum_consec_finite s\<close> IOA.invariant_def)
 qed
+
+lemmas finiteness = learned_by_quorum_consec_finite  learned_by_one_in_quorum_finite
+  learned_by_one_finite
 
 subsection {* Properties of the instance bound. *}
 
@@ -282,7 +284,7 @@ lemma inv2:"invariant the_ioa inv2"
   
 end
 
-subsection {* Other invariants *}
+subsection {* Relation between the ghost state and the normal state. *}
 
 definition inv3 where inv3_def[inv_defs]:
   "inv3 s \<equiv> \<forall> a i . i \<ge> lowest s a  \<longrightarrow> ghost_ballot s a i = ballot s a"
@@ -304,6 +306,44 @@ proof
     apply (simp add:instance_bound_def safe_instance_def) using Max_mono assms(1) le_imp_less_Suc by blast
 qed
    
+definition inv4 where inv4_def[inv_defs]:
+  "inv4 s \<equiv> \<forall> a i b . (ghost_vote s a b i \<noteq> None \<or> vote s a b i \<noteq> None) \<longrightarrow> i \<le> instance_bound (log s)"
+  
+lemma inv4: "invariant the_ioa inv4"                                                                                
+  apply (auto_inv invs:inv1 inv2 finiteness inv_defs:)
+  subgoal premises prems for s t _ a i vs 
+  proof -
+    from prems(12) have "ghost_vote t = ghost_vote s" and "vote t = vote s" by auto
+    moreover
+    have "instance_bound (log t) \<ge> instance_bound (log s)"
+      using learn_increases_instance_bound learned_by_quorum_consec_finite_def prems(12) prems(4) prems(9) by blast 
+    ultimately show ?thesis
+      by (metis (no_types, lifting) dual_order.trans inv4_def prems(1))
+  qed
+  subgoal by (auto simp add:inv4_def; blast)
+  done
+  
+definition inv5 where inv5_def[inv_defs]:
+  "inv5 s \<equiv> \<forall> a i b . (i \<ge> lowest s a \<and> vote s a b i = None) \<longrightarrow> ghost_vote s a b i = None"
+  
+lemma inv5: "invariant the_ioa inv5"                                                                                
+  apply (simp_inv invs:  inv4 learned_by_one_finite)
+   apply (force simp add:inv_defs)
+  subgoal premises prems using prems safe_instance_gt_instance_bound
+    apply (auto simp add:inv_defs)
+    apply (meson inv4_def leD less_le_trans prems(2) safe_instance_gt_instance_bound safe_instance_gt_instance_bound_def)
+    done
+  done
+
+definition inv6 where inv6_def[inv_defs]:
+  "inv6 s \<equiv> \<forall> a i . i \<ge> lowest s a  \<longrightarrow> (\<forall> b . ghost_vote s a b i = vote s a b i)" 
+  
+lemma inv6: "invariant the_ioa inv6"  by (auto_inv invs:inv5)
+  
+lemmas ghost_rel = inv6 inv3
+
+subsection {* Other invariants *}
+
 definition old_inv5 where old_inv5_def[inv_defs]:
   "old_inv5 s \<equiv> \<forall> a b i . ghost_vote s a b i \<noteq> None \<longrightarrow> instance_bound s \<ge> i"
   
