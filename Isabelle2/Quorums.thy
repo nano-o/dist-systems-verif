@@ -8,6 +8,7 @@ locale quorums =
   fixes quorums::"'a set set"
   assumes "\<And> q1 q2 . \<lbrakk>q1 \<in> quorums; q2 \<in> quorums\<rbrakk> \<Longrightarrow> q1 \<inter> q2 \<noteq> {}"
     and "quorums \<noteq> {}" and "\<And> q . q \<in> quorums \<Longrightarrow> finite q"
+    and "finite quorums"
 begin
 
 lemma quorum_inter_witness[elim]:
@@ -64,11 +65,12 @@ qed
 print_locale quorums
 
 sublocale quorums quorums
-apply(unfold_locales)
-    apply (metis inter)
-  apply (metis not_e)
-apply (metis card_quorums_axioms card_quorums_def infinite_super subset)
-done
+  apply(unfold_locales)
+     apply (metis inter)
+    apply (metis not_e)
+   apply (metis card_quorums_axioms card_quorums_def infinite_super subset)
+  apply (meson Union_least card_quorums_axioms card_quorums_def finite_UnionD infinite_super subset)
+  done
 
 end
 
