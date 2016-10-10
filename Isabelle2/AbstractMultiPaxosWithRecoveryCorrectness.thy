@@ -82,34 +82,108 @@ method auto_inv uses invs declares inv_defs =
 
 subsection {* Relation between the ghost state and the normal state. *}
 
+subsubsection {* Existence of the instance bound. *}
+
+definition is_learned_by_set where "is_learned_by_set s i q \<equiv> \<forall> a \<in> q . log s a i \<noteq> None"
+
+definition learned_by_quorum_consec where 
+  "learned_by_quorum_consec s \<equiv> {i . \<forall> j \<le> i . \<exists> q \<in> quorums . is_learned_by_set s j q}"
+
+definition instance_bound where "instance_bound s \<equiv> 
+  if learned_by_quorum_consec s \<noteq> {} then Max (learned_by_quorum_consec s) + window else window"
+  -- {* No instance greater than that can have any vote. *}
+  
+context begin
+
+private
+definition learned_by_quorum where 
+  "learned_by_quorum s \<equiv> {i . \<exists> q \<in> quorums . is_learned_by_set s i q}"
+  
+private
+definition instance_bound_bound where "instance_bound_bound s \<equiv> 
+  if learned_by_quorum s \<noteq> {} then Max (learned_by_quorum s) + window else window"
+  
+private 
+lemma l1:"learned_by_quorum_consec s \<subseteq> learned_by_quorum s"
+  by (auto simp add:learned_by_quorum_consec_def learned_by_quorum_def)
+
+private
+lemma l2:
+  assumes "finite (learned_by_quorum s)" and "finite (learned_by_quorum_consec s)"
+  shows "instance_bound_bound s \<ge> instance_bound s" using l1 apply (auto simp add:instance_bound_bound_def 
+      instance_bound_def)
+  by (metis Max.antimono assms(1) equals0D) 
+  
+private  
+lemma l3:
+  assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "finite (learned_by_quorum s)" (is "finite ?S")
+  shows "finite (learned_by_quorum t)" (is "finite ?T")
+proof -
+  from \<open>finite ?S\<close> consider "?S = {}" | j where "j = Max ?S" and "?S \<noteq> {}" by blast
+  then obtain k where "\<And> j . j \<in> learned_by_quorum t \<Longrightarrow> j \<le> k"
+  proof (cases)
+    case 1
+    hence "\<And> k q . \<lbrakk>k > i + length vs; q \<in> quorums\<rbrakk> \<Longrightarrow> \<not> is_learned_by_set t k q" using assms(1)
+      apply (auto simp add:learned_by_quorum_def is_learned_by_set_def) by metis
+    hence "\<And> k . k \<in> learned_by_quorum t \<Longrightarrow> k \<le> i + length vs"
+      apply (auto simp add:learned_by_quorum_def is_learned_by_set_def) by (metis (full_types) not_None_eq not_le)
+    thus ?thesis using that by auto
+  next
+    case 2
+    hence "\<And> k q . \<lbrakk>k > j; q \<in> quorums\<rbrakk> \<Longrightarrow> \<not> is_learned_by_set s k q" 
+      apply (auto simp add:learned_by_quorum_def)
+      by (metis (mono_tags, lifting) "2"(1) "2"(2) Max_less_iff assms(2) learned_by_quorum_def less_not_refl mem_Collect_eq) 
+    hence "\<And> k q . \<lbrakk>k > max (i + length vs) j; q \<in> quorums\<rbrakk> \<Longrightarrow> \<not> is_learned_by_set t k q" using assms(1)
+      apply (auto simp add:learned_by_quorum_def is_learned_by_set_def) by fastforce
+    hence "\<And> k . k \<in> learned_by_quorum t \<Longrightarrow> k \<le> max (i + length vs) j"
+      apply (auto simp add:learned_by_quorum_def is_learned_by_set_def)
+      by (metis max.strict_boundedE not_le option.distinct(1))
+    thus ?thesis using that by auto
+  qed
+  thus ?thesis
+    using finite_nat_set_iff_bounded_le by blast
+qed
+  
+private 
+definition aux_inv0 where aux_inv0_def[inv_defs]:
+  "aux_inv0 s \<equiv> finite (learned_by_quorum s)"
+  
+definition inv0 where inv0_def[inv_defs]:
+  "inv0 s \<equiv> finite (learned_by_quorum_consec s)"
+  
+private  
+lemma aux_inv0: "invariant the_ioa aux_inv0"
+  apply (auto_inv invs: inv_defs:inv_defs learned_by_quorum_def is_learned_by_set_def)
+  subgoal premises prems using l3 prems unfolding aux_inv0_def by blast
+  done
+
+lemma inv0:"invariant the_ioa inv0"
+proof -
+  have "aux_inv0 s \<Longrightarrow> inv0 s" for s using l1 using aux_inv0_def infinite_super inv0_def by blast
+  show ?thesis using aux_inv0 by (simp add: \<open>\<And>s. aux_inv0 s \<Longrightarrow> inv0 s\<close> IOA.invariant_def)
+qed
+
+end
+
 definition inv1 where inv1_def[inv_defs]:
   "inv1 s \<equiv> \<forall> a i . i \<ge> lowest s a  \<longrightarrow> ghost_ballot s a i = ballot s a"
 
 lemma inv1: "invariant the_ioa inv1" by (force_inv)
 
-definition is_decided_by_set where "is_decided_by_set s i q \<equiv> \<forall> a \<in> q . log s a i \<noteq> None"
-
-definition decided_by_quorum where 
-  "decided_by_quorum s \<equiv> {i . \<forall> j \<le> i . \<exists> q \<in> quorums . is_decided_by_set s j q}"
-
-definition instance_bound where "instance_bound s \<equiv> 
-  if decided_by_quorum s \<noteq> {} then Max (decided_by_quorum s) + window else window"
-  -- {* No instance greater than that can have any vote. *}
-  
 lemma learn_mono:
   assumes "learn a i vs (s::('v, 'a) ampr_state) t"
     and "log s a2 j \<noteq> None"
   shows "log t a2 j \<noteq> None" using assms 
   by (auto, metis UnI1 UnI2 add_le_cancel_left atLeastLessThan_iff atLeast_iff nat_le_iff_add not_le zero_le)
 
-lemma learn_increases_decided_by_quorum:
-  assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "finite (decided_by_quorum s)"
-    and "finite (decided_by_quorum t)"
-  shows "decided_by_quorum s \<subseteq> decided_by_quorum t"
+lemma learn_increases_learned_by_quorum_consec:
+  assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "finite (learned_by_quorum_consec s)"
+    and "finite (learned_by_quorum_consec t)"
+  shows "learned_by_quorum_consec s \<subseteq> learned_by_quorum_consec t"
 proof -
   have "log s a j \<noteq> None \<Longrightarrow> log t a j \<noteq> None" for j a using learn_mono[OF assms(1)] by auto
-  thus "decided_by_quorum s \<subseteq> decided_by_quorum t"
-  proof (auto simp add:decided_by_quorum_def is_decided_by_set_def)
+  thus "learned_by_quorum_consec s \<subseteq> learned_by_quorum_consec t"
+  proof (auto simp add:learned_by_quorum_consec_def is_learned_by_set_def)
     fix j k
     assume 1:"\<And> a l . \<exists>y. log s a l = Some y \<Longrightarrow> \<exists>y. log t a l = Some y"
       and 2:"\<forall>l\<le>j. \<exists>q\<in>quorums. \<forall>a\<in>q. \<exists>y. log s a l = Some y" and 3:"k \<le> j" 
@@ -159,11 +233,11 @@ sorry *)
   
 definition inv000 where inv000_def[inv_defs]:
   "inv000 s \<equiv> \<forall> i . (i > window \<and> (\<exists> a . log s a i \<noteq> None)) 
-    \<longrightarrow> (\<forall> j . j < i-window \<longrightarrow> (\<exists> q \<in> quorums . is_decided_by_set s j q))"
+    \<longrightarrow> (\<forall> j . j < i-window \<longrightarrow> (\<exists> q \<in> quorums . is_learned_by_set s j q))"
   
 lemma inv000: "invariant the_ioa inv000"
   apply (simp_inv invs:inv2  inv_defs:inv_defs 
-      decided_by_quorum_def is_decided_by_set_def decided_by_quorum_def)
+      learned_by_quorum_consec_def is_learned_by_set_def learned_by_quorum_consec_def)
   subgoal premises prems using prems amp_proof_axioms apply -
   nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2, dont_box]
@@ -175,40 +249,23 @@ lemma inv000: "invariant the_ioa inv000"
   done
 
 lemma test:
-  assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "j \<in> decided_by_quorum t" and "inv000 s"
+  assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "j \<in> learned_by_quorum_consec t" and "inv000 s"
   shows "j \<le> max (i+length vs) (instance_bound s)" 
   using assms amp_proof_axioms apply -
   nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2] sorry
 
 lemma learn_preserves_finite_decided:
-  assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "finite (decided_by_quorum s)"
-    and "finite (decided_by_quorum t)" and "inv000 s"
-  shows "finite (decided_by_quorum s)" using assms test by auto
+  assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "finite (learned_by_quorum_consec s)"
+    and "finite (learned_by_quorum_consec t)" and "inv000 s"
+  shows "finite (learned_by_quorum_consec s)" using assms test by auto
     
 lemma learn_increases_instance_bound:
-  assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "finite (decided_by_quorum s)"
-    and "finite (decided_by_quorum t)" and "inv000 s"
-  shows "instance_bound t \<ge> instance_bound s" using learn_increases_decided_by_quorum
+  assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "finite (learned_by_quorum_consec s)"
+    and "finite (learned_by_quorum_consec t)" and "inv000 s"
+  shows "instance_bound t \<ge> instance_bound s" using learn_increases_learned_by_quorum_consec
   by (metis (no_types, lifting) Max_mono add_mono_thms_linordered_semiring(3) assms(1) assms(2) assms(3) bot.extremum_uniqueI eq_iff instance_bound_def le_add2)
-  
-definition inv0 where inv0_def[inv_defs]:
-  "inv0 s \<equiv> finite (decided_by_quorum s)"
-  
-lemma inv0: "invariant the_ioa inv0"
-  apply (simp_inv invs:inv000 inv_defs:inv_defs decided_by_quorum_def is_decided_by_set_def)
-  subgoal premises prems using prems amp_proof_axioms
-    using not_finite_existsD by auto 
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2, dont_box]
-  sorry
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2, dont_box]
-  sorry
-  oops
-  
+ 
 definition inv3 where inv3_def[inv_defs]:
   "inv3 s \<equiv> \<forall> i . (\<forall> q \<in> quorums . \<exists> a \<in> q . log s a i = None) 
     \<longrightarrow> (\<forall> j . j > i + window \<longrightarrow> (\<forall> a b . vote s a b j = None))"
@@ -233,7 +290,7 @@ definition inv4 where inv4_def[inv_defs]:
   "inv4 s \<equiv> \<forall> q \<in> quorums . safe_instance s q > instance_bound s"
 
 lemma inv4: "invariant the_ioa inv4"
-  apply (simp_inv invs:inv3 inv_defs:safe_instance_def inv_defs instance_bound_def decided_by_quorum_def is_decided_by_set_def)
+  apply (simp_inv invs:inv3 inv_defs:safe_instance_def inv_defs instance_bound_def learned_by_quorum_consec_def is_learned_by_set_def)
   apply blast
   subgoal premises prems using prems amp_proof_axioms apply -
   nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
@@ -261,7 +318,7 @@ definition inv5 where inv5_def[inv_defs]:
   "inv5 s \<equiv> \<forall> a b i . ghost_vote s a b i \<noteq> None \<longrightarrow> instance_bound s \<ge> i"
   
 lemma inv5: "invariant the_ioa inv5"                                                                                
-  apply (simp_inv invs: inv4 inv3 inv_defs:safe_instance_def inv_defs instance_bound_def decided_by_quorum_def is_decided_by_set_def) 
+  apply (simp_inv invs: inv4 inv3 inv_defs:safe_instance_def inv_defs instance_bound_def learned_by_quorum_consec_def is_learned_by_set_def) 
   subgoal premises prems using prems amp_proof_axioms apply -
   nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
@@ -288,7 +345,7 @@ definition inv6 where inv6_def[inv_defs]:
   "inv6 s \<equiv> \<forall> a i . log s a i \<noteq> None \<longrightarrow> instance_bound s \<ge> i"
   
 lemma inv6: "invariant the_ioa inv6"
-  apply (simp_inv invs: inv2 inv_defs:inv_defs instance_bound_def decided_by_quorum_def is_decided_by_set_def) 
+  apply (simp_inv invs: inv2 inv_defs:inv_defs instance_bound_def learned_by_quorum_consec_def is_learned_by_set_def) 
   subgoal premises prems using prems amp_proof_axioms apply -
   nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
