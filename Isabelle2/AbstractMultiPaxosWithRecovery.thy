@@ -16,7 +16,7 @@ record ('v,'a) ampr_state =
   ghost_vote :: "'a \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v option"
 
 locale ampr_ioa =
-  fixes quorums::"'a set set" and window :: "nat"
+  fixes quorums::"'a set set" and lookahead :: "nat"
 begin
 
 definition start where
@@ -50,10 +50,15 @@ abbreviation proved_safe_at where
 abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (ba_vote s i)"
   
-definition windowed where "windowed s \<equiv>
-  \<forall> a b i . vote s a b i \<noteq> None \<and> i > window
-    \<longrightarrow> (\<forall> j < i - window . (\<exists> q \<in> quorums . \<forall> a \<in> q . log s a j \<noteq> None))"
-  -- {* New votes cannot be cast in instance i before instances lower than @{term "i-window"} 
+definition is_learned_by_set where "is_learned_by_set l i q \<equiv> \<forall> a \<in> q . l a i \<noteq> None"
+
+definition learned_by_quorum_consec where 
+  "learned_by_quorum_consec l \<equiv> {i . \<forall> j \<le> i . \<exists> q \<in> quorums . is_learned_by_set l j q}"
+
+definition bounded where "bounded s \<equiv>
+  \<forall> a b i . (vote s a b i \<noteq> None \<and> i > lookahead)
+    \<longrightarrow> (i-lookahead-1) \<in> learned_by_quorum_consec (log s)"
+  -- {* New votes cannot be cast in instance i before instances lower than @{term "i-lookahead"} 
   have all been completed by a quorum of acceptors. *}
 
 definition do_vote where
@@ -64,7 +69,7 @@ definition do_vote where
         \<and> proved_safe_at s b i q v
         \<and> q \<in> quorums
         \<and> conservative_at s' i
-        \<and> windowed s'
+        \<and> bounded s'
         \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(b := (vote s a b)(i := Some v))),
             ghost_vote := (ghost_vote s)(a := (ghost_vote s a)(b := (ghost_vote s a b)(i := Some v)))\<rparr>"
 
@@ -82,9 +87,10 @@ definition learn where
 
 definition safe_instance where 
   "safe_instance s q \<equiv> let learned = {i . \<exists> a \<in> q . log s a i \<noteq> None} in 
-    if learned \<noteq> {} then Max learned + window + 1 else window+1"
+    if learned \<noteq> {} then Max learned + lookahead + 1 else lookahead+1"
   
-definition crash where
+definition crash where    
+  -- {*TODO: wipe out log too.*}
   "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
     let b = Max {ballot s a | a . a \<in> q}; (* could we join any ballot? *)
       low = safe_instance s q
