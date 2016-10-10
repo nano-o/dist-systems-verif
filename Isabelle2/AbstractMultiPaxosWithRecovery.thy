@@ -85,15 +85,18 @@ definition learn where
         \<and> (\<forall> j \<in> {0..<i} \<union> {i+length vs..} . new_log j = log s a j)
         \<and> s' = s\<lparr>log := (log s)(a := new_log)\<rparr>)"
 
+definition learned_by_one where 
+  "learned_by_one l q \<equiv> {i . \<exists> a \<in> q . l a i \<noteq> None}"
+  
 definition safe_instance where 
-  "safe_instance s q \<equiv> let learned = {i . \<exists> a \<in> q . log s a i \<noteq> None} in 
-    if learned \<noteq> {} then Max learned + lookahead + 1 else lookahead+1"
+  "safe_instance l q \<equiv>
+    if learned_by_one l q \<noteq> {} then Max (learned_by_one l q) + lookahead + 2 else lookahead + 1"
   
 definition crash where    
   -- {*TODO: wipe out log too.*}
   "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
     let b = Max {ballot s a | a . a \<in> q}; (* could we join any ballot? *)
-      low = safe_instance s q
+      low = safe_instance (log s) q
     in
       s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
         lowest := (lowest s)(a := low), 
