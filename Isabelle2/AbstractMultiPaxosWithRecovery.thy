@@ -6,6 +6,8 @@ section {* Definition of the Abstract MultiPaxos I/O-automaton *}
 
 subsection {* State and actions *}
 
+text {* TODO: wipe out the log on a crash; use suggestions *}
+
 record ('v,'a) ampr_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
@@ -99,7 +101,7 @@ definition crash where
       low = safe_instance (log s) q
     in
       s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
-        lowest := (lowest s)(a := low), 
+        lowest := (lowest s)(a := low),
         ghost_ballot := (ghost_ballot s)(a := 
           (\<lambda> i . if i < low then ghost_ballot s a i else b))\<rparr> )"
 
