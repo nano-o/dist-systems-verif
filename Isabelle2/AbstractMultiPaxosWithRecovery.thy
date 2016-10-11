@@ -20,7 +20,18 @@ record ('v,'a) ampr_state =
 locale ampr_ioa =
   fixes quorums::"'a set set" and lookahead :: "nat"
 begin
+  
+definition is_learned_by_set where "is_learned_by_set l i q \<equiv> \<forall> a \<in> q . l a i \<noteq> None"
 
+definition learned_by_quorum_consec where 
+  "learned_by_quorum_consec l \<equiv> {i . \<forall> j \<le> i . \<exists> q \<in> quorums . is_learned_by_set l j q}"
+
+definition instance_bound where "instance_bound l \<equiv> 
+  if learned_by_quorum_consec l \<noteq> {} 
+  then Max (learned_by_quorum_consec l) + lookahead + 1 
+  else lookahead"
+  -- {* No instance greater than that can have any vote. *}
+  
 definition start where
   -- {* The initial state *}
   "start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> a b i . None),
@@ -36,7 +47,9 @@ definition join_ballot where
   "join_ballot a b s s' \<equiv>
     b > (ballot s a) \<and> s' = s\<lparr>ballot := (ballot s)(a := b), 
       ghost_ballot := (ghost_ballot s)(a := 
-        (\<lambda> i . if i < lowest s a then ghost_ballot s a i else b))\<rparr>"
+        (\<lambda> i . if (ghost_ballot s a i) \<le> b \<and> instance_bound (log s) \<ge> i then b else ghost_ballot s a i))\<rparr>"
+  -- {* Note that we increase the ballot only below @{term instance_bound}. 
+  Also, it does not hurt to increase the ghost ballot below lowest because no action will ever be taken again in those instances. *}
 
 interpretation ba:ballot_array quorums ballot vote for ballot vote .
 
@@ -51,11 +64,6 @@ abbreviation proved_safe_at where
 
 abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (ba_vote s i)"
-  
-definition is_learned_by_set where "is_learned_by_set l i q \<equiv> \<forall> a \<in> q . l a i \<noteq> None"
-
-definition learned_by_quorum_consec where 
-  "learned_by_quorum_consec l \<equiv> {i . \<forall> j \<le> i . \<exists> q \<in> quorums . is_learned_by_set l j q}"
 
 definition bounded where "bounded s \<equiv>
   \<forall> a b i . (vote s a b i \<noteq> None \<and> i > lookahead)
@@ -94,10 +102,10 @@ definition safe_instance where
   "safe_instance l q \<equiv>
     if learned_by_one l q \<noteq> {} then Max (learned_by_one l q) + lookahead + 2 else lookahead + 1"
   
-definition crash where    
-  -- {*TODO: wipe out log too.*}
+definition crash where
   "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
-    let b = Max {ballot s a | a . a \<in> q}; (* could we join any ballot? *)
+    let b = Max {ballot s a | a . a \<in> q}; 
+(* could we join any other ballot? Probably, because the acceptor will only participate in instances in which nobody ever voted. *)
       low = safe_instance (log s) q
     in
       s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),

@@ -9,6 +9,10 @@ text {* Guidlines:
   To maintain reactivity, set a number of threads greater than the number of background tools that can be started.
   *}
 
+text {* Ideas: 
+  In the abstract ballot-array model, the asynchronous combination of immutable state (or binary monotonic, acting on the last value) can be done atomically.
+  What examples like the monotonicity of choosable? *}
+
 nitpick_params [verbose, timeout = 60, finitize nat, dont_box]
 
 locale amp_proof = quorums quorums + ampr_ioa quorums for quorums :: "'a set set" +
@@ -84,14 +88,6 @@ method simp_inv uses invs declares inv_defs =
 method auto_inv uses invs declares inv_defs =
   inv_cases \<open>auto simp add:inv_defs ioa_defs\<close> \<open>-\<close> \<open>(auto simp add:inv_defs split:option.splits; fail)?\<close>
   invs:invs inv_defs:inv_defs
-
-subsection {* The instance bound. *}
-
-definition instance_bound where "instance_bound l \<equiv> 
-  if learned_by_quorum_consec l \<noteq> {} 
-  then Max (learned_by_quorum_consec l) + lookahead + 1 
-  else lookahead"
-  -- {* No instance greater than that can have any vote. *}
   
 subsection {* finiteness lemmas. *}
 
@@ -310,7 +306,7 @@ context begin
 definition inv3 where inv3_def[inv_defs]:
   "inv3 s \<equiv> \<forall> a i . i \<ge> lowest s a  \<longrightarrow> ghost_ballot s a i = ballot s a"
 
-lemma inv3: "invariant the_ioa inv3" by (force_inv)
+lemma inv3: "invariant the_ioa inv3" oops
   
 definition safe_instance_gt_instance_bound where safe_instance_gt_instance_bound_def[inv_defs]:
   "safe_instance_gt_instance_bound s \<equiv> \<forall> q \<in> quorums . safe_instance (log s) q > instance_bound (log s)"
@@ -350,11 +346,11 @@ definition inv7 where inv7_def[inv_defs]:
   "inv7 s \<equiv> \<forall> a b i . vote s a b i \<noteq> None \<longrightarrow> ghost_vote s a b i = vote s a b i"
 
 lemma inv7: "invariant the_ioa inv7"
-  by (auto_inv invs: inv6 inv3) 
+  by (auto_inv invs: inv6) 
 
-lemmas ghost_rel = inv3 inv6 inv7
+lemmas ghost_rel = inv6 inv7
 
-end 
+end
 
 subsection {* Other invariants *}
 
@@ -429,7 +425,7 @@ done
 definition inv11 where inv11_def[inv_defs]:
   "inv11 s \<equiv> \<forall> a . let l = lowest s a; j = (l-lookahead-2) in l > lookahead+1 \<longrightarrow>
     (\<exists> q \<in> quorums . \<exists> a \<in> q . log s a j \<noteq> None)"
-  -- {* Superseded?. *}
+  -- {* Superseded?. Probably better to prove that lowest is always below @{term instance_bound}*}
 
 lemma inv11: "invariant the_ioa inv11"
   apply (simp_inv invs: instance_bound_lemmas)
