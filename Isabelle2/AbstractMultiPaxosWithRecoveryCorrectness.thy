@@ -254,7 +254,7 @@ proof -
 qed  
   
 definition inv2 where inv2_def[inv_defs]:
-  -- {* Is this needed? *}
+  -- {* Is this needed? YES *}
   "inv2 s \<equiv> \<forall> i > instance_bound (log s) . \<forall> a . log s a i = None"
   
 lemma learn_increases_instance_bound:
@@ -340,81 +340,21 @@ definition inv6 where inv6_def[inv_defs]:
   
 lemma inv6: "invariant the_ioa inv6"  by (auto_inv invs:inv5)
   
-lemmas ghost_rel = inv6 inv3
+definition inv7 where inv7_def[inv_defs]:
+  "inv7 s \<equiv> \<forall> a b i . vote s a b i \<noteq> None \<longrightarrow> ghost_vote s a b i = vote s a b i"
+
+lemma inv7: "invariant the_ioa inv7"
+  by (auto_inv invs: inv6 inv3) 
+
+lemmas ghost_rel = inv3 inv6 inv7
 
 subsection {* Other invariants *}
-
-definition old_inv5 where old_inv5_def[inv_defs]:
-  "old_inv5 s \<equiv> \<forall> a b i . ghost_vote s a b i \<noteq> None \<longrightarrow> instance_bound s \<ge> i"
-  
-lemma old_inv5: "invariant the_ioa old_inv5"                                                                                
-  apply (simp_inv invs: safe_instance_gt_instance_bound old_inv3 inv_defs:safe_instance_def inv_defs instance_bound_def learned_by_quorum_consec_def is_learned_by_set_def) 
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2]
-  sorry
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
   subgoal premises prems using prems amp_proof_axioms apply -
   nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
   sorry
 done
 
-definition old_inv6 where old_inv6_def[inv_defs]:
-  "old_inv6 s \<equiv> \<forall> a i . log s a i \<noteq> None \<longrightarrow> instance_bound s \<ge> i"
-  
-lemma old_inv6: "invariant the_ioa old_inv6"
-  apply (simp_inv invs: old_inv2 inv_defs:inv_defs instance_bound_def learned_by_quorum_consec_def is_learned_by_set_def) 
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2]
-  sorry
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
-done
-
-definition old_inv7 where old_inv7_def[inv_defs]:
-  "old_inv7 s \<equiv> \<forall> a i b . (i \<ge> lowest s a \<and> vote s a b i = None) \<longrightarrow> ghost_vote s a b i = None"
-  
-lemma old_inv7: "invariant the_ioa old_inv7" 
-  apply (simp_inv invs: old_inv2 old_inv3 safe_instance_gt_instance_bound old_inv5 old_inv6 inv_defs:safe_instance_def inv_defs) 
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
-done
-
-definition old_inv8 where old_inv8_def[inv_defs]:
-  "old_inv8 s \<equiv> \<forall> a i . i \<ge> lowest s a  \<longrightarrow> (\<forall> b . ghost_vote s a b i = vote s a b i)" 
-  
-lemma old_inv8: "invariant the_ioa old_inv8" 
-  by (auto_inv invs:inv3 old_inv2 old_inv3 safe_instance_gt_instance_bound old_inv5 old_inv6 old_inv7)
- 
 definition inv30 where inv30_def[inv_defs]:
   "inv30 s \<equiv> \<forall> a b i . ghost_vote s a b i \<noteq> None
     \<longrightarrow> (\<exists> q \<in> quorums . ballot_array.joined (flip (ghost_ballot s) i) b q)"
@@ -439,20 +379,6 @@ lemma inv30: "invariant the_ioa inv30"
   sorry
   done
 
-definition inv31 where inv31_def[inv_defs]:
-  "inv31 s \<equiv> \<forall> a b i . vote s a b i \<noteq> None \<longrightarrow> ghost_vote s a b i = vote s a b i"
-
-lemma inv31: "invariant the_ioa inv31"
-  apply (simp_inv invs: old_inv2 old_inv3 safe_instance_gt_instance_bound old_inv5 old_inv6 old_inv7 old_inv8 inv30) 
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
-  subgoal premises prems using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  sorry
-  done
 
 definition old_inv9 where old_inv9_def[inv_defs]:
   "old_inv9 s \<equiv> \<forall> a i v . log s a i = Some v \<longrightarrow> ghost_chosen s i v"
