@@ -6,7 +6,7 @@ section {* Definition of the Abstract MultiPaxos I/O-automaton *}
 
 subsection {* State and actions *}
 
-text {* TODO: wipe out the log on a crash; use suggestions *}
+text {* TODO: wipe out the log on a crash; use suggestions; update the ghost ballot when the instance bound increases.  *}
 
 record ('v,'a) ampr_state =
   propCmd :: "'v set"
@@ -90,6 +90,7 @@ abbreviation ghost_chosen where
   "ghost_chosen s i v \<equiv> ba.chosen (ghost_ba_vote s i) v"
 
 definition learn where
+  -- {* TODO: update @{term ghost_ballot}. *}
   "learn a i vs s s' \<equiv> (\<forall> j \<in> {0..<length vs} . chosen s (i+j) (vs!j))
     \<and> (\<exists> new_log . (\<forall> j \<in> {0..<length vs} . new_log (i+j) = Some (vs!j))
         \<and> (\<forall> j \<in> {0..<i} \<union> {i+length vs..} . new_log j = log s a j)
@@ -103,6 +104,7 @@ definition safe_instance where
     if learned_by_one l q \<noteq> {} then Max (learned_by_one l q) + lookahead + 2 else lookahead + 1"
   
 definition crash where
+  -- {* TODO: update log and @{term ghost_ballot}. *}
   "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
     let b = Max {ballot s a | a . a \<in> q}; 
 (* could we join any other ballot? Probably, because the acceptor will only participate in instances in which nobody ever voted. *)
