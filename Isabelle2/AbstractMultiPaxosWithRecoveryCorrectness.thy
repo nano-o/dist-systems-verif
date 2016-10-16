@@ -4,7 +4,7 @@ theory AbstractMultiPaxosWithRecoveryCorrectness
 imports AbstractMultiPaxosWithRecovery "~~/src/HOL/Eisbach/Eisbach_Tools" BallotArrayProperties 
 begin
 
-text {* Guidlines:
+text {* Guidelines:
   If a state function depends on only part of the state, make this clear by passing it only that part.
   To maintain reactivity, set a number of threads greater than the number of background tools that can be started.
   *}
@@ -250,7 +250,6 @@ proof -
 qed  
   
 definition inv2 where inv2_def[inv_defs]:
-  -- {* Is this needed? YES *}
   "inv2 s \<equiv> \<forall> i > instance_bound (log s) . \<forall> a . log s a i = None"
   
 lemma learn_increases_instance_bound:
@@ -264,20 +263,44 @@ lemma inv2:"invariant the_ioa inv2"
   apply (auto_inv invs:inv1 learned_by_quorum_consec_finite inv_defs:inv_defs)
   subgoal premises prems for s t _ a i vs
   proof (auto simp add:inv2_def)
-    fix a i
-    assume 1:"instance_bound (log t) < i"
-    show "log t a i = None" 
-    proof (cases "log s a i = None")
+    fix a2 j
+    assume 1:"instance_bound (log t) < j"
+    show "log t a2 j = None" 
+    proof (cases "log s a2 j = None")
       case True
-      then show ?thesis sorry
+      show ?thesis 
+      proof (rule ccontr)
+        assume 2:"log t a2 j \<noteq> None"
+        with \<open>learn a i vs s t\<close> True have 3:"a2 = a"
+          by auto
+        have "chosen s j (the (log t a2 j))"
+        proof -
+          from \<open>learn a i vs s t\<close> 3 have "\<forall>j\<in>{0..<i} \<union> {i + length vs..} . log s a2 j = log t a2 j"
+            by auto
+          hence 4:"j \<in> {i..<i+length vs}" using 2 True
+            by (metis UnI1 UnI2 atLeastLessThan_iff atLeast_iff leI not_less_zero)
+          hence "chosen s j (vs ! (j-i))" using \<open>learn a i vs s t\<close> apply auto
+            using le_Suc_ex by fastforce
+          moreover have "log t a j = Some (vs ! (j-i))" using \<open>learn a i vs s t\<close> 4
+            apply auto
+            by (metis add_less_imp_less_left atLeastLessThan_iff le_add_diff_inverse le_add_same_cancel1)
+          ultimately show ?thesis using 3 by simp
+        qed
+        with \<open>inv1 s\<close> have "j \<le> instance_bound (log s)" 
+          apply (auto simp add:inv_defs ballot_array.chosen_def ballot_array.chosen_at_def quorums_def)
+          by (metis (full_types) not_less option.distinct(1) quorum_inter_witness)
+        then show False using learn_mono  prems(3,5) learn_increases_instance_bound 1
+          by (meson dual_order.strict_trans1 learned_by_quorum_consec_finite_def not_le prems(6))
+      qed
     next
       case False
-      then show ?thesis using learn_mono prems 1 learn_increases_instance_bound
+      then show ?thesis using learn_mono \<open>inv2 s\<close> \<open>learn a i vs s t\<close> prems(3,5)(* finiteness *) 1 
+          learn_increases_instance_bound
         apply (auto simp add:inv_defs simp del:learn_def) by (meson False le_less_trans)
     qed
   qed
   done
-  
+
 definition inv4 where inv4_def[inv_defs]:
   "inv4 s \<equiv> \<forall> a i b . (ghost_vote s a b i \<noteq> None \<or> vote s a b i \<noteq> None) \<longrightarrow> i \<le> instance_bound (log s)"
   
