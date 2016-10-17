@@ -6,7 +6,7 @@ section {* Definition of the Abstract MultiPaxos I/O-automaton *}
 
 subsection {* State and actions *}
 
-text {* TODO: wipe out the log on a crash; use suggestions; update the ghost ballot when the instance bound increases.  *}
+text {* TODO: wipe out the log on a crash; use suggestions.  *}
 
 record ('v,'a) ampr_state =
   propCmd :: "'v set"
@@ -122,14 +122,13 @@ definition crash where
   necessarily above the instance bound (see the learn action for how the ghost ballot
   will increase when the instance bound increases). *}
   "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
-    let b = Max {ballot s a | a . a \<in> q}; 
+    let b = Max {ballot s a | a . a \<in> q};
 (* could we join any other ballot? Probably, because the acceptor will only participate in instances in which nobody ever voted. *)
       low = safe_instance (log s) q
-    in
-      s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
-        lowest := (lowest s)(a := low) (* ,
-        ghost_ballot := (ghost_ballot s)(a := 
-          (\<lambda> i . if i < low then ghost_ballot s a i else b)) *)\<rparr> )"
+    in (\<exists> new_log . 
+      (\<forall> i v . (new_log i = Some v) = (\<exists> a \<in> q . log s a i = Some v))
+      \<and> s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
+        lowest := (lowest s)(a := low), log := (log s)(a := new_log)\<rparr> ))"
 
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
