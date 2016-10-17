@@ -228,7 +228,8 @@ private lemma aux_inv1: "invariant the_ioa aux_inv1"
     ultimately show ?thesis using prems(1) by (force simp add:inv_defs)
   qed
   subgoal premises prems for s t using prems(1,4)
-    by (cases s, cases t, force simp add:inv_defs learned_by_quorum_consec_def)
+    (* TODO: see the proof of inv2 *)
+    oops
   subgoal premises prems for s t _ a i q v
   proof -
     from prems(4) have "vote t = (vote s)(a := (vote s a)(ballot s a := (vote s a (ballot s a))(i := Some v)))"
@@ -300,6 +301,22 @@ lemma inv2:"invariant the_ioa inv2"
           learn_increases_instance_bound
         apply (auto simp add:inv_defs simp del:learn_def) by (meson False le_less_trans)
     qed
+  qed
+  subgoal premises prems for s t _ a 
+  proof - 
+    have "instance_bound (log t) \<ge> instance_bound (log s)"
+    proof -
+      have "learned_by_quorum_consec (log s) \<subseteq> learned_by_quorum_consec (log t)"
+        using \<open>crash a s t\<close>
+        apply (auto simp add:learned_by_quorum_consec_def is_learned_by_set_def)
+        by (meson quorum_inter_witness)
+      thus ?thesis
+        by (smt Max_mono Suc_eq_plus1 add.commute add_le_cancel_left eq_iff instance_bound_def learned_by_quorum_consec_finite_def less_add_Suc2 less_imp_le prems(5) subset_empty)
+    qed
+    moreover have "log t a2 i \<noteq> log s a2 i \<Longrightarrow> i \<le> instance_bound (log s)" for i a2
+      using \<open>crash a s t\<close> \<open>inv2 s\<close> by (auto simp add:inv_defs)
+    ultimately show ?thesis using \<open>inv2 s\<close> apply (auto simp add:inv_defs)
+      by (metis le_less_trans not_le)
   qed
   done
 
