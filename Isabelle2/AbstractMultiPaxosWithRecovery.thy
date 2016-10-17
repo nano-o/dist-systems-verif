@@ -47,9 +47,11 @@ definition join_ballot where
   "join_ballot a b s s' \<equiv>
     b > (ballot s a) \<and> s' = s\<lparr>ballot := (ballot s)(a := b), 
       ghost_ballot := (ghost_ballot s)(a := 
-        (\<lambda> i . if (ghost_ballot s a i) \<le> b \<and> instance_bound (log s) \<ge> i then b else ghost_ballot s a i))\<rparr>"
+        (\<lambda> i . if (ghost_ballot s a i) \<le> b \<and> instance_bound (log s) \<ge> i 
+          then b else ghost_ballot s a i))\<rparr>"
   -- {* Note that we increase the ballot only below @{term instance_bound}. 
-  Also, it does not hurt to increase the ghost ballot below lowest because no action will ever be taken again in those instances. *}
+  Also, it does not hurt to increase the ghost ballot below lowest because no action 
+  will ever be taken again in those instances. *}
 
 interpretation ba:ballot_array quorums ballot vote for ballot vote .
 
@@ -90,12 +92,24 @@ abbreviation ghost_chosen where
   "ghost_chosen s i v \<equiv> ba.chosen (ghost_ba_vote s i) v"
 
 definition learn where
-  -- {* TODO: update @{term ghost_ballot}. *}
+  "learn a i vs s s' \<equiv> 
+    (\<forall> j \<in> {0..<length vs} . chosen s (i+j) (vs!j))
+    \<and> s' = s\<lparr>log := (log s)(a :=
+        (\<lambda> j . if j \<in> {i..<i+length vs} then Some (vs!(j-i)) else log s a j)), 
+        ghost_ballot := (ghost_ballot s)(a := 
+          (\<lambda> i . if i \<in> {instance_bound (log s)<..instance_bound (log s')}
+            then ballot s a else ghost_ballot s a i))\<rparr>"
+(*
+definition learn where
   "learn a i vs s s' \<equiv> (\<forall> j \<in> {0..<length vs} . chosen s (i+j) (vs!j))
-    \<and> (\<exists> new_log . (\<forall> j \<in> {0..<length vs} . new_log (i+j) = Some (vs!j))
+    \<and> (\<exists> new_log new_ghost_ballot . (\<forall> j \<in> {0..<length vs} . new_log (i+j) = Some (vs!j))
         \<and> (\<forall> j \<in> {0..<i} \<union> {i+length vs..} . new_log j = log s a j)
-        \<and> s' = s\<lparr>log := (log s)(a := new_log)\<rparr>)"
-
+        \<and> (\<forall> j \<in> {instance_bound (log s)<..instance_bound (log s')} . 
+            new_ghost_ballot j = ballot s a)
+        \<and> (\<forall> j \<in> {0..instance_bound (log s)} \<union> {instance_bound (log s')<..} . 
+            new_ghost_ballot j = ghost_ballot s a j)
+        \<and> s' = s\<lparr>log := (log s)(a := new_log), ghost_ballot := (ghost_ballot s)(a := new_ghost_ballot)\<rparr>)"
+*)
 definition learned_by_one where 
   "learned_by_one l q \<equiv> {i . \<exists> a \<in> q . l a i \<noteq> None}"
   
@@ -104,16 +118,18 @@ definition safe_instance where
     if learned_by_one l q \<noteq> {} then Max (learned_by_one l q) + lookahead + 2 else lookahead + 1"
   
 definition crash where
-  -- {* TODO: update log and @{term ghost_ballot}. *}
+  -- {* Here @{term ghost_ballot} does not change because @{term lowest} is 
+  necessarily above the instance bound (see the learn action for how the ghost ballot
+  will increase when the instance bound increases). *}
   "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
     let b = Max {ballot s a | a . a \<in> q}; 
 (* could we join any other ballot? Probably, because the acceptor will only participate in instances in which nobody ever voted. *)
       low = safe_instance (log s) q
     in
       s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
-        lowest := (lowest s)(a := low),
+        lowest := (lowest s)(a := low) (* ,
         ghost_ballot := (ghost_ballot s)(a := 
-          (\<lambda> i . if i < low then ghost_ballot s a i else b))\<rparr> )"
+          (\<lambda> i . if i < low then ghost_ballot s a i else b)) *)\<rparr> )"
 
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
