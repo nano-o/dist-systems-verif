@@ -137,7 +137,7 @@ proof -
     hence "\<And> k a . \<lbrakk>k > j; a \<in> q\<rbrakk> \<Longrightarrow> log s a k = None" using assms(2)
       unfolding learned_by_one_def using Max_gr_iff by blast 
     hence "\<And> k a . \<lbrakk>k > max (i + length vs) j; a \<in> q\<rbrakk> \<Longrightarrow>  log t a k = None" using assms(1)
-      by (auto simp add:learned_by_one_def) 
+      by (cases s, cases t, auto simp add:learned_by_one_def)
     hence "\<And> k . k \<in> learned_by_one (log t) q \<Longrightarrow> k \<le> max (i + length vs) j"
       apply (auto simp add:learned_by_one_def is_learned_by_set_def) using not_less by force
     thus ?thesis using that by auto
@@ -181,8 +181,7 @@ lemmas finiteness = learned_by_quorum_consec_finite  learned_by_one_in_quorum_fi
 
 subsection {* Properties of the instance bound. *}
 
-private 
-definition aux_inv1 where aux_inv1_def[inv_defs]:
+private  definition aux_inv1 where aux_inv1_def[inv_defs]:
   "aux_inv1 s \<equiv> \<forall> i a b . (i > lookahead \<and> vote s a b i \<noteq> None)
     \<longrightarrow> (i-(lookahead+1)) \<in> learned_by_quorum_consec (log s)"
 
@@ -192,8 +191,7 @@ definition inv1 where inv1_def[inv_defs]:
 private lemma learn_mono:
   assumes "learn a i vs (s::('v, 'a) ampr_state) t"
     and "log s a2 j \<noteq> None"
-  shows "log t a2 j \<noteq> None" using assms 
-  by (auto, metis UnI1 UnI2 add_le_cancel_left atLeastLessThan_iff atLeast_iff nat_le_iff_add not_le zero_le)
+  shows "log t a2 j \<noteq> None" using assms by (cases s, cases t, auto simp add:fun_eq_iff)
 
 private lemma learn_increases_learned_by_quorum_consec:
   assumes "learn a i vs (s::('v, 'a) ampr_state) t" and "finite (learned_by_quorum_consec (log s))"
@@ -214,14 +212,13 @@ proof -
   qed
 qed
 
-private
-lemma aux_inv1: "invariant the_ioa aux_inv1"
+private lemma aux_inv1: "invariant the_ioa aux_inv1"
   apply (simp_inv invs:learned_by_quorum_consec_finite inv_defs:inv_defs learned_by_quorum_consec_def is_learned_by_set_def)
   subgoal premises prems for s t 
   proof -
     from prems(2,3) learn_increases_learned_by_quorum_consec[OF prems(4)]
     have "learned_by_quorum_consec (log s) \<subseteq> learned_by_quorum_consec (log t)" by (auto simp add:inv_defs)
-    moreover have "vote t = vote s" using prems(4) by auto
+    moreover have "vote t = vote s" using prems(4) by (cases s, cases t, auto)
     ultimately show ?thesis using prems(1) by (force simp add:inv_defs)
   qed
   subgoal premises prems for s t using prems(1,4)
@@ -242,11 +239,11 @@ proof -
     assume 1:"instance_bound (log s) < i" and 2:"vote s a b i = Some v"
     from 1 have "i > lookahead" by (auto simp add:instance_bound_def)
     with 2 \<open>aux_inv1 s\<close> have "(i-lookahead-1) \<in> learned_by_quorum_consec (log s)"
-      by (auto simp add:inv_defs )
+      by (auto simp add:inv_defs)
     with 1 \<open>learned_by_quorum_consec_finite s\<close> show False apply (simp add: instance_bound_def inv_defs)
       by (metis Max_ge Suc_eq_plus1 diff_Suc_eq_diff_pred leD le_diff_conv)
   qed
-  thus ?thesis by (metis IOA.invariant_def aux_inv1 learned_by_quorum_consec_finite) 
+  thus ?thesis by (metis IOA.invariant_def aux_inv1 learned_by_quorum_consec_finite)
 qed  
   
 definition inv2 where inv2_def[inv_defs]:
@@ -272,18 +269,17 @@ lemma inv2:"invariant the_ioa inv2"
       proof (rule ccontr)
         assume 2:"log t a2 j \<noteq> None"
         with \<open>learn a i vs s t\<close> True have 3:"a2 = a"
-          by auto
+          by (cases s, cases t, auto)
         have "chosen s j (the (log t a2 j))"
         proof -
           from \<open>learn a i vs s t\<close> 3 have "\<forall>j\<in>{0..<i} \<union> {i + length vs..} . log s a2 j = log t a2 j"
-            by auto
+            by (cases s, cases t, auto)
           hence 4:"j \<in> {i..<i+length vs}" using 2 True
             by (metis UnI1 UnI2 atLeastLessThan_iff atLeast_iff leI not_less_zero)
           hence "chosen s j (vs ! (j-i))" using \<open>learn a i vs s t\<close> apply auto
             using le_Suc_ex by fastforce
           moreover have "log t a j = Some (vs ! (j-i))" using \<open>learn a i vs s t\<close> 4
-            apply auto
-            by (metis add_less_imp_less_left atLeastLessThan_iff le_add_diff_inverse le_add_same_cancel1)
+            by (cases s, cases t, auto)
           ultimately show ?thesis using 3 by simp
         qed
         with \<open>inv1 s\<close> have "j \<le> instance_bound (log s)" 
@@ -308,7 +304,7 @@ lemma inv4: "invariant the_ioa inv4"
   apply (auto_inv invs:inv1 inv2 finiteness inv_defs:)
   subgoal premises prems for s t _ a i vs 
   proof -
-    from prems(12) have "ghost_vote t = ghost_vote s" and "vote t = vote s" by auto
+    from prems(12) have "ghost_vote t = ghost_vote s" and "vote t = vote s"  by (cases s, cases t, auto)+
     moreover
     have "instance_bound (log t) \<ge> instance_bound (log s)"
       using learn_increases_instance_bound learned_by_quorum_consec_finite_def prems(12) prems(4) prems(9) by blast 
@@ -326,11 +322,6 @@ subsection {* Relation between the ghost state and the normal state. *}
 
 context begin
 
-definition inv3 where inv3_def[inv_defs]:
-  "inv3 s \<equiv> \<forall> a i . i \<ge> lowest s a  \<longrightarrow> ghost_ballot s a i = ballot s a"
-
-lemma inv3: "invariant the_ioa inv3" oops
-  
 definition safe_instance_gt_instance_bound where safe_instance_gt_instance_bound_def[inv_defs]:
   "safe_instance_gt_instance_bound s \<equiv> \<forall> q \<in> quorums . safe_instance (log s) q > instance_bound (log s)"
 
@@ -346,14 +337,13 @@ proof
     apply (simp add:instance_bound_def safe_instance_def) using Max_mono assms(1) le_imp_less_Suc by blast
 qed
 
-private
-definition inv5 where inv5_def[inv_defs]:
+private definition inv5 where inv5_def[inv_defs]:
   "inv5 s \<equiv> \<forall> a i b . (i \<ge> lowest s a \<and> vote s a b i = None) \<longrightarrow> ghost_vote s a b i = None"
   
-private
-lemma inv5: "invariant the_ioa inv5"                                                                                
+private lemma inv5: "invariant the_ioa inv5"                                                                                
   apply (simp_inv invs:  inv4 learned_by_one_finite)
-   apply (force simp add:inv_defs)
+    subgoal premises prems for s t using prems
+      by (cases s, cases t, auto simp add:inv_defs)
   subgoal premises prems using prems safe_instance_gt_instance_bound
     apply (auto simp add:inv_defs)
     apply (meson inv4_def leD less_le_trans prems(2) safe_instance_gt_instance_bound safe_instance_gt_instance_bound_def)
@@ -363,19 +353,55 @@ lemma inv5: "invariant the_ioa inv5"
 definition inv6 where inv6_def[inv_defs]:
   "inv6 s \<equiv> \<forall> a i . i \<ge> lowest s a  \<longrightarrow> (\<forall> b . ghost_vote s a b i = vote s a b i)" 
   
-lemma inv6: "invariant the_ioa inv6"  by (auto_inv invs:inv5)
+lemma inv6: "invariant the_ioa inv6"  
+  apply (auto_inv invs:inv5)
+  subgoal premises prems for s t using prems
+    by (cases s, cases t, auto simp add:inv_defs)
+  done
   
 definition inv7 where inv7_def[inv_defs]:
   "inv7 s \<equiv> \<forall> a b i . vote s a b i \<noteq> None \<longrightarrow> ghost_vote s a b i = vote s a b i"
 
 lemma inv7: "invariant the_ioa inv7"
-  by (auto_inv invs: inv6) 
+  apply (auto_inv invs: inv6) 
+  subgoal premises prems for s t using prems
+    by (cases s, cases t, auto simp add:inv_defs)
+  done
 
-lemmas ghost_rel = inv6 inv7
+definition inv13 where inv13_def[inv_defs]:
+  "inv13 s \<equiv> \<forall> i \<le> instance_bound (log s) . \<forall> a . i \<ge> lowest s a \<longrightarrow> ghost_ballot s a i = ballot s a"
+lemma inv13: "invariant the_ioa inv13"                                                                                
+  apply (simp_inv invs: inv6 inv7 instance_bound_lemmas)
+  subgoal premises prems using prems amp_proof_axioms apply -
+    nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
+        card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2]
+    sorry
+  subgoal premises prems using prems amp_proof_axioms apply -
+    nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
+        card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2]
+    sorry
+  sorry
+
+lemmas ghost_rel = inv6 inv7 inv13
 
 end
 
 subsection {* Other invariants *}
+
+definition inv12 where inv12_def[inv_defs]:
+  "inv12 s \<equiv> \<forall> i > instance_bound (log s) . \<forall> a . ghost_ballot s a i = 0"
+  
+lemma inv12: "invariant the_ioa inv12"
+  apply (simp_inv invs: instance_bound_lemmas ghost_rel inv_defs:inv_defs)
+  subgoal premises prems using prems amp_proof_axioms apply -
+    nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
+        card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2]
+    sorry
+  subgoal premises prems for s t using prems amp_proof_axioms apply -
+    nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
+        card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list" = 2, eval="(instance_bound (log s), instance_bound (log t))"]
+    sorry
+  sorry
 
 definition inv8 where inv8_def[inv_defs]:
   "inv8 s \<equiv> \<forall> a b i . ghost_vote s a b i \<noteq> None
@@ -400,7 +426,6 @@ lemma inv8: "invariant the_ioa inv8"
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
   sorry
   done
-
 
 definition inv9 where inv9_def[inv_defs]:
   "inv9 s \<equiv> \<forall> a i v . log s a i = Some v \<longrightarrow> ghost_chosen s i v"
@@ -480,12 +505,16 @@ text {* For this we need explicit suggestions. As it is now, if we don't use the
 lemma conservative_inductive:
   "invariant the_ioa conservative_array"
   apply (simp_inv invs:ghost_rel instance_bound_lemmas inv_defs:conservative_array_def ballot_array.conservative_array_def ballot_array.conservative_def)
-   apply (auto simp add: conservative_array_def ballot_array.conservative_array_def ballot_array.conservative_def split:option.splits)[1]
+    apply (case_tac s, case_tac t, auto simp add: conservative_array_def ballot_array.conservative_array_def ballot_array.conservative_def split:option.splits)[1]
   subgoal premises prems for s t using prems amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, eval="inv6 s"]
-  sorry
-done
+    nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
+        card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, eval="inv6 s"]
+    sorry
+  subgoal premises prems for s t using prems amp_proof_axioms apply -
+    nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
+        card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, eval="inv6 s"]
+    sorry
+  done
 
 subsection {* the ghost ballot-array is safe } *}
 
@@ -507,14 +536,16 @@ lemma quorum_ballots_finite_ne:
 lemma quorum_ghost_ballots_finite_ne:
   assumes "q \<in> quorums"
   shows "finite {ghost_ballot s a | a . a \<in> q}" and "{ghost_ballot s a | a . a \<in> q} \<noteq> {}"
-    using quorums_axioms assms by (auto simp add:quorums_def)
-  
+  using quorums_axioms assms by (auto simp add:quorums_def)
+
+(* 
 lemma trans_imp_prefix_order:
   assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t"
   shows "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)" using assms[simplified]
   apply (cases rule:trans_cases)
-      apply (auto simp add:is_prefix_2_def split:option.split_asm)[3] defer
-   apply (auto simp add:is_prefix_2_def split:option.split_asm)[1]
+      apply (auto simp add:is_prefix_2_def split:option.split_asm)[1]
+     apply (case_tac s, case_tac t, auto simp add:is_prefix_2_def split:option.split_asm)[1]
+    apply (auto simp add:is_prefix_2_def split:option.split_asm)[1] defer defer
   subgoal premises prems for acc
   proof (simp add:is_prefix_2_def, rule allI)
     fix a
@@ -527,7 +558,7 @@ lemma trans_imp_prefix_order:
       have 2:"\<exists> q\<in>quorums . \<forall>a2\<in>q. ballot s a2 \<le> ballot t a"
       proof -
         from prems \<open>a = acc\<close> obtain q b where "q \<in> quorums" and "b = Max {ballot s a | a . a \<in> q}"
-            and "ballot t a = b" by (cases s, cases t, auto)
+          and "ballot t a = b" by (cases s, cases t, auto)
         moreover have "ballot s a \<le> Max {ballot s a | a . a \<in> q}" (is "ballot s a \<le> Max ?S") if "a \<in> q" for a
           using quorum_ballots_finite_ne[of q s, OF \<open>q \<in> quorums\<close>] that by (metis (mono_tags, lifting) Max.coboundedI mem_Collect_eq)
         ultimately show ?thesis by auto
@@ -536,24 +567,27 @@ lemma trans_imp_prefix_order:
     ultimately show "ballot s a \<le> ballot t a \<and> (\<forall>b. (b < ballot s a \<longrightarrow> vote s a b i = vote t a b i) \<and> (b = ballot s a \<and> (\<exists>y. vote s a b i = Some y) \<longrightarrow> vote s a (ballot s a) i = vote t a (ballot s a) i)) \<or> (\<exists>q\<in>quorums. \<forall>a2\<in>q. ballot s a2 \<le> ballot t a) \<and> (\<forall>b. vote t a b i = None)"
       by force 
   qed
-  done
+  apply (auto simp add:is_prefix_2_def split:option.split_asm)[1]
+  done *)
 
-lemma test:
-  assumes "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)"
-    and "all_invs s" and "all_invs t"
-  shows "is_prefix_2 quorums (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)"
-  using assms amp_proof_axioms apply -
-  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
-      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
-  oops
+definition all_invs where all_invs_def[inv_defs]:"all_invs s \<equiv> inv1 s \<and> inv2 s \<and> inv4 s
+  \<and> inv6 s \<and> inv7 s \<and> inv13 s \<and> inv12 s \<and> inv8 s \<and> inv9 s \<and> inv10 s \<and> inv11 s"
 
-lemma trans_imp_prefix_order_ghost:
-  assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)"
-    and "all_invs s" and "all_invs t"
-  shows "is_prefix_2 quorums (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)" 
+lemma trans_imp_prefix_order:
+  assumes "(s::('v, 'a) ampr_state) \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" (* and "is_prefix (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)" *)
+    and "all_invs s"
+  shows "is_prefix (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)" 
   using assms[simplified]
   apply (cases rule:trans_cases)
-      apply (auto simp add:is_prefix_2_def split:option.split_asm)[2] 
+      (* apply (auto simp add:is_prefix_2_def split:option.split_asm)[2] *)
+  subgoal premises prems using prems amp_proof_axioms apply -
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
+  sorry
+  subgoal premises prems using prems amp_proof_axioms apply -
+  nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
+      card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2, card "'v list"=2]
+  sorry
   subgoal premises prems using prems amp_proof_axioms apply -
   nitpick[no_assms, card 'v = 2, card 'a = 3,  card nat = 4, card "'v option" = 3, card "nat option" = 5, expect=none,
       card "nat \<times> nat" = 9, card "('v, 'a) ampr_state" = 2]
@@ -570,36 +604,17 @@ done
 
 lemma safe_mono:
   -- {* @{term safe_at} is monotonic. *}
-  assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "safe_at s i v b" and "ba.joined (ballot s) b q" and "q \<in> quorums"
-  shows "safe_at t i v b" 
-proof -
-  have "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)" 
-    using assms(1) trans_imp_prefix_order by auto
-  with ballot_array_prefix_2.safe_at_mono quorums_axioms assms(2-4) 
-  show ?thesis
-    by (auto simp add:ballot_array_prefix_2_def ballot_array_prefix_2_axioms_def, fast)
-qed
-
-lemmas all_invs = inv3 old_inv2 old_inv3 safe_instance_gt_instance_bound old_inv5 old_inv6 old_inv7 old_inv8 inv9 inv8 inv31 inv10 inv11
-
-lemma safe_mono_ghost:
-  -- {* @{term safe_at} is monotonic. *}
-  assumes "s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "ghost_safe_at s i v b" 
-    and "ba.joined (flip (ghost_ballot s) i) b q" and "q \<in> quorums"
-    and "reachable the_ioa s"
+  assumes "(s::('v, 'a) ampr_state) \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t" and "ghost_safe_at s i v b" and "all_invs s"
+    and "ba.joined (ballot s) b q" and "q \<in> quorums"
   shows "ghost_safe_at t i v b" 
 proof -
-  have "is_prefix_2 quorums (ballot s) (ballot t) (ba_vote s i) (ba_vote t i)" 
-    using assms(1) trans_imp_prefix_order by auto
-  hence "is_prefix_2 quorums (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)"
-    using \<open>reachable the_ioa s\<close> trans_imp_prefix_order_ghost \<open>s \<midarrow>a\<midarrow>the_ioa\<longrightarrow> t\<close>
-    apply - apply (instantiate_invs_2 invs:all_invs) by (auto simp add:all_invs_def)
-  with ballot_array_prefix_2.safe_at_mono[of quorums "flip (ghost_ballot s) i"
-      "ghost_ba_vote s i" "flip (ghost_ballot t) i" "ghost_ba_vote t i"]
-    quorums_axioms assms(2-4) 
-  show ?thesis
-    by (auto simp add:ballot_array_prefix_2_def ballot_array_prefix_2_axioms_def)
+  have "is_prefix (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)" 
+    using assms(1,3) trans_imp_prefix_order by auto
+  with ballot_array_prefix.safe_at_mono quorums_axioms assms(2,4,5) 
+  show ?thesis by (fastforce simp add:ballot_array_prefix_def ballot_array_prefix_axioms_def)
 qed
+
+text {* To fix from there. *}
 
 lemma safe_votes: 
   fixes s :: "('v, 'a) ampr_state" and t a i v q
