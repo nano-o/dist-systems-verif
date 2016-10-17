@@ -93,90 +93,96 @@ subsection {* finiteness lemmas. *}
 
 context begin
 
-definition learned_by_one_in_quorum where 
-  "learned_by_one_in_quorum l \<equiv> \<Union> q \<in> quorums . learned_by_one l q"
+definition learned_instances where 
+  "learned_instances l \<equiv> {i . \<exists> a . l a i \<noteq> None}"
   
-private definition instance_bound_bound where "instance_bound_bound l \<equiv> 
-  if learned_by_one_in_quorum l \<noteq> {} then Max (learned_by_one_in_quorum l) + lookahead + 1 else lookahead"
-  
-lemma l1:
-  assumes "q \<in> quorums"
-  shows "learned_by_quorum_consec (log s) \<subseteq> learned_by_one (log s) q" using assms
-  apply (auto simp add:learned_by_quorum_consec_def learned_by_one_def is_learned_by_set_def)
-  by (meson order_refl quorum_inter_witness)
+definition learned_instances_finite where learned_instances_finite_def[inv_defs]:
+  "learned_instances_finite s \<equiv> finite (learned_instances (log s))"
 
-private lemma l2:
-  assumes "\<And> q . q \<in> quorums \<Longrightarrow> finite (learned_by_one (log s) q)" and "finite (learned_by_quorum_consec (log s))"
-  shows "instance_bound_bound (log s) \<ge> instance_bound (log s)" 
-proof -
-  have "finite (learned_by_one_in_quorum (log s))" using assms(1) quorums_axioms by (simp add:quorums_def
-        learned_by_one_in_quorum_def) 
-  thus ?thesis using l1 assms(2) apply (auto simp add:instance_bound_bound_def 
-        instance_bound_def learned_by_one_in_quorum_def) using Max_ge 
-     apply blast
-    apply (metis all_not_in_conv empty_subsetI inf.absorb_iff1 inf.absorb_iff2 quorums_axioms quorums_def)
-    done
-qed
+lemma learned_instances_finite:"invariant the_ioa learned_instances_finite"
+  apply (simp_inv inv_defs:learned_instances_def)
+  subgoal premises prems for s t _ a i vs 
+  proof -
+    from prems(1) obtain j where "log s a k = None" if "k > j" for a k
+      unfolding learned_instances_def learned_instances_finite_def using that
+      by (metis (mono_tags, lifting) finite_nat_set_iff_bounded mem_Collect_eq not_less_iff_gr_or_eq)
+    hence "\<And> k a . \<lbrakk>k > max (i + length vs) j\<rbrakk> \<Longrightarrow>  log t a k = None" using \<open>learn a i vs s t\<close>
+      by (cases s, cases t, auto)
+    thus ?thesis unfolding learned_instances_def learned_instances_finite_def
+    proof -
+      assume a1: "\<And>k a. max (i + length vs) j < k \<Longrightarrow> log t a k = None"
+      obtain nn :: "nat set \<Rightarrow> nat \<Rightarrow> nat" where
+        f2: "\<And>N n. (finite N \<or> nn N n \<in> N) \<and> (\<not> nn N n \<le> n \<or> finite N)"
+        by (metis (full_types, lifting) finite_nat_set_iff_bounded_le)
+      moreover
+      { assume "\<exists>n. \<forall>a. log t a (nn {n. \<exists>a. log t a n \<noteq> None} n) = None"
+        then have "\<exists>n. nn {n. \<exists>a. log t a n \<noteq> None} n \<notin> {n. \<exists>a. log t a n \<noteq> None}"
+          by simp
+        then have "finite {n. \<exists>a. log t a n \<noteq> None}"
+          using f2 by blast }
+      ultimately show "finite {n. \<exists>a. log t a n \<noteq> None}"
+        using a1 by (meson not_le)
+    qed 
+  qed
+  subgoal premises prems for s t _ a
+  proof -
+    from prems(1) obtain j where "log s a k = None" if "k > j" for a k
+      unfolding learned_instances_def learned_instances_finite_def using that
+      by (metis (mono_tags, lifting) finite_nat_set_iff_bounded mem_Collect_eq not_less_iff_gr_or_eq)
+    moreover
+    from \<open>crash a s t\<close> have "\<exists> a . log s a i = Some v" if "log t a i = Some v" for a i v
+      using that by (cases s, cases t, auto)
+    ultimately have  "i \<le> j" if "log t a i = Some v" for a i v
+      by (metis leI option.distinct(1) that)
+    thus ?thesis unfolding learned_instances_def learned_instances_finite_def
+      using finite_nat_set_iff_bounded_le by auto 
+  qed
+  done
+
+private definition instance_bound_bound where "instance_bound_bound l \<equiv> 
+  if learned_instances l \<noteq> {} then Max (learned_instances l) + lookahead + 1 else lookahead"
+  
+private lemma l1: "learned_by_one (log s) q \<subseteq> learned_instances (log s)"
+  by (auto simp add:learned_by_one_def learned_instances_def)
+  
+private  lemma l2:
+  "learned_by_quorum_consec (log s) \<subseteq> learned_instances (log s)"
+  apply (auto simp add:learned_by_quorum_consec_def learned_instances_def is_learned_by_set_def)
+  by (meson Int_emptyI order_refl quorums_axioms quorums_def)
 
 private lemma l3:
-  assumes "learn a i vs (s::('v, 'a) ampr_state) t" 
-    and "finite (learned_by_one (log s) q)" (is "finite ?S")
-  shows "finite (learned_by_one (log t) q)" (is "finite ?T") 
+  assumes "finite (learned_instances (log s))" and "finite (learned_by_quorum_consec (log s))"
+  shows "instance_bound_bound (log s) \<ge> instance_bound (log s)"
+  using assms l1 l2 unfolding instance_bound_bound_def instance_bound_def
+  apply simp
 proof -
-  from \<open>finite ?S\<close> consider "?S = {}" | j where "j = Max ?S" and "?S \<noteq> {}" by blast
-  then obtain k where "\<And> j . j \<in> learned_by_one (log t) q \<Longrightarrow> j \<le> k"
-  proof (cases)
-    case 1
-    hence "\<And> k a . \<lbrakk>k > i + length vs; a \<in> q\<rbrakk> \<Longrightarrow> log t a k = None" using assms(1)
-      by (cases s, cases t, auto simp add:learned_by_one_def) 
-    hence "\<And> k . k \<in> learned_by_one (log t) q \<Longrightarrow> k \<le> i + length vs"
-      apply (auto simp add:learned_by_one_def) by (metis (full_types) not_None_eq not_le)
-    thus ?thesis using that by auto
-  next
-    case 2
-    hence "\<And> k a . \<lbrakk>k > j; a \<in> q\<rbrakk> \<Longrightarrow> log s a k = None" using assms(2)
-      unfolding learned_by_one_def using Max_gr_iff by blast 
-    hence "\<And> k a . \<lbrakk>k > max (i + length vs) j; a \<in> q\<rbrakk> \<Longrightarrow>  log t a k = None" using assms(1)
-      by (cases s, cases t, auto simp add:learned_by_one_def)
-    hence "\<And> k . k \<in> learned_by_one (log t) q \<Longrightarrow> k \<le> max (i + length vs) j"
-      apply (auto simp add:learned_by_one_def is_learned_by_set_def) using not_less by force
-    thus ?thesis using that by auto
-  qed
-  thus ?thesis
-    using finite_nat_set_iff_bounded_le by blast
+  assume a1: "finite (learned_instances (log s))"
+  { fix nn :: nat
+    have "\<And>a. learned_by_quorum_consec (log (a::('b, 'a, 'c) ampr_state_scheme)) \<subseteq> learned_instances (log a)"
+      by (metis (no_types) all_not_in_conv l1 l2 order_trans quorums_axioms quorums_def)
+    then have "learned_by_quorum_consec (log s) = {} \<or> (learned_instances (log s) = {} \<or> nn \<notin> learned_by_quorum_consec (log s) \<or> nn \<le> Max (learned_instances (log s))) \<and> learned_instances (log s) \<noteq> {}"
+      using a1 by (metis (no_types) Max.boundedE Max_mono assms(2) empty_subsetI inf.absorb_iff1 inf.absorb_iff2) }
+  then have "learned_by_quorum_consec (log s) = {} \<or> (learned_instances (log s) = {} \<or> (\<forall>n. n \<notin> learned_by_quorum_consec (log s) \<or> n \<le> Max (learned_instances (log s)))) \<and> learned_instances (log s) \<noteq> {}"
+    by blast
+  then show "learned_by_quorum_consec (log s) \<noteq> {} \<longrightarrow> (learned_instances (log s) \<noteq> {} \<longrightarrow> (\<forall>n\<in>learned_by_quorum_consec (log s). n \<le> Max (learned_instances (log s)))) \<and> learned_instances (log s) \<noteq> {}"
+    by blast
 qed
-  
+
 definition learned_by_one_finite where learned_by_one_finite_def[inv_defs]:
   "learned_by_one_finite s \<equiv> \<forall> q . finite (learned_by_one (log s) q)"
-  
-definition learned_by_one_in_quorum_finite where
-  "learned_by_one_in_quorum_finite s \<equiv> finite (learned_by_one_in_quorum (log s))"
   
 definition learned_by_quorum_consec_finite where learned_by_quorum_consec_finite_def[inv_defs]:
   "learned_by_quorum_consec_finite s \<equiv> finite (learned_by_quorum_consec (log s))"
     
 lemma learned_by_one_finite: "invariant the_ioa learned_by_one_finite"
-  apply (auto_inv invs: inv_defs:inv_defs learned_by_one_def is_learned_by_set_def)
-  subgoal premises prems using l3 prems unfolding learned_by_one_finite_def by blast
-  done
-
-lemma learned_by_one_in_quorum_finite:"invariant the_ioa learned_by_one_in_quorum_finite"
-proof -
-  have "learned_by_one_in_quorum_finite s" if "learned_by_one_finite s" for s using that quorums_axioms
-    by (auto simp add:learned_by_one_in_quorum_finite_def learned_by_one_finite_def quorums_def
-        learned_by_one_in_quorum_def) 
-  thus ?thesis
-    using IOA.invariant_def learned_by_one_finite by blast  
-qed
+  using learned_instances_finite l1
+  by (metis IOA.invariant_def infinite_super learned_by_one_finite_def learned_instances_finite_def) 
 
 lemma learned_by_quorum_consec_finite:"invariant the_ioa learned_by_quorum_consec_finite"
-proof -
-  have "learned_by_one_finite s \<Longrightarrow> learned_by_quorum_consec_finite s" for s using l1
-    by (metis all_not_in_conv learned_by_one_finite_def infinite_super learned_by_quorum_consec_finite_def quorums_axioms quorums_def) 
-  show ?thesis using learned_by_one_finite by (simp add: \<open>\<And>s. learned_by_one_finite s \<Longrightarrow> learned_by_quorum_consec_finite s\<close> IOA.invariant_def)
-qed
+  using learned_instances_finite l2
+  by (metis IOA.invariant_def finite_subset learned_by_quorum_consec_finite_def learned_instances_finite_def)
 
-lemmas finiteness = learned_by_quorum_consec_finite  learned_by_one_in_quorum_finite
+lemmas finiteness = learned_by_quorum_consec_finite  learned_instances_finite
   learned_by_one_finite
 
 subsection {* Properties of the instance bound. *}
