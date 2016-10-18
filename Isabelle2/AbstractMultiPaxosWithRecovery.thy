@@ -88,7 +88,6 @@ definition do_vote where
         suggestion s b i = Some v
         \<and> i \<ge> lowest s a
         \<and> vote s a b i = None
-        \<and> conservative_at s' i
         \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(b := (vote s a b)(i := Some v))),
             ghost_vote := (ghost_vote s)(a := (ghost_vote s a)(b := (ghost_vote s a b)(i := Some v)))\<rparr>"
 
@@ -117,7 +116,7 @@ definition safe_instance where
 definition crash where
   "crash a q s s' \<equiv> q \<in> quorums \<and> a \<notin> q \<and> (
     let b = Max {ballot s a | a . a \<in> q};
-(* could we join any other ballot? Probably, because the acceptor will only participate in instances in which nobody ever voted. *)
+    (* could we join any other ballot? Probably, because the acceptor will only participate in instances in which nobody ever voted. *)
       low = safe_instance (log s) q
     in (\<exists> new_log . 
       (\<forall> i v . (new_log i = Some v) = (\<exists> a \<in> q . log s a i = Some v))
