@@ -115,9 +115,6 @@ definition safe_instance where
     if learned_by_one l q \<noteq> {} then Max (learned_by_one l q) + lookahead + 2 else lookahead + 1"
   
 definition crash where
-  -- {* Here @{term ghost_ballot} does not change because @{term lowest} is 
-  necessarily above the instance bound (see the learn action for how the ghost ballot
-  will increase when the instance bound increases). *}
   "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
     let b = Max {ballot s a | a . a \<in> q};
 (* could we join any other ballot? Probably, because the acceptor will only participate in instances in which nobody ever voted. *)
@@ -125,7 +122,10 @@ definition crash where
     in (\<exists> new_log . 
       (\<forall> i v . (new_log i = Some v) = (\<exists> a \<in> q . log s a i = Some v))
       \<and> s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
-        lowest := (lowest s)(a := low), log := (log s)(a := new_log)\<rparr> ))"
+        lowest := (lowest s)(a := low), log := (log s)(a := new_log), 
+        ghost_ballot := (\<lambda> a .
+          (\<lambda> i . if i \<in> {instance_bound (log s)<..instance_bound (log s')}
+            then ballot s' a else ghost_ballot s a i))\<rparr> ))"
 
 fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
