@@ -79,7 +79,7 @@ definition suggest where
     suggestion s b i = None
     \<and> v \<in> propCmd s
     \<and> proved_safe_at s b i q v
-    \<and> q \<in> quorums
+    \<and> (\<forall> a \<in> q . i \<ge> lowest s a)
     \<and> (i-lookahead-1) \<in> learned_by_quorum_consec (log s)
     \<and> s' = s\<lparr>suggestion := (suggestion s)(b := (suggestion s b)(i := Some v))\<rparr>"
   
@@ -115,7 +115,7 @@ definition safe_instance where
     if learned_by_one l q \<noteq> {} then Max (learned_by_one l q) + lookahead + 2 else lookahead + 1"
   
 definition crash where
-  "crash a s s' \<equiv> \<exists> q \<in> quorums . a \<notin> q \<and> (
+  "crash a q s s' \<equiv> q \<in> quorums \<and> a \<notin> q \<and> (
     let b = Max {ballot s a | a . a \<in> q};
 (* could we join any other ballot? Probably, because the acceptor will only participate in instances in which nobody ever voted. *)
       low = safe_instance (log s) q
@@ -133,7 +133,7 @@ fun trans_rel where
     (\<exists> a b . join_ballot a b r r')
     \<or> (\<exists> a i v . do_vote a i v r r')
     \<or> (\<exists> b i q v . suggest b i q v r r')
-    \<or> (\<exists> a . crash a r r') )"
+    \<or> (\<exists> a q . crash a q r r') )"
 | "trans_rel r (Learn a i vs) r' = learn a i vs r r'"
 
 lemma trans_cases: 
@@ -142,7 +142,7 @@ lemma trans_cases:
   (propose) c where "propose c r r'"
 | (learn) a i vs where "learn a i vs r r'"
 | (join_ballot) a b where "join_ballot a b r r'"
-| (crash) a where "crash a r r'"
+| (crash) a q where "crash a q r r'"
 | (do_vote) a i v where "do_vote a i v r r'"
 | (suggest) b i q v where "suggest b i q v r r'"
   using assms apply induct apply auto
