@@ -6,12 +6,11 @@ section {* Definition of the Abstract MultiPaxos I/O-automaton *}
 
 subsection {* State and actions *}
 
-text {* TODO: wipe out the log on a crash; use suggestions.  *}
-
 record ('v,'a) ampr_state =
   propCmd :: "'v set"
   ballot :: "'a \<Rightarrow> bal"
   vote :: "'a \<Rightarrow> bal \<Rightarrow> inst \<Rightarrow> 'v option"
+  suggestion :: "bal \<Rightarrow> inst \<Rightarrow> 'v option"
   lowest :: "'a \<Rightarrow> inst"
   log :: "'a \<Rightarrow> inst \<Rightarrow> 'v option"
   ghost_ballot :: "'a \<Rightarrow> inst \<Rightarrow> bal"
@@ -19,6 +18,7 @@ record ('v,'a) ampr_state =
 
 locale ampr_ioa =
   fixes quorums::"'a set set" and lookahead :: "nat"
+  -- {* @{term "lookahead+1"} instances can be run in parallel. *}
 begin
   
 definition is_learned_by_set where "is_learned_by_set l i q \<equiv> \<forall> a \<in> q . l a i \<noteq> None"
@@ -35,6 +35,7 @@ definition instance_bound where "instance_bound l \<equiv>
 definition start where
   -- {* The initial state *}
   "start \<equiv> {\<lparr>propCmd = {}, ballot = (\<lambda> a . 0), vote = (\<lambda> a b i . None),
+    suggestion = \<lambda> b i . None,
     lowest = \<lambda> a . 0, log = \<lambda> a i . None, 
     ghost_ballot = (\<lambda> a i . 0), ghost_vote = (\<lambda> a b i . None)\<rparr>}"
 
@@ -73,15 +74,21 @@ definition bounded where "bounded s \<equiv>
   -- {* New votes cannot be cast in instance i before instances lower than @{term "i-lookahead"} 
   have all been completed by a quorum of acceptors. *}
 
+definition suggest where
+  "suggest b i q v s s' \<equiv> 
+    suggestion s b i = None
+    \<and> v \<in> propCmd s
+    \<and> proved_safe_at s b i q v
+    \<and> q \<in> quorums
+    \<and> (i-lookahead-1) \<in> learned_by_quorum_consec (log s)
+    \<and> s' = s\<lparr>suggestion := (suggestion s)(b := (suggestion s b)(i := Some v))\<rparr>"
+  
 definition do_vote where
-  "do_vote a i q v s s' \<equiv> let b = ballot s a in
-          v \<in> propCmd s
+  "do_vote a i v s s' \<equiv> let b = ballot s a in
+        suggestion s b i = Some v
         \<and> i \<ge> lowest s a
         \<and> vote s a b i = None
-        \<and> proved_safe_at s b i q v
-        \<and> q \<in> quorums
         \<and> conservative_at s' i
-        \<and> bounded s'
         \<and> s' = s\<lparr>vote := (vote s)(a := (vote s a)(b := (vote s a b)(i := Some v))),
             ghost_vote := (ghost_vote s)(a := (ghost_vote s a)(b := (ghost_vote s a b)(i := Some v)))\<rparr>"
 
@@ -96,20 +103,10 @@ definition learn where
     (\<forall> j \<in> {0..<length vs} . chosen s (i+j) (vs!j))
     \<and> s' = s\<lparr>log := (log s)(a :=
         (\<lambda> j . if j \<in> {i..<i+length vs} then Some (vs!(j-i)) else log s a j)), 
-        ghost_ballot := (ghost_ballot s)(a := 
+        ghost_ballot := (\<lambda> a .
           (\<lambda> i . if i \<in> {instance_bound (log s)<..instance_bound (log s')}
             then ballot s a else ghost_ballot s a i))\<rparr>"
-(*
-definition learn where
-  "learn a i vs s s' \<equiv> (\<forall> j \<in> {0..<length vs} . chosen s (i+j) (vs!j))
-    \<and> (\<exists> new_log new_ghost_ballot . (\<forall> j \<in> {0..<length vs} . new_log (i+j) = Some (vs!j))
-        \<and> (\<forall> j \<in> {0..<i} \<union> {i+length vs..} . new_log j = log s a j)
-        \<and> (\<forall> j \<in> {instance_bound (log s)<..instance_bound (log s')} . 
-            new_ghost_ballot j = ballot s a)
-        \<and> (\<forall> j \<in> {0..instance_bound (log s)} \<union> {instance_bound (log s')<..} . 
-            new_ghost_ballot j = ghost_ballot s a j)
-        \<and> s' = s\<lparr>log := (log s)(a := new_log), ghost_ballot := (ghost_ballot s)(a := new_ghost_ballot)\<rparr>)"
-*)
+
 definition learned_by_one where 
   "learned_by_one l q \<equiv> {i . \<exists> a \<in> q . l a i \<noteq> None}"
   
@@ -134,7 +131,8 @@ fun trans_rel where
   "trans_rel r (Propose c) r' = propose c r r'"
 | "trans_rel r Internal r' = (
     (\<exists> a b . join_ballot a b r r')
-    \<or> (\<exists> a q i v . do_vote a i q v r r') 
+    \<or> (\<exists> a i v . do_vote a i v r r')
+    \<or> (\<exists> b i q v . suggest b i q v r r')
     \<or> (\<exists> a . crash a r r') )"
 | "trans_rel r (Learn a i vs) r' = learn a i vs r r'"
 
@@ -145,7 +143,8 @@ lemma trans_cases:
 | (learn) a i vs where "learn a i vs r r'"
 | (join_ballot) a b where "join_ballot a b r r'"
 | (crash) a where "crash a r r'"
-| (do_vote) a i q v where "do_vote a i q v r r'"
+| (do_vote) a i v where "do_vote a i v r r'"
+| (suggest) b i q v where "suggest b i q v r r'"
   using assms apply induct apply auto
   by (metis trans_rel.elims(2))
 
