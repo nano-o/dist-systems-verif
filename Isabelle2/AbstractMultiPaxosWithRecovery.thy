@@ -47,7 +47,7 @@ definition propose where
 definition join_ballot where
   "join_ballot a b s s' \<equiv>
     b > (ballot s a) \<and> s' = s\<lparr>ballot := (ballot s)(a := b), 
-      ghost_ballot := (ghost_ballot s)(a := 
+      ghost_ballot := (ghost_ballot s)(a :=
         (\<lambda> i . if (ghost_ballot s a i) \<le> b \<and> instance_bound (log s) \<ge> i 
           then b else ghost_ballot s a i))\<rparr>"
   -- {* Note that we increase the ballot only below @{term instance_bound}. 
@@ -114,11 +114,10 @@ definition safe_instance where
     if learned_by_one l q \<noteq> {} then Max (learned_by_one l q) + lookahead + 2 else lookahead + 1"
   
 definition crash where
+  -- {* Why reset things here? Wouldn't it be sufficient to set lowest? *}
   "crash a q s s' \<equiv> q \<in> quorums \<and> a \<notin> q \<and> (
-    let b = Max {ballot s a | a . a \<in> q};
-    (* could we join any other ballot? Probably, because the acceptor will only participate in instances in which nobody ever voted. *)
-      low = safe_instance (log s) q
-    in (\<exists> new_log . 
+    let  low = safe_instance (log s) q
+    in (\<exists> new_log b .
       (\<forall> i v . (new_log i = Some v) = (\<exists> a \<in> q . log s a i = Some v))
       \<and> s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
         lowest := (lowest s)(a := low), log := (log s)(a := new_log), 

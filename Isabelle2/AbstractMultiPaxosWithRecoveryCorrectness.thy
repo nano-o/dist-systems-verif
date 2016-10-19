@@ -435,11 +435,11 @@ lemma inv13: "invariant the_ioa inv13"
   subgoal premises prems for s t _ a q
   proof -
     from \<open>crash a q s t\<close>
-    have "ghost_ballot t = (\<lambda> a .
+    obtain b where "ghost_ballot t = (\<lambda> a .
       (\<lambda> i . if i \<in> {instance_bound (log s)<..instance_bound (log t)}
       then ballot t a else ghost_ballot s a i))
         \<and> lowest t = (lowest s)(a := safe_instance (log s) q) 
-        \<and> ballot t = (ballot s)(a := Max {ballot s a | a . a \<in> q})"
+        \<and> ballot t = (ballot s)(a := b)"
        by (cases s, cases t, auto)
     moreover have "safe_instance (log s) q \<ge> instance_bound (log s)"
       using safe_instance_gt_instance_bound
@@ -512,7 +512,7 @@ lemma quorum_ghost_ballots_finite_ne:
 
 abbreviation ba_ballot where "ba_ballot s i \<equiv> flip (ghost_ballot s) i"
 
-lemma ghost_ballot_mono_2:
+lemma ghost_ballot_mono:
   assumes "trans_rel (s::('v,'a)ampr_state) ac t" 
   shows "\<forall> i a . i \<le> instance_bound (log s) \<longrightarrow> ghost_ballot t a i \<ge> ghost_ballot s a i" using assms 
   apply (induct rule:trans_cases; (auto; fail)?)
@@ -529,7 +529,7 @@ lemma trans_imp_prefix_order:
   assumes "trans_rel (s::('v, 'a) ampr_state) acti t" 
     and "inv6 s" and "inv13 s" and "i \<le> instance_bound (log s)"
   shows "is_prefix (ba_ballot s i) (ba_ballot t i) (ghost_ba_vote s i) (ghost_ba_vote t i)" 
-  using assms ghost_ballot_mono_2
+  using assms ghost_ballot_mono
   apply ((cases rule:trans_cases);
       (cases s, cases t, simp add:is_prefix_def inv_defs)?)
    apply (metis ampr_state.select_convs(7) eq_refl leD)
