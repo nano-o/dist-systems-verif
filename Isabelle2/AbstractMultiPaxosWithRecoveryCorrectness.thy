@@ -476,6 +476,9 @@ subsection {* Other invariants *}
 
 definition inv12 where inv12_def[inv_defs]:
   "inv12 s \<equiv> \<forall> i > instance_bound (log s) . \<forall> a . ghost_ballot s a i = 0"
+  -- {* TODO: this is used to show that the ghost ballot always increases after the 
+  instance bound. However we don't care about what happens after the instance bound.
+  So there should be a better way to complete the proof.*}
   
 lemma inv12: "invariant the_ioa inv12"
   apply (simp_inv invs: finiteness inv_defs:inv_defs)
@@ -682,9 +685,15 @@ qed
 subsection {* Finally, the proof that agreement holds (trivial, follows immediately from safe).*}
 
 definition agreement where 
-  "agreement s \<equiv> \<forall> v w i . chosen s i v \<and> chosen s i w \<longrightarrow> v = w"
+  "agreement s \<equiv> \<forall> v w i . ghost_chosen s i v \<and> ghost_chosen s i w \<longrightarrow> v = w"
 
-lemma agreement:"invariant the_ioa agreement" oops
+lemma agreement:"invariant the_ioa agreement" 
+proof -
+  have "ghost_safe s \<Longrightarrow> agreement s" for s
+    by (metis agreement_def bap.safe_imp_agreement)
+  thus ?thesis
+    by (metis (mono_tags) IOA.invariant_def safe_inv)
+qed
 
 end
 
