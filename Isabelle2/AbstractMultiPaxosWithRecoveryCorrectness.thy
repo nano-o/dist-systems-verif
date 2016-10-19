@@ -183,7 +183,7 @@ qed
 definition learned_by_one_finite where learned_by_one_finite_def[inv_defs]:
   "learned_by_one_finite s \<equiv> \<forall> q . finite (learned_by_one (log s) q)"
   
-definition learned_by_quorum_consec_finite where learned_by_quorum_consec_finite_def[inv_defs]:
+definition learned_by_quorum_consec_finite where learned_by_quorum_consec_finite_def[simp]:
   "learned_by_quorum_consec_finite s \<equiv> finite (learned_by_quorum_consec (log s))"
     
 lemma learned_by_one_finite: "invariant the_ioa learned_by_one_finite"
@@ -343,12 +343,11 @@ lemma inv2:"invariant the_ioa inv2"
       by (metis le_less_trans not_le)
   qed
   done
-thm ampr_state.iffs
 
 definition inv4 where inv4_def[inv_defs]:
   "inv4 s \<equiv> \<forall> a i b . (ghost_vote s a b i \<noteq> None \<or> vote s a b i \<noteq> None) \<longrightarrow> i \<le> instance_bound (log s)"
   
-lemma crash_instance_bound:
+lemma crash_increases_instance_bound:
   assumes "crash a q s t" and "learned_by_quorum_consec_finite s"
     and "learned_by_quorum_consec_finite t"
   shows "instance_bound (log t) \<ge> instance_bound (log s)"
@@ -371,7 +370,7 @@ lemma inv4: "invariant the_ioa inv4"
       by (metis (no_types, lifting) dual_order.trans inv4_def \<open>inv4 s\<close>)
   qed
   subgoal premises prems for s t _ a q
-    using \<open> crash a q s t\<close> crash_instance_bound [OF \<open>crash a q s t\<close> \<open>learned_by_quorum_consec_finite s\<close> \<open>learned_by_quorum_consec_finite t\<close>]
+    using \<open> crash a q s t\<close> crash_increases_instance_bound [OF \<open>crash a q s t\<close> \<open>learned_by_quorum_consec_finite s\<close> \<open>learned_by_quorum_consec_finite t\<close>]
     apply (cases s, cases t, auto simp add:inv_defs)
      apply (metis (no_types, lifting) ampr_state.select_convs(6) ampr_state.select_convs(8) dual_order.trans inv4_def option.distinct(1) \<open>inv4 s\<close>)
     by (metis (no_types, lifting) ampr_state.select_convs(3) ampr_state.select_convs(6) dual_order.trans inv4_def option.distinct(1) \<open>inv4 s\<close>)
@@ -428,43 +427,28 @@ lemma inv7: "invariant the_ioa inv7"
   by (auto_inv_cases)
 
 definition inv13 where inv13_def[inv_defs]:
-  "inv13 s \<equiv> \<forall> i \<le> instance_bound (log s) . \<forall> a . i \<ge> lowest s a \<longrightarrow> ghost_ballot s a i = ballot s a"
-  
+  "inv13 s \<equiv> \<forall> a i . i \<ge> lowest s a \<and> i \<le> instance_bound (log s)
+    \<longrightarrow> ghost_ballot s a i = ballot s a"
+
 lemma inv13: "invariant the_ioa inv13"
-  -- {* TODO: an understandable proof. *}
-  apply (simp_inv invs: finiteness)
-  subgoal premises prems for s t _ a i vs (* learn *)
+  apply (auto_inv_cases invs: finiteness inv_defs:inv_defs)
+  subgoal premises prems for s t _ a q
   proof -
-    have "instance_bound (log t) \<ge> instance_bound (log s)"
-      using learn_increases_instance_bound learned_by_quorum_consec_finite_def 
-        \<open>learned_by_quorum_consec_finite t\<close> \<open>learned_by_quorum_consec_finite s\<close> \<open>learn a i vs s t \<close> by blast
-    thus ?thesis using \<open>inv13 s\<close> \<open>learn a i vs s t\<close> by (cases s, cases t, auto simp add:inv_defs)
-  qed
-  subgoal premises prems for s t _ a2 q (* crash *)
-  proof -
-    have "instance_bound (log t) \<ge> instance_bound (log s)" using crash_instance_bound
-        \<open>crash a2 q s t\<close> \<open>learned_by_quorum_consec_finite s\<close> \<open>learned_by_quorum_consec_finite t\<close> by blast
-    moreover have "safe_instance (log s) q > instance_bound (log s)" 
-      using safe_instance_gt_instance_bound \<open>learned_by_one_finite s\<close> \<open>crash a2 q s t\<close>
-      by (metis crash_def learned_by_one_finite_def)
+    from \<open>crash a q s t\<close>
+    have "ghost_ballot t = (\<lambda> a .
+      (\<lambda> i . if i \<in> {instance_bound (log s)<..instance_bound (log t)}
+      then ballot t a else ghost_ballot s a i))
+        \<and> lowest t = (lowest s)(a := safe_instance (log s) q) 
+        \<and> ballot t = (ballot s)(a := Max {ballot s a | a . a \<in> q})"
+       by (cases s, cases t, auto)
+    moreover have "safe_instance (log s) q \<ge> instance_bound (log s)"
+      using safe_instance_gt_instance_bound
+      by (metis crash_def learned_by_one_finite_def less_imp_le \<open>learned_by_one_finite s\<close> \<open>crash a q s t\<close>)
     ultimately
-    show ?thesis using \<open>inv13 s\<close> \<open>crash a2 q s t\<close>
-      apply (cases s, cases t, auto simp add:inv_defs)
-       apply (metis (no_types, lifting) ampr_state.select_convs(2) dual_order.strict_trans1 fun_upd_same)
-    proof -
-      fix propCmd :: "'v set" and ballota :: "'a \<Rightarrow> nat" and vote :: "'a \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'v option" and suggestion :: "nat \<Rightarrow> nat \<Rightarrow> 'v option" and lowest :: "'a \<Rightarrow> nat" and log :: "'a \<Rightarrow> nat \<Rightarrow> 'v option" and ghost_ballota :: "'a \<Rightarrow> nat \<Rightarrow> nat" and ghost_vote :: "'a \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'v option" and ghost_ballotaa :: "'a \<Rightarrow> nat \<Rightarrow> nat" and i :: nat and new_log :: "nat \<Rightarrow> 'v option" and aa :: 'a
-      assume a1: "aa \<noteq> a2"
-      assume a2: "lowest aa \<le> i"
-      assume a3: "i \<le> instance_bound (log(a2 := new_log))"
-      assume "s = \<lparr>propCmd = propCmd, ballot = ballota, vote = vote, suggestion = suggestion, lowest = lowest, log = log, ghost_ballot = ghost_ballota, ghost_vote = ghost_vote\<rparr>"
-      assume a4: "\<forall>i\<le>instance_bound log. \<forall>a. lowest a \<le> i \<longrightarrow> ghost_ballota a i = ballota a"
-      assume a5: "ghost_ballotaa = (\<lambda>a i. if instance_bound log < i \<and> i \<le> instance_bound (log(a2 := new_log)) then ballot \<lparr>propCmd = propCmd, ballot = ballota(a2 := Max {ballota a |a. a \<in> q}), vote = vote(a2 := \<lambda>b. Map.empty), suggestion = suggestion, lowest = lowest(a2 := safe_instance log q), log = log(a2 := new_log), ghost_ballot = ghost_ballotaa, ghost_vote = ghost_vote\<rparr> a else ghost_ballot \<lparr>propCmd = propCmd, ballot = ballota, vote = vote, suggestion = suggestion, lowest = lowest, log = log, ghost_ballot = ghost_ballota, ghost_vote = ghost_vote\<rparr> a i)"
-      assume "t = \<lparr>propCmd = propCmd, ballot = ballota(a2 := Max {ballota a |a. a \<in> q}), vote = vote(a2 := \<lambda>b. Map.empty), suggestion = suggestion, lowest = lowest(a2 := safe_instance log q), log = log(a2 := new_log), ghost_ballot = ghost_ballotaa, ghost_vote = ghost_vote\<rparr>"
-      have "\<And>f n. (f(a2 := n::nat)) aa = f aa"
-        using a1 by (metis (lifting) fun_upd_apply)
-      then show "ghost_ballotaa aa i = ballota aa"
-        using a5 a4 a3 a2 by (metis (lifting) ampr_state.select_convs(2) ampr_state.select_convs(7) not_le)
-    qed
+    show ?thesis using \<open>inv13 s\<close>
+      apply (auto simp add:inv_defs)
+      by (metis (no_types, lifting) crash_def dual_order.strict_trans1 learned_by_one_finite_def 
+        \<open>learned_by_one_finite s\<close> \<open>crash a q s t\<close> safe_instance_gt_instance_bound)
   qed
   done
 
@@ -474,78 +458,6 @@ end
 
 subsection {* Other invariants *}
 
-definition inv12 where inv12_def[inv_defs]:
-  "inv12 s \<equiv> \<forall> i > instance_bound (log s) . \<forall> a . ghost_ballot s a i = 0"
-  -- {* TODO: this is used to show that the ghost ballot always increases after the 
-  instance bound. However we don't care about what happens after the instance bound.
-  So there should be a better way to complete the proof.*}
-  
-lemma inv12: "invariant the_ioa inv12"
-  apply (simp_inv invs: finiteness inv_defs:inv_defs)
-  subgoal premises prems for s t _ a i vs (* learn *)
-  proof -
-    have "instance_bound (log t) \<ge> instance_bound (log s)"
-      using learn_increases_instance_bound learned_by_quorum_consec_finite_def \<open>learn a i vs s t\<close> \<open>learned_by_quorum_consec_finite t\<close> \<open>learned_by_quorum_consec_finite s\<close> by blast
-    thus ?thesis using \<open>learn a i vs s t\<close>  \<open>inv12 s\<close> by (cases s, cases t, auto simp add:inv_defs)
-  qed
-  subgoal premises prems for s t _ a q
-  proof -
-    have "instance_bound (log t) \<ge> instance_bound (log s)" thm prems(2) prems(5) prems(8)
-      using crash_instance_bound \<open>crash a q s t\<close> \<open>learned_by_quorum_consec_finite s\<close> \<open>learned_by_quorum_consec_finite t\<close> by blast
-    thus ?thesis using \<open>crash a q s t\<close>  \<open>inv12 s\<close> apply (cases s, cases t, auto simp add:inv_defs)
-      by (metis (no_types, lifting) ampr_state.select_convs(7) leD le_less_trans)
-  qed
-  done
-
-lemma ghost_ballot_mono:
-  assumes "trans_rel s a t" and "inv12 s"
-    shows "\<forall> a2 j . ghost_ballot t a2 j \<ge> ghost_ballot s a2 j" using assms
-  by (induct rule:trans_cases; (auto; fail)?; (cases s, cases t, simp add:inv_defs))
-    (metis ampr_state.select_convs(7) le0 less_or_eq_imp_le)
-
-definition inv8 where inv8_def[inv_defs]:
-  "inv8 s \<equiv> \<forall> a b i . (suggestion s b i \<noteq> None \<or> ghost_vote s a b i \<noteq> None)
-    \<longrightarrow> (\<exists> q \<in> quorums . ballot_array.joined (flip (ghost_ballot s) i) b q)"
-
-lemma inv8: "invariant the_ioa inv8"
-  apply (simp_inv_2 \<open>frule ghost_ballot_mono\<close> invs: inv12 inv13 finiteness inv_defs:inv_defs ballot_array.joined_def)
-  subgoal premises prems for s t _ a i vs (* learn *)
-  proof -
-    from \<open>learn a i vs s t\<close> have "suggestion t = suggestion s" and "ghost_vote t = ghost_vote s"
-      by (cases s, cases t, auto)+ 
-    thus ?thesis using \<open>\<forall>a2 j. ghost_ballot s a2 j \<le> ghost_ballot t a2 j\<close> \<open>inv8 s\<close> 
-      apply (simp add:inv_defs ballot_array.joined_def) by (meson dual_order.trans)
-  qed
-  subgoal premises prems for s t  _ a b
-  proof -
-    have "suggestion t = suggestion s" and "ghost_vote t = ghost_vote s" using \<open>join_ballot a b s t\<close>
-      by auto
-    with \<open>inv8 s\<close> \<open>\<forall>a2 j. ghost_ballot s a2 j \<le> ghost_ballot t a2 j\<close> 
-    show ?thesis apply (simp add:inv8_def ballot_array.joined_def)
-      by (meson dual_order.trans)
-  qed
-  subgoal premises prems for s t _ a q
-  proof -
-    have "suggestion t = suggestion s" and "ghost_vote t = ghost_vote s" using \<open>crash a q s t\<close>
-      by (cases s, cases t, force)+
-    with \<open>inv8 s\<close> \<open>\<forall>a2 j. ghost_ballot s a2 j \<le> ghost_ballot t a2 j\<close> 
-    show ?thesis apply (simp add:inv8_def ballot_array.joined_def)
-      by (meson dual_order.trans)
-  qed
-  subgoal premises prems for s t _ b i q v thm prems
-  proof -
-    obtain q2 where "q2 \<in> quorums" and 1:"\<And> a2 . a2 \<in> q2 \<Longrightarrow> i \<ge> lowest s a2 \<and> ballot s a2 \<ge> b"
-       using \<open>suggest b i q v s t\<close> by (auto simp add:ballot_array.proved_safe_at_abs_def)
-    have "i \<le> instance_bound (log s)" using \<open>suggest b i q v s t\<close>
-      apply (auto simp add:instance_bound_def)
-      by (metis Max_ge Suc_eq_plus1_left add.left_commute le_diff_conv learned_by_quorum_consec_finite_def \<open>learned_by_quorum_consec_finite s\<close>)
-    have 2:"ghost_ballot s a2 i \<ge> b" if "a2 \<in> q2" for a2 using \<open>inv13 s\<close> \<open>i \<le> instance_bound (log s)\<close>
-      1 that by (auto simp add:inv_defs)
-    show ?thesis using 2 \<open>q2 \<in> quorums\<close> \<open>suggest b i q v s t\<close> \<open>inv8 s\<close>
-      by (auto simp add:inv_defs ballot_array.joined_def)
-  qed
-  done
-    
 definition inv9 where inv9_def[inv_defs]:
   "inv9 s \<equiv> \<forall> a i v . log s a i = Some v \<longrightarrow> ghost_chosen s i v"
   
@@ -598,29 +510,45 @@ lemma quorum_ghost_ballots_finite_ne:
   shows "finite {ghost_ballot s a | a . a \<in> q}" and "{ghost_ballot s a | a . a \<in> q} \<noteq> {}"
   using quorums_axioms assms by (auto simp add:quorums_def)
 
-lemma trans_imp_prefix_order:
-  assumes "trans_rel (s::('v, 'a) ampr_state) a t" 
-    and "\<forall> a2 j . ghost_ballot t a2 j \<ge> ghost_ballot s a2 j"
-    and "inv6 s" and "inv7 s" and "inv13 s" and "inv1 s"
-  shows "is_prefix (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)" 
-  using assms
-  apply ((cases rule:trans_cases);
-      (cases s, cases t, force simp add:is_prefix_def)?)
-  apply (cases s, cases t, auto simp add:is_prefix_def inv_defs)
-  apply (metis le_less_linear neq_iff option.distinct(1))
+abbreviation ba_ballot where "ba_ballot s i \<equiv> flip (ghost_ballot s) i"
+
+lemma ghost_ballot_mono_2:
+  assumes "trans_rel (s::('v,'a)ampr_state) ac t" 
+  shows "\<forall> i a . i \<le> instance_bound (log s) \<longrightarrow> ghost_ballot t a i \<ge> ghost_ballot s a i" using assms 
+  apply (induct rule:trans_cases; (auto; fail)?)
+  subgoal premises prems for a2 j vs
+    using prems learn_increases_instance_bound 
+    by (cases s, cases t, auto)
+  subgoal premises prems for a2 q
+    using prems crash_increases_instance_bound 
+    apply (cases s, cases t, auto)
+    by (metis ampr_state.select_convs(7) leD less_or_eq_imp_le)
   done
+
+lemma trans_imp_prefix_order:
+  assumes "trans_rel (s::('v, 'a) ampr_state) acti t" 
+    and "inv6 s" and "inv13 s" and "i \<le> instance_bound (log s)"
+  shows "is_prefix (ba_ballot s i) (ba_ballot t i) (ghost_ba_vote s i) (ghost_ba_vote t i)" 
+  using assms ghost_ballot_mono_2
+  apply ((cases rule:trans_cases);
+      (cases s, cases t, simp add:is_prefix_def inv_defs)?)
+   apply (metis ampr_state.select_convs(7) eq_refl leD)
+  done
+
+definition ghost_safe_increases where ghost_safe_increases_def[inv_defs]:
+  "ghost_safe_increases s t \<equiv> 
+    \<forall> i v b . i \<le> instance_bound (log s) \<and> ghost_safe_at s i v b \<longrightarrow> ghost_safe_at t i v b"
 
 lemma safe_mono:
   -- {* @{term ghost_safe_at} is monotonic. *}
   assumes "trans_rel (s::('v, 'a) ampr_state) a t"
-    and "inv6 s" and "inv7 s" and "inv13 s" and "inv1 s" and "inv12 s"
-  shows "\<forall> i v b . ghost_safe_at s i v b \<longrightarrow> ghost_safe_at t i v b"
-proof (auto)
+    and "inv6 s" and "inv7 s" and "inv13 s" and "inv1 s"
+  shows "ghost_safe_increases s t"
+proof (auto simp add:ghost_safe_increases_def)
   fix i v b
-  assume 1:"ghost_safe_at s i v b"
+  assume 1:"ghost_safe_at s i v b" and 2:"i \<le> instance_bound (log s)"
   have "is_prefix (flip (ghost_ballot s) i) (flip (ghost_ballot t) i) (ghost_ba_vote s i) (ghost_ba_vote t i)" 
-    using assms trans_imp_prefix_order
-    using ghost_ballot_mono by blast
+    using assms trans_imp_prefix_order 2 by blast
   with ballot_array_prefix.safe_at_mono quorums_axioms assms(2,5) 1
   show "ba.safe_at (\<lambda>y. ghost_ballot t y i) (\<lambda>a b. ghost_vote t a b i) v b" 
     by (fastforce simp add:ballot_array_prefix_def ballot_array_prefix_axioms_def)
@@ -628,30 +556,48 @@ qed
 
 definition inv15 where inv15_def[inv_defs]:
   "inv15 (s::('v,'a)ampr_state) \<equiv> \<forall> a b i v . (suggestion s b i = Some v \<or> ghost_vote s a b i = Some v)
-    \<longrightarrow> ghost_safe_at s i v b"
+  \<longrightarrow> ghost_safe_at s i v b"
   
-lemma inv15: "invariant the_ioa inv15"
-  apply (simp_inv_2 \<open>frule safe_mono\<close> 
+lemma inv15: "invariant the_ioa inv15"  apply (simp_inv_2 \<open>frule safe_mono\<close> 
       invs: conservative_inductive instance_bound_lemmas ghost_rel 
-      learned_by_quorum_consec_finite inv12)
+      learned_by_quorum_consec_finite)
   subgoal premises prems for s t _ a i vs (* learn *)
   proof -
     have "suggestion t = suggestion s" and "ghost_vote t = ghost_vote s" 
       using \<open>learn a i vs s t\<close> by (cases s, cases t, force)+
-    thus ?thesis using \<open>inv15 s\<close> \<open>\<forall>i v b.
-     ba.safe_at (\<lambda>y. ghost_ballot s y i) (\<lambda>a b. ghost_vote s a b i) v b \<longrightarrow>
-     ba.safe_at (\<lambda>y. ghost_ballot t y i) (\<lambda>a b. ghost_vote t a b i) v b\<close>
-      by (auto simp add:inv_defs)
+    thus ?thesis using \<open>inv15 s\<close> \<open>inv1 s\<close> \<open>inv4 s\<close> \<open>ghost_safe_increases s t\<close>
+      apply (auto simp add:inv_defs)
+       apply (metis (no_types) not_le option.distinct(1) )
+      by meson
+  qed
+  subgoal premises prems for s t _ a b (* join_ballot *)
+  proof -
+    have "suggestion t = suggestion s" and "ghost_vote t = ghost_vote s" 
+      using \<open>join_ballot a b s t\<close> by (cases s, cases t, force)+
+    thus ?thesis using \<open>inv15 s\<close> \<open>inv1 s\<close> \<open>inv4 s\<close> \<open>ghost_safe_increases s t\<close>
+      apply (auto simp add:inv_defs)
+       apply (metis (no_types) not_le option.distinct(1) )
+      by meson
   qed
   subgoal premises prems for s t _ a q (* crash *)
   proof -
     from \<open>crash a q s t\<close> 
     have "suggestion t = suggestion s" and "ghost_vote t = ghost_vote s" 
       by (cases s, cases t, force)+
-    thus ?thesis using \<open>inv15 s\<close> \<open>\<forall>i v b.
-     ba.safe_at (\<lambda>y. ghost_ballot s y i) (\<lambda>a b. ghost_vote s a b i) v b \<longrightarrow>
-     ba.safe_at (\<lambda>y. ghost_ballot t y i) (\<lambda>a b. ghost_vote t a b i) v b\<close>
-      by (auto simp add:inv_defs)
+    thus ?thesis using \<open>inv15 s\<close> \<open>inv1 s\<close> \<open>inv4 s\<close> \<open>ghost_safe_increases s t\<close>
+      apply (auto simp add:inv_defs)
+       apply (metis (no_types) not_le option.distinct(1) )
+      by meson
+  qed
+  subgoal premises prems for s t _ a i v (* do_vote *)
+  proof -
+    from \<open>do_vote a i v s t\<close> have "suggestion t = suggestion s"  
+      and "ghost_vote t = (ghost_vote s)(a := (ghost_vote s a)((ballot s a) := 
+        (ghost_vote s a (ballot s a))(i := suggestion s (ballot s a) i)))" 
+      and "log t = log s"
+        by (cases s, cases t, force)+
+    with \<open>inv15 s\<close> \<open>inv1 s\<close> \<open>inv4 s\<close> \<open>ghost_safe_increases s t\<close>
+    show ?thesis sorry
   qed
   subgoal premises prems for s t _ b i q v (* suggest *)
   proof -
@@ -666,9 +612,7 @@ lemma inv15: "invariant the_ioa inv15"
     have "ghost_safe_at s i v b" using bap.proved_safe_at_abs_imp_safe_at \<open>inv15 s\<close>
       \<open>conservative_array s\<close> apply (auto simp add:inv_defs)
       by (metis (mono_tags) 5 bap.proved_safe_at_abs_imp_safe_at)
-    thus ?thesis using \<open>inv15 s\<close> \<open>\<forall>i v b.
-     ba.safe_at (\<lambda>y. ghost_ballot s y i) (\<lambda>a b. ghost_vote s a b i) v b \<longrightarrow>
-     ba.safe_at (\<lambda>y. ghost_ballot t y i) (\<lambda>a b. ghost_vote t a b i) v b\<close>
+    thus ?thesis using \<open>inv15 s\<close> \<open>ghost_safe_increases s t\<close>
       \<open>suggest b i q v s t\<close>
       by (auto simp add:inv_defs)
   qed
