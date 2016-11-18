@@ -162,34 +162,31 @@ lemma
     have 2:"f a = Some fa" using  \<open>kv = (a,fa)\<close> \<open>it \<subseteq> map_to_set f\<close> \<open>kv \<in> it\<close> by auto
         (metis (mono_tags, lifting) in_pair_collect_simp map_to_set_def mem_Collect_eq subset_Collect_conv)
     have 3:"inv f s as UNIV" using as_def prems(4) by auto
-    have 4:"fa2 = fa" if "(a,fa2) \<in> it" for fa2 using \<open>kv = (a,fa)\<close> \<open>it \<subseteq> map_to_set f\<close> \<open>kv \<in> it\<close> that
-        by (metis (no_types, lifting) Refine_Misc.map_to_set_inj subsetCE)
-    define inner where "inner \<equiv> 
-      FOREACH (map_to_set fa) (\<lambda> (i,vbo) r2 . RETURN 
+    define inner where "inner \<equiv>
+      FOREACH (map_to_set fa) (\<lambda> (i,vbo) r2 . RETURN
         (case vbo of None \<Rightarrow> r2 | Some (v,b) \<Rightarrow>
           (case r2 i of None \<Rightarrow> r2(i \<mapsto> (v,b))
           | Some (v2,b2) \<Rightarrow> if b \<ge> b2 then r2(i \<mapsto> (v,b)) else r2))) s"
     have "inner \<le> SPEC (\<lambda>r. inv f r as' UNIV)" unfolding inner_def
-      apply (refine_vcg FOREACH_rule[where I="\<lambda> it2 r2 . let 
-            is_1 = (dom s \<inter> (fst ` it2)) \<union> (dom s - dom fa); is_2 = ((dom s \<union> dom fa) - (fst ` it2)) in
-            inv f r2 as' is_2 \<and> inv f r2 as is_1 \<and> (fst ` it2) \<subseteq> dom fa"])
+      apply (refine_vcg FOREACH_rule[where I="\<lambda> it2 r2 . let
+            is = ((dom s \<union> dom fa) - (fst ` it2)) in
+            inv f r2 as' is \<and> inv f r2 as (-is) (* \<and> (fst ` it2) \<subseteq> dom fa *)"])
+        -- \<open> The update instances contains the max over @{term as'}, while other instance the max of @{term as} \<close>
       subgoal using "2" assms finite_map_to_set by fastforce
       subgoal unfolding Let_def (* The invariant is true of the initial state *)
       proof (intro conjI)
-        let ?is_1="(dom s \<inter> fst ` map_to_set fa) \<union> (dom s - dom fa)"
-        let ?is_2="(dom s \<union> dom fa) - fst ` map_to_set fa"
-        have "?is_2 = dom s - dom fa" by (simp add: Un_Diff map_to_set_dom) 
-        show "inv f s as' ?is_2" unfolding inv_def Let_def
+        let ?is="(dom s \<union> dom fa) - fst ` map_to_set fa"
+        have "?is = dom s - dom fa" by (simp add: Un_Diff map_to_set_dom)
+        show "inv f s as' ?is" unfolding inv_def Let_def
         proof 
           fix i
-          assume "i \<in> ?is_2"
-          hence "fa i = None"  by (auto simp add:\<open>?is_2 = dom s - dom fa\<close>)
+          assume "i \<in> ?is"
+          hence "fa i = None"  by (auto simp add:\<open>?is = dom s - dom fa\<close>)
           hence "inst_votes f i {a} = {}" using \<open>f a = Some fa\<close> by (simp add:inst_votes_def)
           hence "inst_votes f i as' = inst_votes f i as" by (auto simp add: \<open>as' = insert a as\<close> inst_votes_def)
           thus "inst_inv (inst_votes f i as') (s i)" using \<open>inv f s as UNIV\<close> by (simp add:inv_def)
         qed  
-        show "inv f s as ?is_1" using \<open>inv f s as UNIV\<close> by (simp add:inv_def)
-        show "fst ` map_to_set fa \<subseteq> dom fa" by (simp add: map_to_set_dom)
+        show "inv f s as (-?is)" using \<open>inv f s as UNIV\<close> by (simp add:inv_def)
       qed
       subgoal premises prems for kv2 it2 s2 i hi (* The inductive step. *)
         unfolding Let_def
@@ -198,29 +195,23 @@ lemma
         define s3 where "s3 \<equiv> (case hi of None \<Rightarrow> s2 | Some (v, b) \<Rightarrow>
           (case s2 i of None \<Rightarrow> s2(i \<mapsto> (v, b))
           | Some (v2, b2) \<Rightarrow> if b2 \<le> b then s2(i \<mapsto> (v, b)) else s2))"
-        define is_2' where "is_2' \<equiv> (dom s \<union> dom fa) - (fst ` (it2 - {kv2}))"
-        define is_2 where "is_2 \<equiv> (dom s \<union> dom fa) - (fst ` it2)"
-        define is_1 where "is_1 \<equiv> (dom s \<inter> fst ` it2) \<union> (dom s - dom fa)"
-        define is_1' where "is_1' \<equiv> (dom s \<inter> fst ` (it2 - {kv2})) \<union> (dom s - dom fa)"
-        have 5:"is_2' = insert i is_2"  
+        define iss' where "iss' \<equiv> (dom s \<union> dom fa) - (fst ` (it2 - {kv2}))"
+        define iss where "iss \<equiv> (dom s \<union> dom fa) - (fst ` it2)"
+        have 5:"iss' = insert i iss"
         proof -
           have "fst ` it2 \<subseteq> (dom s \<union> dom fa)" using \<open>it2 \<subseteq> map_to_set fa\<close> by (auto simp add: map_to_set_dom)
           with it_step_insert_image_fst_iff[of it2 "dom s \<union> dom fa" i hi] \<open>it2 \<subseteq> map_to_set fa\<close> \<open>kv2 = (i,hi)\<close> \<open>kv2 \<in> it2\<close> 
-          show ?thesis by (auto simp add:is_2'_def is_2_def)
+          show ?thesis by (auto simp add:iss'_def iss_def)
         qed
-        have 6:"inv f s2 as' is_2" unfolding is_2_def using prems(3) by auto
-        have 7:"inv f s2 as is_1" unfolding is_1_def by (meson prems(3))
+        have 6:"inv f s2 as' iss" unfolding iss_def using prems(3) by auto
+        have 7:"inv f s2 as (-iss)" unfolding iss_def by (meson prems(3))
         have 8:"fa i = Some hi" using \<open>kv2 = (i,hi)\<close> \<open>it2 \<subseteq> map_to_set fa\<close> \<open>kv2 \<in> it2\<close>
           by (metis (mono_tags, lifting) in_pair_collect_simp map_to_set_def mem_Collect_eq subset_Collect_conv)
-        have 9:"hi2 = hi" if "(i,hi2) \<in> it2" for hi2 using \<open>kv2 = (i,hi)\<close> \<open>it2 \<subseteq> map_to_set fa\<close> \<open>kv2 \<in> it2\<close> that
-          by (metis (no_types, lifting) Refine_Misc.map_to_set_inj subsetCE)
-        have 10:"i \<notin> is_2" using \<open>kv2 \<in> it2\<close> \<open>kv2 = (i,hi)\<close> unfolding is_2_def by (simp add: img_fst)
-        have 11:"is_1' \<subseteq> is_1 - {i}" unfolding is_1_def is_1'_def using "5" is_2'_def "8" by blast
-        have 12:"fst ` it2 \<subseteq> dom fa" by (meson prems(3))
-        have "AutoRefTest.inv f s3 as' is_2'"
+        have 10:"i \<notin> iss" using \<open>kv2 \<in> it2\<close> \<open>kv2 = (i,hi)\<close> unfolding iss_def by (simp add: img_fst)
+        have "AutoRefTest.inv f s3 as' iss'"
         proof (auto simp add:inv_def)
           fix j
-          assume "j \<in> is_2'"
+          assume "j \<in> iss'"
           define vs' where "vs' \<equiv> inst_votes f j as'"
           define vs where "vs \<equiv> inst_votes f j as"
           have 4:"vs' = (inst_votes f j {a}) \<union> vs" unfolding vs'_def vs_def by (metis "1" insert_is_Un inst_votes_union) 
@@ -228,23 +219,49 @@ lemma
           proof (cases "i = j")
             case True
             show ?thesis
-            proof (cases hi)
-              case None
-              hence "inst_votes f j {a} = {}" unfolding inst_votes_def using "8" 2 \<open>i=j\<close> by auto
-              hence "vs' = vs" using "4" by blast 
-              moreover have "s3 j = s2 j" by (simp add: None s3_def)
-              moreover have "inst_inv vs (s2 j)"
+            proof (cases hi, auto)
+              assume "hi = None"
+              have "vs' = vs"
               proof -
-                have "j \<in> is_1 \<or> j \<in> (fst ` it2) - dom s"
+                from \<open>hi = None\<close> have "inst_votes f j {a} = {}" unfolding inst_votes_def using "8" 2 \<open>i=j\<close> by auto
+                thus ?thesis using "4" by blast 
+              qed
+              moreover have "s3 j = s2 j" by (simp add: \<open>hi = None\<close> s3_def)
+              moreover have "inst_inv vs (s2 j)" using 10 7 \<open>i = j\<close>  unfolding inv_def Let_def vs_def by auto
               ultimately show ?thesis by auto
             next
-              case (Some a)
-              then show ?thesis sorry
+              fix v b
+              assume "hi = Some (v,b)"
+              hence "vs' = insert (v,b) vs" using \<open>fa i = Some hi\<close> \<open>f a = Some fa\<close>
+                unfolding vs_def vs'_def inst_votes_def by (auto simp add:\<open>as' = insert a as\<close> \<open>i=j\<close>)
+              moreover 
+              have "inst_inv vs (s2 j)" by (metis "10" "7" AutoRefTest.inv_def ComplI True vs_def)
+              moreover have "finite vs" using assms(1) unfolding vs_def inst_votes_def sorry
+              ultimately
+              show ?thesis using \<open>hi = Some (v,b)\<close> \<open>i=j\<close>
+                apply (simp add:\<open>vs' = insert (v,b) vs\<close> inst_inv_def s3_def split!:option.splits if_splits prod.splits)
+                 apply (simp add: max_absorb1)
+                apply (metis Max.coboundedI finite_imageI imageI max.bounded_iff max_def)
+                done
             qed
           next
             case False
-            show ?thesis
-        oops
+            moreover
+            have "j \<in> iss" using "5" False \<open>j \<in> iss'\<close> by blast
+            moreover have "s3 j = s2 j" unfolding s3_def using False by (auto split!:option.splits)
+            ultimately
+            show ?thesis using 6 unfolding inv_def Let_def vs'_def by auto
+          qed
+        qed
+        thus "inv f (case hi of None \<Rightarrow> s2 | Some (v, b) \<Rightarrow> case s2 i of None \<Rightarrow> s2(i \<mapsto> (v, b))
+          | Some (v2, b2) \<Rightarrow> if b2 \<le> b then s2(i \<mapsto> (v, b)) else s2) as' 
+          (dom s \<union> dom fa - fst ` (it2 - {kv2}))" unfolding s3_def iss'_def by auto
+        have "inv f s3  as (- iss')" unfolding s3_def using 7 6
+          by (simp add: 5 split!:option.splits) (auto simp add:inv_def)
+        thus "inv f (case hi of None \<Rightarrow> s2 | Some (v, b) \<Rightarrow> case s2 i of None \<Rightarrow> s2(i \<mapsto> (v, b))
+          | Some (v2, b2) \<Rightarrow> if b2 \<le> b then s2(i \<mapsto> (v, b)) else s2) 
+          as (- (dom s \<union> dom fa - fst ` (it2 - {kv2})))" unfolding s3_def iss'_def by auto
+      qed
   
   
 schematic_goal impl_1:
