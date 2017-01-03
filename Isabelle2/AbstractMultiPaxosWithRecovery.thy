@@ -2,6 +2,27 @@ theory AbstractMultiPaxosWithRecovery
 imports  IOA BallotArrays Paxos_Sig
 begin                          
 
+text {*
+An abstraction of a MultiPaxos in which a process can crash, loose its state, and rejoin the protocol.
+\<^item> There is an integer "lookahead" such that no process makes a proposition at instance i before
+all instances lower or equal than i-lookahead-1 are decided.
+\<^item> Process have an integer variable @{term "lowest"}, and they do not participate in any instance
+lower that @{term "lowest"}.
+\<^item> Let @{term "instance_bound"} be the largest instance such that all lower instances and itself are decided.
+A process recovering from a crash computes an upper bound on @{term "instance_bound"} and sets @{term "lowest"} to that upper bound.
+It can then join any ballot, since no promises may have been made in instances higher than @{term "instance_bound"}
+\<^item> Ghost variables are added to keep track of the state lost during a crash, 
+and to make local ballots always increasing: above @{term "instance_bound"}, a local ballot is always 0.
+
+About the abstraction:
+\<^item> The local state of processes is mostly the same in both the abstract and the implementation.
+\<^item> The abstraction uses predicates on the local states of processes that are monotonic, 
+and take action when a predicate becomes true.
+\<^item> In a distributed implementation, read the distributed state piece by piece asynchronously. If action is taken,
+it can also be taken if the state was read atomically at the same point in the abstract version.
+
+*}
+  
 section {* Definition of the Abstract MultiPaxos I/O-automaton *}
 
 subsection {* State and actions *}
@@ -27,8 +48,8 @@ definition learned_by_quorum_consec where
   "learned_by_quorum_consec l \<equiv> {i . \<forall> j \<le> i . \<exists> q \<in> quorums . is_learned_by_set l j q}"
 
 definition instance_bound where "instance_bound l \<equiv> 
-  if learned_by_quorum_consec l \<noteq> {} 
-  then Max (learned_by_quorum_consec l) + lookahead + 1 
+  if learned_by_quorum_consec l \<noteq> {}
+  then Max (learned_by_quorum_consec l) + lookahead + 1
   else lookahead"
   -- {* No instance greater than that can have any vote. *}
   
@@ -50,7 +71,7 @@ definition join_ballot where
       ghost_ballot := (ghost_ballot s)(a :=
         (\<lambda> i . if (ghost_ballot s a i) \<le> b \<and> instance_bound (log s) \<ge> i 
           then b else ghost_ballot s a i))\<rparr>"
-  -- {* Note that we increase the ballot only below @{term instance_bound}. 
+  -- {* Note that we increase the ballot only below @{term instance_bound}.
   Also, it does not hurt to increase the ghost ballot below lowest because no action 
   will ever be taken again in those instances. *}
 
@@ -59,7 +80,7 @@ interpretation ba:ballot_array quorums ballot vote for ballot vote .
 abbreviation ba_vote where "ba_vote s i \<equiv> \<lambda> a b . vote s a b i"
 abbreviation ghost_ba_vote where "ghost_ba_vote s i \<equiv> \<lambda> a b . ghost_vote s a b i"
 
-abbreviation proved_safe_at where 
+abbreviation proved_safe_at where
   -- {* v is proved safe in instance i at ballot b by quorum q *}
   "proved_safe_at s b i q v \<equiv> 
     ba.proved_safe_at_abs (ballot s) (ba_vote s i) q b v
@@ -68,21 +89,21 @@ abbreviation proved_safe_at where
 abbreviation conservative_at where
   "conservative_at s i \<equiv> ballot_array.conservative_array (ba_vote s i)"
 
-definition bounded where "bounded s \<equiv>
+definition bounded where "bounded s \<equiv> (* where is this used? *)
   \<forall> a b i . (vote s a b i \<noteq> None \<and> i > lookahead)
     \<longrightarrow> (i-lookahead-1) \<in> learned_by_quorum_consec (log s)"
   -- {* New votes cannot be cast in instance i before instances lower than @{term "i-lookahead"} 
   have all been completed by a quorum of acceptors. *}
 
 definition suggest where
-  "suggest b i q v s s' \<equiv> 
+  "suggest b i q v s s' \<equiv>
     suggestion s b i = None
     \<and> v \<in> propCmd s
     \<and> proved_safe_at s b i q v
     \<and> (\<forall> a \<in> q . i \<ge> lowest s a)
     \<and> (i-lookahead-1) \<in> learned_by_quorum_consec (log s)
     \<and> s' = s\<lparr>suggestion := (suggestion s)(b := (suggestion s b)(i := Some v))\<rparr>"
-  
+ 
 definition do_vote where
   "do_vote a i v s s' \<equiv> let b = ballot s a in
         suggestion s b i = Some v
@@ -120,8 +141,8 @@ definition crash where
     in (\<exists> new_log b .
       (\<forall> i v . (new_log i = Some v) = (\<exists> a \<in> q . log s a i = Some v))
       \<and> s' = s\<lparr>vote := (vote s)(a := \<lambda> b i . None), ballot := (ballot s)(a := b),
-        lowest := (lowest s)(a := low), log := (log s)(a := new_log), 
-        ghost_ballot := (\<lambda> a .
+        lowest := (lowest s)(a := low), log := (log s)(a := new_log),
+        ghost_ballot := (\<lambda> a . (* The instance bound might increase as a result of the crashed process learning more than it had before the crash. *)
           (\<lambda> i . if i \<in> {instance_bound (log s)<..instance_bound (log s')}
             then ballot s' a else ghost_ballot s a i))\<rparr> ))"
 
@@ -134,9 +155,9 @@ fun trans_rel where
     \<or> (\<exists> a q . crash a q r r') )"
 | "trans_rel r (Learn a i vs) r' = learn a i vs r r'"
 
-lemma trans_cases: 
+lemma trans_cases:
   assumes "trans_rel r a r'"
-  obtains 
+  obtains
   (propose) c where "propose c r r'"
 | (learn) a i vs where "learn a i vs r r'"
 | (join_ballot) a b where "join_ballot a b r r'"
